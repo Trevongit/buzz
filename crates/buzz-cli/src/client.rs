@@ -60,13 +60,33 @@ pub fn build_imeta_tag(d: &BlobDescriptor) -> Vec<String> {
     tag
 }
 
-/// MIME types accepted for upload.
-const ALLOWED_MIMES: &[&str] = &[
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "video/mp4",
+/// Image MIME types accepted on the image/thumbnail upload path.
+const ALLOWED_IMAGE_MIMES: &[&str] = &["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+/// Video MIME types accepted on the video pipeline path.
+const ALLOWED_VIDEO_MIMES: &[&str] = &["video/mp4"];
+
+/// MIME types blocked on the generic file-upload path.
+///
+/// Mirrors `buzz-media` `BLOCKED_FILE_MIME_TYPES`: active web content (stored
+/// XSS) and native executables/installers. Everything else is allowed for
+/// agent co-lab (zip skill packs, pdf, text, office docs, …) and is enforced
+/// again server-side by `validate_file_content`.
+const BLOCKED_FILE_MIMES: &[&str] = &[
+    "text/html",
+    "application/xhtml+xml",
+    "image/svg+xml",
+    "application/javascript",
+    "text/javascript",
+    "application/x-msdownload",
+    "application/x-executable",
+    "application/vnd.microsoft.portable-executable",
+    "application/x-mach-binary",
+    "application/x-sharedlib",
+    "application/x-elf",
+    "application/x-msi",
+    "application/vnd.android.package-archive",
+    "application/x-apple-diskimage",
 ];
 
 /// Maximum file size for image uploads (50 MB).
@@ -74,6 +94,39 @@ const MAX_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
 
 /// Maximum file size for video uploads (500 MB).
 const MAX_VIDEO_BYTES: u64 = 500 * 1024 * 1024;
+
+/// Maximum file size for generic (non-image/video) uploads (100 MB).
+/// Matches relay default `BUZZ_MAX_FILE_BYTES`.
+const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Whether a sniffed MIME may be uploaded via CLI (`buzz upload` / `--file`).
+///
+/// - Images: jpeg/png/gif/webp only (image pipeline).
+/// - Video: mp4 only (video pipeline).
+/// - Other audio/video: rejected (no sanitizer yet — same as relay).
+/// - Everything else: allowed unless on the dangerous blocklist (zip, pdf, …).
+fn is_upload_mime_allowed(mime: &str) -> bool {
+    if mime.starts_with("image/") {
+        return ALLOWED_IMAGE_MIMES.contains(&mime);
+    }
+    if mime.starts_with("video/") {
+        return ALLOWED_VIDEO_MIMES.contains(&mime);
+    }
+    if mime.starts_with("audio/") {
+        return false;
+    }
+    !BLOCKED_FILE_MIMES.contains(&mime)
+}
+
+fn max_upload_bytes_for_mime(mime: &str) -> u64 {
+    if mime.starts_with("video/") {
+        MAX_VIDEO_BYTES
+    } else if mime.starts_with("image/") {
+        MAX_IMAGE_BYTES
+    } else {
+        MAX_FILE_BYTES
+    }
+}
 
 /// Sign a NIP-98 HTTP auth event (kind:27235) and return the Authorization header value.
 ///
@@ -1108,21 +1161,17 @@ impl BuzzClient {
         let bytes = std::fs::read(file_path)
             .map_err(|e| CliError::Other(format!("failed to read {file_path}: {e}")))?;
 
-        // 2. Detect MIME from magic bytes
+        // 2. Detect MIME from magic bytes (no signature → opaque download).
         let mime = infer::get(&bytes)
             .map(|t| t.mime_type().to_string())
             .unwrap_or_else(|| "application/octet-stream".to_string());
 
-        if !ALLOWED_MIMES.contains(&mime.as_str()) {
+        if !is_upload_mime_allowed(&mime) {
             return Err(CliError::Usage(format!("unsupported file type: {mime}")));
         }
 
-        // 3. Size check
-        let max = if mime.starts_with("video/") {
-            MAX_VIDEO_BYTES
-        } else {
-            MAX_IMAGE_BYTES
-        };
+        // 3. Size check (image / video / generic file tiers).
+        let max = max_upload_bytes_for_mime(&mime);
         if bytes.len() as u64 > max {
             return Err(CliError::Usage(format!(
                 "file too large: {} bytes (max {})",
@@ -1442,8 +1491,9 @@ mod retry_tests {
     use std::time::Duration;
 
     use super::{
-        env_duration_secs, is_moderation_kind, jitter_delay, parse_retry_hint_text,
-        parse_retry_in_secs, RETRY_BASE_SECS, RETRY_IN_MAX_SECS, RETRY_MAX_ATTEMPTS,
+        env_duration_secs, is_moderation_kind, is_upload_mime_allowed, jitter_delay,
+        max_upload_bytes_for_mime, parse_retry_hint_text, parse_retry_in_secs, MAX_FILE_BYTES,
+        MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, RETRY_BASE_SECS, RETRY_IN_MAX_SECS, RETRY_MAX_ATTEMPTS,
     };
 
     // ---- parse_retry_in_secs ----
@@ -1480,6 +1530,50 @@ mod retry_tests {
     #[test]
     fn parse_empty_body_returns_none() {
         assert_eq!(parse_retry_in_secs(""), None);
+    }
+
+    // ---- is_upload_mime_allowed (M1 media widen) ----
+
+    #[test]
+    fn upload_allows_images_video_and_zip() {
+        for mime in [
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+            "video/mp4",
+            "application/zip",
+            "application/pdf",
+            "text/plain",
+            "application/json",
+            "application/octet-stream",
+        ] {
+            assert!(is_upload_mime_allowed(mime), "expected allowed: {mime}");
+        }
+    }
+
+    #[test]
+    fn upload_blocks_active_and_executable_types() {
+        for mime in [
+            "text/html",
+            "application/javascript",
+            "image/svg+xml",
+            "application/x-msdownload",
+            "application/x-executable",
+            "application/vnd.android.package-archive",
+            "audio/mpeg",
+            "video/webm",
+            "image/bmp",
+        ] {
+            assert!(!is_upload_mime_allowed(mime), "expected blocked: {mime}");
+        }
+    }
+
+    #[test]
+    fn upload_size_tiers() {
+        assert_eq!(max_upload_bytes_for_mime("image/png"), MAX_IMAGE_BYTES);
+        assert_eq!(max_upload_bytes_for_mime("video/mp4"), MAX_VIDEO_BYTES);
+        assert_eq!(max_upload_bytes_for_mime("application/zip"), MAX_FILE_BYTES);
     }
 
     // ---- parse_retry_hint_text ----
