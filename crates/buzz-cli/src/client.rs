@@ -37,7 +37,16 @@ pub struct BlobDescriptor {
 }
 
 /// Build an `imeta` tag array from a BlobDescriptor (NIP-92 media metadata).
+///
+/// When `filename` is set (basename of the local path the user uploaded), it is
+/// included as `filename <name>` so Desktop can render FileCards with a real
+/// label for generic attachments.
 pub fn build_imeta_tag(d: &BlobDescriptor) -> Vec<String> {
+    build_imeta_tag_with_filename(d, None)
+}
+
+/// Like [`build_imeta_tag`], optionally attaching a `filename` field.
+pub fn build_imeta_tag_with_filename(d: &BlobDescriptor, filename: Option<&str>) -> Vec<String> {
     let mut tag = vec![
         "imeta".to_string(),
         format!("url {}", d.url),
@@ -45,6 +54,14 @@ pub fn build_imeta_tag(d: &BlobDescriptor) -> Vec<String> {
         format!("x {}", d.sha256),
         format!("size {}", d.size),
     ];
+    if let Some(name) = filename.map(str::trim).filter(|s| !s.is_empty()) {
+        // Relay rejects path-like filenames; basename only.
+        let base = std::path::Path::new(name)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(name);
+        tag.push(format!("filename {base}"));
+    }
     if let Some(ref dim) = d.dim {
         tag.push(format!("dim {dim}"));
     }
@@ -58,6 +75,37 @@ pub fn build_imeta_tag(d: &BlobDescriptor) -> Vec<String> {
         tag.push(format!("duration {dur}"));
     }
     tag
+}
+
+/// Format one uploaded attachment for message body markdown.
+///
+/// Matches Desktop `formatImetaMediaLine`:
+/// - `video/*` → `![video](url)`
+/// - `image/*` (except `*.agent.png` / `*.team.png` snapshots) → `![image](url)`
+/// - everything else (zip, pdf, txt, …) → plain `[filename](url)` so Desktop
+///   FileCard renders a download card instead of a broken image.
+pub fn format_attachment_markdown(file_path: &str, desc: &BlobDescriptor) -> String {
+    let mime = desc.mime_type.as_str();
+    let basename = std::path::Path::new(file_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("file");
+    let lower = basename.to_ascii_lowercase();
+    let is_snapshot_png = lower.ends_with(".agent.png") || lower.ends_with(".team.png");
+
+    if mime.starts_with("video/") {
+        return format!("\n![video]({})", desc.url);
+    }
+    if mime.starts_with("image/") && !is_snapshot_png {
+        return format!("\n![image]({})", desc.url);
+    }
+
+    // Generic / snapshot: escape `[` `]` `\` in the label so markdown stays valid.
+    let escaped = basename
+        .replace('\\', "\\\\")
+        .replace('[', "\\[")
+        .replace(']', "\\]");
+    format!("\n[{escaped}]({})", desc.url)
 }
 
 /// Image MIME types accepted on the image/thumbnail upload path.
@@ -1516,9 +1564,11 @@ mod retry_tests {
     use std::time::Duration;
 
     use super::{
-        env_duration_secs, is_moderation_kind, is_upload_mime_allowed, jitter_delay,
-        max_upload_bytes_for_mime, parse_retry_hint_text, parse_retry_in_secs, MAX_FILE_BYTES,
-        MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, RETRY_BASE_SECS, RETRY_IN_MAX_SECS, RETRY_MAX_ATTEMPTS,
+        build_imeta_tag, build_imeta_tag_with_filename, env_duration_secs,
+        format_attachment_markdown, is_moderation_kind, is_upload_mime_allowed, jitter_delay,
+        max_upload_bytes_for_mime, parse_retry_hint_text, parse_retry_in_secs, BlobDescriptor,
+        MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, RETRY_BASE_SECS, RETRY_IN_MAX_SECS,
+        RETRY_MAX_ATTEMPTS,
     };
 
     // ---- parse_retry_in_secs ----
@@ -1599,6 +1649,78 @@ mod retry_tests {
         assert_eq!(max_upload_bytes_for_mime("image/png"), MAX_IMAGE_BYTES);
         assert_eq!(max_upload_bytes_for_mime("video/mp4"), MAX_VIDEO_BYTES);
         assert_eq!(max_upload_bytes_for_mime("application/zip"), MAX_FILE_BYTES);
+    }
+
+    fn test_desc(mime: &str, url: &str) -> BlobDescriptor {
+        BlobDescriptor {
+            url: url.to_string(),
+            sha256: "aa".repeat(32),
+            size: 1,
+            mime_type: mime.to_string(),
+            uploaded: 0,
+            dim: None,
+            blurhash: None,
+            thumb: None,
+            duration: None,
+        }
+    }
+
+    #[test]
+    fn attachment_markdown_image_and_video_inline() {
+        let img = test_desc("image/png", "https://relay.example/media/a.png");
+        assert_eq!(
+            format_attachment_markdown("/tmp/shot.png", &img),
+            "\n![image](https://relay.example/media/a.png)"
+        );
+        let vid = test_desc("video/mp4", "https://relay.example/media/a.mp4");
+        assert_eq!(
+            format_attachment_markdown("/tmp/clip.mp4", &vid),
+            "\n![video](https://relay.example/media/a.mp4)"
+        );
+    }
+
+    #[test]
+    fn attachment_markdown_generic_file_is_plain_link() {
+        let zip = test_desc("application/zip", "https://relay.example/media/pack.zip");
+        assert_eq!(
+            format_attachment_markdown("/tmp/gcr-skill-pack.zip", &zip),
+            "\n[gcr-skill-pack.zip](https://relay.example/media/pack.zip)"
+        );
+        let pdf = test_desc("application/pdf", "https://relay.example/media/doc.pdf");
+        assert_eq!(
+            format_attachment_markdown("/home/u/notes.pdf", &pdf),
+            "\n[notes.pdf](https://relay.example/media/doc.pdf)"
+        );
+    }
+
+    #[test]
+    fn attachment_markdown_escapes_label_metacharacters() {
+        let d = test_desc("application/pdf", "https://relay.example/media/x.pdf");
+        assert_eq!(
+            format_attachment_markdown("/tmp/a].pdf", &d),
+            "\n[a\\].pdf](https://relay.example/media/x.pdf)"
+        );
+    }
+
+    #[test]
+    fn attachment_markdown_snapshot_png_uses_file_link() {
+        let d = test_desc("image/png", "https://relay.example/media/snap.png");
+        assert_eq!(
+            format_attachment_markdown("/tmp/bot.agent.png", &d),
+            "\n[bot.agent.png](https://relay.example/media/snap.png)"
+        );
+    }
+
+    #[test]
+    fn imeta_tag_includes_optional_filename() {
+        let d = test_desc("application/zip", "https://relay.example/media/p.zip");
+        let with = build_imeta_tag_with_filename(&d, Some("pack.zip"));
+        assert!(with.iter().any(|f| f == "filename pack.zip"), "{with:?}");
+        let without = build_imeta_tag(&d);
+        assert!(
+            !without.iter().any(|f| f.starts_with("filename ")),
+            "{without:?}"
+        );
     }
 
     // ---- parse_retry_hint_text ----
