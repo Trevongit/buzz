@@ -40,12 +40,7 @@ pub struct BlobDescriptor {
 ///
 /// When `filename` is set (basename of the local path the user uploaded), it is
 /// included as `filename <name>` so Desktop can render FileCards with a real
-/// label for generic attachments.
-pub fn build_imeta_tag(d: &BlobDescriptor) -> Vec<String> {
-    build_imeta_tag_with_filename(d, None)
-}
-
-/// Like [`build_imeta_tag`], optionally attaching a `filename` field.
+/// label for generic attachments. Pass `None` for media that needs no label.
 pub fn build_imeta_tag_with_filename(d: &BlobDescriptor, filename: Option<&str>) -> Vec<String> {
     let mut tag = vec![
         "imeta".to_string(),
@@ -1539,11 +1534,10 @@ mod retry_tests {
     use std::time::Duration;
 
     use super::{
-        build_imeta_tag, build_imeta_tag_with_filename, env_duration_secs,
-        format_attachment_markdown, is_moderation_kind, is_upload_mime_allowed, jitter_delay,
-        max_upload_bytes_for_mime, parse_retry_hint_text, parse_retry_in_secs, BlobDescriptor,
-        MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, RETRY_BASE_SECS, RETRY_IN_MAX_SECS,
-        RETRY_MAX_ATTEMPTS,
+        build_imeta_tag_with_filename, env_duration_secs, format_attachment_markdown,
+        is_moderation_kind, is_upload_mime_allowed, jitter_delay, max_upload_bytes_for_mime,
+        parse_retry_hint_text, parse_retry_in_secs, BlobDescriptor, MAX_FILE_BYTES,
+        MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, RETRY_BASE_SECS, RETRY_IN_MAX_SECS, RETRY_MAX_ATTEMPTS,
     };
 
     // ---- parse_retry_in_secs ----
@@ -1691,7 +1685,7 @@ mod retry_tests {
         let d = test_desc("application/zip", "https://relay.example/media/p.zip");
         let with = build_imeta_tag_with_filename(&d, Some("pack.zip"));
         assert!(with.iter().any(|f| f == "filename pack.zip"), "{with:?}");
-        let without = build_imeta_tag(&d);
+        let without = build_imeta_tag_with_filename(&d, None);
         assert!(
             !without.iter().any(|f| f.starts_with("filename ")),
             "{without:?}"
