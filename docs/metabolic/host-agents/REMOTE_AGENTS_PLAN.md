@@ -144,7 +144,10 @@ After R10 answers → execute per /goal lock (below).
 | P2 RemoteAgentsSection | **DONE** (Agents page · under local Agents) |
 | P4 live client arm/disarm/status | **DONE** (Host dialog · tunnel URL) |
 | P5 settings (host/token/room/preset) | **DONE** (v1 localStorage; keyring later) |
-| P6 Nostr heartbeats | **DEFERRED** (hybrid track) |
-| P7 Projects bind | **DEFERRED** |
+| P6 location-proof (hybrid) | **DONE** · `/v1/location-proof` · seat-location.v0 · Desktop merge |
+| P7 thin surface/project on cards | **DONE** · full Projects epic still later |
+| mesh-direct bind | **BLOCKED** until open121 tunnel dogfood (Codex/home) |
+| OS keyring token | **FOLLOW-UP** (Codex gate) |
 
-**Dogfood:** `docs/metabolic/host-agents/DOGFOOD.md`
+**Dogfood:** `docs/metabolic/host-agents/DOGFOOD.md`  
+**Branch:** `feat/remote-agents-desktop`
