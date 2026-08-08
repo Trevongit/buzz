@@ -620,11 +620,11 @@ pub async fn cmd_send_message(
             .upload_file(file_path)
             .await
             .map_err(|e| CliError::Other(format!("upload failed for {file_path}: {e}")))?;
-        let basename = std::path::Path::new(file_path)
-            .file_name()
-            .and_then(|s| s.to_str());
+        // Pass the full path so sanitize_filename can strip both separator styles
+        // and controls (same label contract as format_attachment_markdown / Desktop).
         media_tags.push(crate::client::build_imeta_tag_with_filename(
-            &desc, basename,
+            &desc,
+            Some(file_path.as_str()),
         ));
         media_content.push_str(&crate::client::format_attachment_markdown(file_path, &desc));
     }
