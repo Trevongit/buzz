@@ -4,6 +4,7 @@ import {
   HostAgentdError,
   hostAgentdArm,
   hostAgentdDisarm,
+  hostAgentdLocationProof,
   hostAgentdStatus,
 } from "./hostAgentdClient";
 import { deriveRemoteAgentCards } from "./deriveRemoteAgentCards";
@@ -32,12 +33,17 @@ export function useRemoteHostAgents() {
   const [isPending, setIsPending] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [pendingSeat, setPendingSeat] = React.useState<string | null>(null);
+  const [locationProof, setLocationProof] = React.useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
   const refresh = React.useCallback(async () => {
     const conn = loadRemoteHostConnection();
     setConnection(conn);
     if (!conn?.baseUrl || !conn.token) {
       setStatus(null);
+      setLocationProof(null);
       setError(null);
       return;
     }
@@ -46,6 +52,36 @@ export function useRemoteHostAgents() {
       const next = await hostAgentdStatus(conn.baseUrl, conn.token);
       setStatus(next);
       setError(null);
+      try {
+        const proof = await hostAgentdLocationProof(conn.baseUrl, conn.token);
+        setLocationProof(proof);
+        // Merge surface/project from proof seats into status seats when missing
+        const proofSeats =
+          (proof.seats as Array<Record<string, unknown>>) || [];
+        if (next.seats && proofSeats.length > 0) {
+          next.seats = next.seats.map((s) => {
+            const match = proofSeats.find((p) => p.seat_id === s.seat_id);
+            if (!match) return s;
+            return {
+              ...s,
+              surface_root:
+                s.surface_root || (match.surface_root as string) || "",
+              project_ids:
+                s.project_ids ||
+                (match.project_ids as string[] | undefined) ||
+                [],
+              unit_pid:
+                s.unit_pid ?? (match.unit_pid as number | null | undefined),
+              unit_alive:
+                s.unit_alive ??
+                (match.health === "online" ? true : s.unit_alive),
+            };
+          });
+          setStatus({ ...next });
+        }
+      } catch {
+        setLocationProof(null);
+      }
     } catch (err) {
       const message =
         err instanceof HostAgentdError
@@ -55,6 +91,7 @@ export function useRemoteHostAgents() {
             : "status failed";
       setError(message);
       setStatus(null);
+      setLocationProof(null);
     } finally {
       setIsLoading(false);
     }
@@ -156,6 +193,7 @@ export function useRemoteHostAgents() {
   return {
     connection,
     status,
+    locationProof,
     error,
     notice,
     isLoading,

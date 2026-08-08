@@ -21,6 +21,7 @@ export type HostAgentSeat = {
   unit_alive?: boolean;
   surface_root?: string;
   surface_kind?: string;
+  project_ids?: string[];
 };
 
 export type HostAgentStatus = {
@@ -60,6 +61,9 @@ export type RemoteAgentCardModel = {
   healthLabel: string;
   relayOk: boolean;
   ollamaOk: boolean;
+  surfaceRoot?: string;
+  projectIds?: string[];
+  unitPid?: number | null;
 };
 
 export const REMOTE_AGENT_PRESETS: {

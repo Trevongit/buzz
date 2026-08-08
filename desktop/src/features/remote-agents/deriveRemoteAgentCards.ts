@@ -96,6 +96,9 @@ export function deriveRemoteAgentCards(
       healthLabel: seatLabel,
       relayOk: Boolean(status?.relay?.ok),
       ollamaOk: Boolean(status?.ollama?.ok),
+      surfaceRoot: seat.surface_root || "",
+      projectIds: seat.project_ids || [],
+      unitPid: seat.unit_pid ?? null,
     };
   });
 }

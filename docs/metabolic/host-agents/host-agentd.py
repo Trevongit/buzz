@@ -148,6 +148,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, status_json())
             return
 
+        if path in ("/v1/location-proof", "/location-proof"):
+            try:
+                sys.path.insert(0, str(Path(__file__).resolve().parent))
+                from location_proof import build_location_proof, write_proof_file
+
+                st = status_json()
+                proof = build_location_proof(st if st.get("ok") else None)
+                write_proof_file(proof)
+                self._json(200, {"ok": True, **proof})
+            except Exception as exc:  # keep controller alive
+                self._json(500, {"ok": False, "error": str(exc)[:200]})
+            return
+
         if path in ("/v1/agents", "/agents"):
             st = status_json()
             agents = st.get("seats") if isinstance(st, dict) else []

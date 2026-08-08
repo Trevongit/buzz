@@ -59,3 +59,12 @@ curl -sS -X POST -H "Authorization: Bearer $HOST_AGENTD_TOKEN" \
   http://127.0.0.1:8787/v1/agents/home-grok/arm
 # expect 400 unknown preset
 ```
+
+## Location proof (P6)
+
+```bash
+curl -sS -H "Authorization: Bearer $HOST_AGENTD_TOKEN" \
+  http://127.0.0.1:8787/v1/location-proof | head
+python3 location_proof.py --write
+python3 location_proof.py --print-board   # optional post body for ability channel
+```

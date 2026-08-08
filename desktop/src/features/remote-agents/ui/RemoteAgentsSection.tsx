@@ -74,6 +74,9 @@ export function RemoteAgentsSection() {
           {remote.status?.ollama?.ok
             ? ` · ollama ${(remote.status.ollama.models || []).join(",") || "ok"}`
             : null}
+          {remote.locationProof?.schema
+            ? ` · proof ${String(remote.locationProof.schema)}`
+            : null}
         </p>
       ) : (
         <p className="text-2xs text-muted-foreground">

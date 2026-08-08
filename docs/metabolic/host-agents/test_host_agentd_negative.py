@@ -78,6 +78,9 @@ def main() -> int:
         assert code == 401, code
         code, body = http("GET", "/v1/status")
         assert code == 200, (code, body)
+        code, body = http("GET", "/v1/location-proof")
+        assert code == 200, (code, body)
+        assert body.get("schema") == "seat-location.v0" or body.get("ok") is True
         code, body = http(
             "POST",
             "/v1/agents/home-grok/arm",

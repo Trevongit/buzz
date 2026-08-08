@@ -62,6 +62,19 @@ export function RemoteAgentCard({
             {card.runtimes.join(" · ")}
           </p>
         ) : null}
+        {card.surfaceRoot ? (
+          <p
+            className="truncate text-3xs text-muted-foreground/70"
+            title={card.surfaceRoot}
+          >
+            surface {card.surfaceRoot}
+          </p>
+        ) : null}
+        {card.projectIds && card.projectIds.length > 0 ? (
+          <p className="truncate text-3xs text-muted-foreground/70">
+            projects {card.projectIds.join(", ")}
+          </p>
+        ) : null}
       </div>
       <div className="mt-3 flex items-center gap-2">
         <Button

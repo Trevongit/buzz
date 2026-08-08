@@ -90,6 +90,23 @@ export async function hostAgentdArm(
   return { ok: true, stdout: body.stdout, stderr: body.stderr };
 }
 
+export async function hostAgentdLocationProof(
+  baseUrl: string,
+  token: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/location-proof`, {
+    headers: authHeaders(token),
+  });
+  const body = (await parseJson(res)) as Record<string, unknown>;
+  if (!res.ok) {
+    throw new HostAgentdError(
+      (body.error as string) || `location-proof ${res.status}`,
+      res.status,
+    );
+  }
+  return body;
+}
+
 export async function hostAgentdDisarm(
   baseUrl: string,
   token: string,
