@@ -36,11 +36,43 @@ pub struct BlobDescriptor {
     pub duration: Option<f64>,
 }
 
+/// Sanitize a filename for imeta `filename` and markdown labels.
+///
+/// Matches Desktop `sanitize_filename` and the relay's imeta contract
+/// (`crates/buzz-relay/src/handlers/imeta.rs`): final path segment only
+/// (both `/` and `\`), no control characters, 1–255 **bytes**, fallback `"file"`.
+///
+/// Using this for both the imeta field and the markdown link text prevents the
+/// regression where Blossom upload succeeds but `messages send --file` fails
+/// at event ingest on a relay-invalid basename.
+pub fn sanitize_filename(name: &str) -> String {
+    // Keep only the final path segment — defend against `../` and absolute paths
+    // regardless of separator style (Unix `Path::file_name` does not split `\`).
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name).trim();
+    // Bound by UTF-8 bytes to match relay `value.len() > 255` (not char count).
+    let mut cleaned = String::new();
+    for c in base.chars().filter(|c| !c.is_control()) {
+        let mut buf = [0u8; 4];
+        let enc = c.encode_utf8(&mut buf);
+        if cleaned.len() + enc.len() > 255 {
+            break;
+        }
+        cleaned.push_str(enc);
+    }
+    if cleaned.is_empty() {
+        "file".to_string()
+    } else {
+        cleaned
+    }
+}
+
 /// Build an `imeta` tag array from a BlobDescriptor (NIP-92 media metadata).
 ///
-/// When `filename` is set (basename of the local path the user uploaded), it is
-/// included as `filename <name>` so Desktop can render FileCards with a real
-/// label for generic attachments. Pass `None` for media that needs no label.
+/// When `filename` is set (local path or basename the user uploaded), it is
+/// sanitized and included as `filename <name>` so Desktop can render FileCards
+/// with a real label for generic attachments. Pass `None` for media that needs
+/// no label. Empty/invalid-after-sanitize names are omitted rather than
+/// publishing a relay-invalid value.
 pub fn build_imeta_tag_with_filename(d: &BlobDescriptor, filename: Option<&str>) -> Vec<String> {
     let mut tag = vec![
         "imeta".to_string(),
@@ -49,13 +81,12 @@ pub fn build_imeta_tag_with_filename(d: &BlobDescriptor, filename: Option<&str>)
         format!("x {}", d.sha256),
         format!("size {}", d.size),
     ];
-    if let Some(name) = filename.map(str::trim).filter(|s| !s.is_empty()) {
-        // Relay rejects path-like filenames; basename only.
-        let base = std::path::Path::new(name)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or(name);
-        tag.push(format!("filename {base}"));
+    if let Some(raw) = filename.map(str::trim).filter(|s| !s.is_empty()) {
+        let base = sanitize_filename(raw);
+        // sanitize_filename always returns 1–255 valid bytes; still guard.
+        if !base.is_empty() && base.len() <= 255 {
+            tag.push(format!("filename {base}"));
+        }
     }
     if let Some(ref dim) = d.dim {
         tag.push(format!("dim {dim}"));
@@ -79,12 +110,11 @@ pub fn build_imeta_tag_with_filename(d: &BlobDescriptor, filename: Option<&str>)
 /// - `image/*` (except `*.agent.png` / `*.team.png` snapshots) → `![image](url)`
 /// - everything else (zip, pdf, txt, …) → plain `[filename](url)` so Desktop
 ///   FileCard renders a download card instead of a broken image.
+///
+/// Label uses the same [`sanitize_filename`] contract as the imeta field.
 pub fn format_attachment_markdown(file_path: &str, desc: &BlobDescriptor) -> String {
     let mime = desc.mime_type.as_str();
-    let basename = std::path::Path::new(file_path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("file");
+    let basename = sanitize_filename(file_path);
     let lower = basename.to_ascii_lowercase();
     let is_snapshot_png = lower.ends_with(".agent.png") || lower.ends_with(".team.png");
 
@@ -96,6 +126,7 @@ pub fn format_attachment_markdown(file_path: &str, desc: &BlobDescriptor) -> Str
     }
 
     // Generic / snapshot: escape `[` `]` `\` in the label so markdown stays valid.
+    // After sanitize, `\` is already gone; keep escapes for `[` `]` and any residual.
     let escaped = basename
         .replace('\\', "\\\\")
         .replace('[', "\\[")
@@ -1561,8 +1592,9 @@ mod retry_tests {
     use super::{
         build_imeta_tag_with_filename, env_duration_secs, format_attachment_markdown,
         is_moderation_kind, is_upload_mime_allowed, jitter_delay, max_upload_bytes_for_mime,
-        parse_retry_hint_text, parse_retry_in_secs, BlobDescriptor, MAX_FILE_BYTES,
-        MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, RETRY_BASE_SECS, RETRY_IN_MAX_SECS, RETRY_MAX_ATTEMPTS,
+        parse_retry_hint_text, parse_retry_in_secs, sanitize_filename, BlobDescriptor,
+        MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, RETRY_BASE_SECS, RETRY_IN_MAX_SECS,
+        RETRY_MAX_ATTEMPTS,
     };
 
     // ---- parse_retry_in_secs ----
@@ -1714,6 +1746,53 @@ mod retry_tests {
         assert!(
             !without.iter().any(|f| f.starts_with("filename ")),
             "{without:?}"
+        );
+    }
+
+    #[test]
+    fn sanitize_filename_matches_relay_contract() {
+        assert_eq!(sanitize_filename("report.pdf"), "report.pdf");
+        // Strips directory components and traversal (both separator styles).
+        assert_eq!(sanitize_filename("../../etc/passwd"), "passwd");
+        assert_eq!(sanitize_filename("/abs/path/notes.txt"), "notes.txt");
+        assert_eq!(sanitize_filename(r"C:\Users\me\doc.docx"), "doc.docx");
+        // Unix Path::file_name leaves embedded `\` — we must still strip.
+        assert_eq!(sanitize_filename(r"bad\name.zip"), "name.zip");
+        // Empty / separator-only falls back.
+        assert_eq!(sanitize_filename(""), "file");
+        assert_eq!(sanitize_filename("/"), "file");
+        assert_eq!(sanitize_filename(r"\\"), "file");
+        // Control chars removed (including newlines).
+        assert_eq!(sanitize_filename("a\nb\tc.txt"), "abc.txt");
+        // Bound to 255 bytes (relay), not unbounded.
+        let long = "a".repeat(300);
+        assert_eq!(sanitize_filename(&long).len(), 255);
+        // Multibyte: never exceed 255 bytes (CJK ideograph is 3 UTF-8 bytes).
+        let multi = "\u{4e16}".repeat(100);
+        let out = sanitize_filename(&multi);
+        assert!(out.len() <= 255, "len={}", out.len());
+        assert_eq!(out.len() % 3, 0);
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn imeta_tag_sanitizes_path_and_controls_in_filename() {
+        let d = test_desc("application/zip", "https://relay.example/media/p.zip");
+        let with = build_imeta_tag_with_filename(&d, Some(r"../../pack\evil\name.zip"));
+        assert!(with.iter().any(|f| f == "filename name.zip"), "{with:?}");
+        let with_ctrl = build_imeta_tag_with_filename(&d, Some("pack\n.zip"));
+        assert!(
+            with_ctrl.iter().any(|f| f == "filename pack.zip"),
+            "{with_ctrl:?}"
+        );
+    }
+
+    #[test]
+    fn attachment_markdown_uses_sanitized_label() {
+        let d = test_desc("application/zip", "https://relay.example/media/p.zip");
+        assert_eq!(
+            format_attachment_markdown(r"/tmp/dir\weird\pack.zip", &d),
+            "\n[pack.zip](https://relay.example/media/p.zip)"
         );
     }
 
