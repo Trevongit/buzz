@@ -1,6 +1,18 @@
-/** Host-seat-location types for Remote Agents (layer 3). */
+/** Host-seat-location types for Remote Agents (layer 3).
+ * Entity holon P0: birth_cert / body / public place_proof.v1
+ */
 
 export type HostAgentHealth = "online" | "stale" | "stopped" | "unknown";
+
+/** place_proof.v1 health (host controller). Maps to HostAgentHealth in UI. */
+export type PlaceProofHealth = "ok" | "degraded" | "stale" | "down";
+
+export type SurfaceKind =
+  | "desktop-local"
+  | "cli-seat"
+  | "host-unit"
+  | "remote-view"
+  | string;
 
 export type RemoteAgentPreset =
   | "co-lab-gemma"
@@ -8,9 +20,42 @@ export type RemoteAgentPreset =
   | "push-nerve"
   | "status-only";
 
+/** Public place_proof.v1 — room/mesh safe (no surface_root, pid, nsec). */
+export type PlaceProofPublic = {
+  schema: "place_proof.v1" | string;
+  birth_cert_id?: string;
+  legal_name?: string;
+  seat_id?: string;
+  body_id?: string | null;
+  host_id?: string;
+  host_role?: string;
+  surface_kind?: SurfaceKind;
+  surface_id?: string;
+  health?: PlaceProofHealth | string;
+  lease_epoch?: number;
+  issued_at?: number;
+  expires_at?: number;
+  attestation?: string;
+  runtime?: string | null;
+  model?: string | null;
+};
+
+export type DualBodyError = {
+  ok: false;
+  error: "dual_body";
+  message?: string;
+  seat?: string;
+  place_proof?: PlaceProofPublic;
+};
+
 export type HostAgentSeat = {
   seat_id: string;
+  /** Immutable DNA (Nostr pubkey) when known */
+  birth_cert_id?: string;
+  pubkey?: string;
   pubkey_hint?: string;
+  body_id?: string;
+  lease_epoch?: number;
   runtimes?: string[];
   model?: string;
   channels?: string[];
@@ -19,8 +64,10 @@ export type HostAgentSeat = {
   unit_name?: string;
   unit_pid?: number | null;
   unit_alive?: boolean;
+  /** Host-local only — do not render full path in multi-user UI */
   surface_root?: string;
-  surface_kind?: string;
+  surface_kind?: SurfaceKind;
+  surface_id?: string;
   project_ids?: string[];
 };
 
@@ -61,9 +108,20 @@ export type RemoteAgentCardModel = {
   healthLabel: string;
   relayOk: boolean;
   ollamaOk: boolean;
+  /** @deprecated host-local only — prefer surfaceId in UI */
   surfaceRoot?: string;
+  /** Public stable bind id (place_proof.v1) — never a full home path */
+  surfaceId?: string;
+  surfaceKind?: SurfaceKind;
+  /** Immutable DNA short display (first 8 of pubkey) */
+  birthCertShort?: string;
+  birthCertId?: string;
+  bodyId?: string;
+  leaseEpoch?: number;
   projectIds?: string[];
   unitPid?: number | null;
+  /** True when a live body exists — Arm should not invite dual spawn */
+  bodyLive?: boolean;
 };
 
 export const REMOTE_AGENT_PRESETS: {
@@ -73,8 +131,8 @@ export const REMOTE_AGENT_PRESETS: {
 }[] = [
   {
     id: "co-lab-gemma",
-    label: "Co-lab + Gemma",
-    description: "Watch + local-llm drafts (gemma3:4b)",
+    label: "Co-lab + local LLM",
+    description: "Watch + local-llm drafts (Ollama model)",
   },
   {
     id: "co-lab-watch",
@@ -89,6 +147,29 @@ export const REMOTE_AGENT_PRESETS: {
   {
     id: "status-only",
     label: "Status only",
-    description: "No process — refresh board only",
+    description: "Register seat · no process yet",
+  },
+];
+
+/** Suggested models for the Create remote agent dialog (host-side). */
+export const REMOTE_AGENT_MODEL_OPTIONS: {
+  id: string;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    id: "gemma3:4b",
+    label: "gemma3:4b (Ollama)",
+    hint: "Local on home · co-lab-gemma",
+  },
+  {
+    id: "llama3.2:3b",
+    label: "llama3.2:3b (Ollama)",
+    hint: "Local fallback on home",
+  },
+  {
+    id: "grok-4.5",
+    label: "grok-4.5 (remote internal)",
+    hint: "Intent for Grok 4.5 on host · full cortex later",
   },
 ];

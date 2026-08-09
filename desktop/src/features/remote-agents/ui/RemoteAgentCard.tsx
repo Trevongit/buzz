@@ -32,6 +32,9 @@ export function RemoteAgentCard({
   onArm,
   onDisarm,
 }: RemoteAgentCardProps) {
+  const placeholder = card.seatId.startsWith("(");
+  const armBlocked = Boolean(card.bodyLive) || placeholder;
+
   return (
     <div
       className="flex min-h-[140px] flex-col justify-between rounded-xl border border-border/60 bg-card p-3 shadow-sm"
@@ -52,9 +55,28 @@ export function RemoteAgentCard({
         </div>
         <p className="truncate text-2xs text-muted-foreground">
           {card.hostId} · {card.hostRole}
+          {card.surfaceKind ? ` · ${card.surfaceKind}` : null}
         </p>
+        {card.birthCertShort ? (
+          <p
+            className="truncate font-mono text-3xs text-muted-foreground/90"
+            title={card.birthCertId}
+          >
+            DNA {card.birthCertShort}
+            {card.bodyId ? ` · body ${card.bodyId}` : null}
+            {card.leaseEpoch != null && card.leaseEpoch > 0
+              ? ` · lease ${card.leaseEpoch}`
+              : null}
+          </p>
+        ) : (
+          <p className="truncate text-3xs text-amber-600/90 dark:text-amber-400/90">
+            DNA unknown · fill pubkey / PUBLIC.txt
+          </p>
+        )}
         <p className="truncate text-2xs text-muted-foreground">
-          {card.healthLabel}
+          {card.bodyLive
+            ? `Online · ${card.hostRole}${card.hostId ? ` · ${card.hostId}` : ""}`
+            : card.healthLabel}
           {card.model ? ` · ${card.model}` : ""}
         </p>
         {card.runtimes.length > 0 ? (
@@ -62,12 +84,12 @@ export function RemoteAgentCard({
             {card.runtimes.join(" · ")}
           </p>
         ) : null}
-        {card.surfaceRoot ? (
+        {card.surfaceId ? (
           <p
             className="truncate text-3xs text-muted-foreground/70"
-            title={card.surfaceRoot}
+            title={card.surfaceId}
           >
-            surface {card.surfaceRoot}
+            surface {card.surfaceId}
           </p>
         ) : null}
         {card.projectIds && card.projectIds.length > 0 ? (
@@ -79,8 +101,13 @@ export function RemoteAgentCard({
       <div className="mt-3 flex items-center gap-2">
         <Button
           className="h-8 flex-1 gap-1 text-xs"
-          disabled={isPending || card.seatId.startsWith("(")}
+          disabled={isPending || armBlocked}
           size="sm"
+          title={
+            card.bodyLive
+              ? "Body already live on host — refuse dual spawn (409). Stop first or fork new DNA."
+              : undefined
+          }
           type="button"
           variant="secondary"
           onClick={onArm}
@@ -90,11 +117,11 @@ export function RemoteAgentCard({
           ) : (
             <Play className="h-3.5 w-3.5" />
           )}
-          Arm
+          {card.bodyLive ? "Live" : "Arm"}
         </Button>
         <Button
           className="h-8 flex-1 gap-1 text-xs"
-          disabled={isPending || card.seatId.startsWith("(")}
+          disabled={isPending || placeholder}
           size="sm"
           type="button"
           variant="outline"
@@ -105,7 +132,9 @@ export function RemoteAgentCard({
         </Button>
       </div>
       <p className="mt-1 truncate text-3xs text-muted-foreground/70">
-        preset {defaultPreset}
+        {card.bodyLive
+          ? "at-most-one body · dual refused"
+          : `preset ${defaultPreset}`}
       </p>
     </div>
   );

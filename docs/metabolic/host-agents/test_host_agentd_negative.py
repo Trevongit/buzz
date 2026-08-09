@@ -80,7 +80,16 @@ def main() -> int:
         assert code == 200, (code, body)
         code, body = http("GET", "/v1/location-proof")
         assert code == 200, (code, body)
-        assert body.get("schema") == "seat-location.v0" or body.get("ok") is True
+        # place_proof.v1 (P0) or legacy seat-location.v0
+        assert body.get("schema") in (
+            "place_proof.v1",
+            "seat-location.v0",
+        ) or body.get("ok") is True
+        code, body = http("GET", "/v1/location-proof?view=public")
+        assert code == 200, (code, body)
+        assert body.get("schema") == "place_proof.v1" or body.get("ok") is True
+        # public view must not leak host_local paths
+        assert "host_local" not in body or body.get("view") == "public"
         code, body = http(
             "POST",
             "/v1/agents/home-grok/arm",

@@ -5,6 +5,8 @@ import { useRemoteHostAgents } from "../useRemoteHostAgents";
 import { REMOTE_AGENT_PRESETS, type RemoteAgentPreset } from "../types";
 import { RemoteAgentCard } from "./RemoteAgentCard";
 import { RemoteHostSettingsDialog } from "./RemoteHostSettingsDialog";
+import { CreateRemoteAgentDialog } from "./CreateRemoteAgentDialog";
+import { CreateIdentityCard } from "@/features/agents/ui/CreateIdentityCard";
 import { IDENTITY_CARD_GRID_CLASS } from "@/features/agents/ui/UnifiedAgentsSection";
 import { Button } from "@/shared/ui/button";
 import { SectionHeader } from "@/shared/ui/PageHeader";
@@ -14,6 +16,8 @@ const FALLBACK_ROOM = "92297894-c2e8-4df1-a710-d1cfd1032d5e";
 export function RemoteAgentsSection() {
   const remote = useRemoteHostAgents();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [createError, setCreateError] = React.useState<string | null>(null);
   const [preset, setPreset] = React.useState<RemoteAgentPreset>("co-lab-gemma");
   const armRoom = remote.connection?.defaultRoom?.trim() || FALLBACK_ROOM;
 
@@ -65,7 +69,7 @@ export function RemoteAgentsSection() {
 
       {remote.connection ? (
         <p className="text-2xs text-muted-foreground">
-          Connected to{" "}
+          {remote.status ? "Connected to" : "Configured host"}{" "}
           <span className="font-medium text-foreground/90">
             {remote.connection.label}
           </span>{" "}
@@ -77,13 +81,17 @@ export function RemoteAgentsSection() {
           {remote.locationProof?.schema
             ? ` · proof ${String(remote.locationProof.schema)}`
             : null}
+          {!remote.status && !remote.isLoading
+            ? " · waiting for host-agentd (check Tailscale + base URL)"
+            : null}
         </p>
       ) : (
         <p className="text-2xs text-muted-foreground">
-          No host configured. Click <strong>Host</strong> and set base URL +
-          token (use SSH tunnel:{" "}
-          <code className="text-3xs">ssh -L 8787:127.0.0.1:8787 user@home</code>
-          ).
+          No host configured. Click <strong>Host</strong> and set the home
+          Tailscale base URL (e.g.{" "}
+          <code className="text-3xs">http://100.79.175.63:8787</code>) + token
+          from DM. Shell access:{" "}
+          <code className="text-3xs">ssh asus@asus-g501vw</code>.
         </p>
       )}
 
@@ -116,7 +124,17 @@ export function RemoteAgentsSection() {
             }}
           />
         ))}
-        {!remote.connection ? (
+        {remote.connection ? (
+          <CreateIdentityCard
+            ariaLabel="Create remote agent on host"
+            dataTestId="create-remote-agent-card"
+            label="New remote"
+            onClick={() => {
+              setCreateError(null);
+              setCreateOpen(true);
+            }}
+          />
+        ) : (
           <button
             className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-center text-sm text-muted-foreground transition-colors hover:bg-muted/25"
             type="button"
@@ -124,7 +142,7 @@ export function RemoteAgentsSection() {
           >
             + Connect host
           </button>
-        ) : null}
+        )}
       </div>
 
       <RemoteHostSettingsDialog
@@ -133,6 +151,36 @@ export function RemoteAgentsSection() {
         onOpenChange={setSettingsOpen}
         onSave={remote.saveConnection}
         onClear={remote.clearConnection}
+      />
+
+      <CreateRemoteAgentDialog
+        open={createOpen}
+        defaultRoom={armRoom}
+        isPending={remote.isPending}
+        error={createError}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setCreateError(null);
+        }}
+        onSubmit={async (values) => {
+          setCreateError(null);
+          try {
+            await remote.createAgent({
+              displayName: values.displayName,
+              seatId: values.seatId,
+              model: values.model,
+              preset: values.preset,
+              room: values.room,
+              notes: values.notes,
+              arm: values.arm,
+            });
+            setCreateOpen(false);
+          } catch (err) {
+            setCreateError(
+              err instanceof Error ? err.message : "Create failed",
+            );
+          }
+        }}
       />
     </section>
   );

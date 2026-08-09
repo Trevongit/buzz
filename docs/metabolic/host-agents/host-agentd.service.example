@@ -7,7 +7,8 @@
 #   systemctl --user enable --now host-agentd.service
 #
 # Bind to Tailscale IP (recommended) so only the mesh can reach it:
-#   HOST_AGENTD_HOST=100.x.y.z
+#   HOST_AGENTD_HOST=100.79.175.63
+# Loopback (127.0.0.1) needs an SSH local forward from the laptop — prefer mesh.
 
 [Unit]
 Description=Buzz host-agentd (Remote Agents control plane)
@@ -17,7 +18,7 @@ After=network-online.target
 Type=simple
 Environment=BUZZ_HOST_ROLE=home
 Environment=BUZZ_HOST_ID=asus-g501vw
-Environment=HOST_AGENTD_HOST=127.0.0.1
+Environment=HOST_AGENTD_HOST=100.79.175.63
 Environment=HOST_AGENTD_PORT=8787
 # Environment=HOST_AGENTD_TOKEN=change-me
 # Environment=BUZZ_HOST_AGENTS=%h/.local/bin/buzz-host-agents

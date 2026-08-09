@@ -3,9 +3,11 @@ import * as React from "react";
 import {
   HostAgentdError,
   hostAgentdArm,
+  hostAgentdCreateAgent,
   hostAgentdDisarm,
   hostAgentdLocationProof,
   hostAgentdStatus,
+  type CreateRemoteAgentInput,
 } from "./hostAgentdClient";
 import { deriveRemoteAgentCards } from "./deriveRemoteAgentCards";
 import {
@@ -53,28 +55,68 @@ export function useRemoteHostAgents() {
       setStatus(next);
       setError(null);
       try {
-        const proof = await hostAgentdLocationProof(conn.baseUrl, conn.token);
+        // Prefer public place_proof.v1 (no surface_root/pid) — privacy by default
+        let proof: Record<string, unknown>;
+        try {
+          proof = await hostAgentdLocationProof(
+            conn.baseUrl,
+            conn.token,
+            "public",
+          );
+        } catch {
+          proof = await hostAgentdLocationProof(conn.baseUrl, conn.token);
+        }
         setLocationProof(proof);
-        // Merge surface/project from proof seats into status seats when missing
         const proofSeats =
           (proof.seats as Array<Record<string, unknown>>) || [];
-        if (next.seats && proofSeats.length > 0) {
+        const proofBodies =
+          (proof.bodies as Array<Record<string, unknown>>) || [];
+        if (next.seats && (proofSeats.length > 0 || proofBodies.length > 0)) {
           next.seats = next.seats.map((s) => {
+            const body = proofBodies.find(
+              (p) => p.seat_id === s.seat_id || p.legal_name === s.seat_id,
+            );
             const match = proofSeats.find((p) => p.seat_id === s.seat_id);
-            if (!match) return s;
+            const health = (body?.health || match?.health) as
+              | string
+              | undefined;
             return {
               ...s,
-              surface_root:
-                s.surface_root || (match.surface_root as string) || "",
+              birth_cert_id:
+                s.birth_cert_id ||
+                (body?.birth_cert_id as string) ||
+                (match?.birth_cert_id as string) ||
+                (match?.pubkey as string) ||
+                s.pubkey ||
+                s.pubkey_hint,
+              body_id:
+                s.body_id ||
+                (body?.body_id as string) ||
+                (match?.body_id as string),
+              lease_epoch:
+                s.lease_epoch ??
+                (body?.lease_epoch as number | undefined) ??
+                (match?.lease_epoch as number | undefined),
+              surface_kind:
+                s.surface_kind ||
+                (body?.surface_kind as string) ||
+                (match?.surface_kind as string),
+              surface_id:
+                s.surface_id ||
+                (body?.surface_id as string) ||
+                (match?.surface_id as string),
+              // Do not merge surface_root into UI status from public proof
               project_ids:
                 s.project_ids ||
-                (match.project_ids as string[] | undefined) ||
+                (match?.project_ids as string[] | undefined) ||
                 [],
-              unit_pid:
-                s.unit_pid ?? (match.unit_pid as number | null | undefined),
               unit_alive:
                 s.unit_alive ??
-                (match.health === "online" ? true : s.unit_alive),
+                (health === "ok" || health === "online"
+                  ? true
+                  : health === "down" || health === "stopped"
+                    ? false
+                    : s.unit_alive),
             };
           });
           setStatus({ ...next });
@@ -185,9 +227,47 @@ export function useRemoteHostAgents() {
     [refresh],
   );
 
+  const createAgent = React.useCallback(
+    async (input: CreateRemoteAgentInput) => {
+      const conn = loadRemoteHostConnection();
+      if (!conn) {
+        setError("Configure host connection first");
+        throw new Error("Configure host connection first");
+      }
+      setIsPending(true);
+      setPendingSeat(input.seatId || input.displayName || null);
+      setNotice(null);
+      try {
+        const result = await hostAgentdCreateAgent(
+          conn.baseUrl,
+          conn.token,
+          input,
+        );
+        setNotice(
+          result.armed
+            ? `Created + armed ${result.seat_id} · ${result.model || input.model}`
+            : `Registered ${result.seat_id} on host`,
+        );
+        setError(null);
+        await refresh();
+        return result;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "create remote agent failed";
+        setError(message);
+        throw err instanceof Error ? err : new Error(message);
+      } finally {
+        setIsPending(false);
+        setPendingSeat(null);
+      }
+    },
+    [refresh],
+  );
+
   const cards: RemoteAgentCardModel[] = React.useMemo(
-    () => deriveRemoteAgentCards(status, Boolean(error && !status)),
-    [status, error],
+    () =>
+      deriveRemoteAgentCards(status, Boolean(error && !status), locationProof),
+    [status, error, locationProof],
   );
 
   return {
@@ -205,6 +285,7 @@ export function useRemoteHostAgents() {
     clearConnection,
     arm,
     disarm,
+    createAgent,
     setNotice,
     setError,
   };

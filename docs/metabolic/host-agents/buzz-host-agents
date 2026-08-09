@@ -22,10 +22,11 @@ METABOLISM_CHANNEL="${BUZZ_METABOLISM_CHANNEL:-92297894-c2e8-4df1-a710-d1cfd1032
 
 usage() {
   sed -n '2,20p' "$0" | sed 's/^# \?//'
-  echo "Usage: $0 {init|path|list|status|arm|disarm|help} [options]"
-  echo "  status [--json] [--post]"
-  echo "  arm    --preset co-lab-watch|co-lab-gemma|status-only --seat ID --room UUID"
-  echo "  disarm --preset … --seat ID"
+  echo "Usage: $0 {init|path|list|status|register|arm|disarm|help} [options]"
+  echo "  status   [--json] [--post]"
+  echo "  register --seat ID [--model M] [--notes T] [--room UUID] [--display NAME]"
+  echo "  arm      --preset co-lab-watch|co-lab-gemma|push-nerve|status-only --seat ID --room UUID [--model M]"
+  echo "  disarm   --preset … --seat ID"
 }
 
 ensure_dirs() {
@@ -62,6 +63,66 @@ JSON
 
 cmd_path() {
   echo "$REGISTRY"
+}
+
+# Register (or update) a seat in the host registry — Desktop "Create remote agent".
+cmd_register() {
+  ensure_dirs
+  local seat="" model="" notes="" room="" display=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --seat) seat="$2"; shift 2;;
+      --model) model="$2"; shift 2;;
+      --notes) notes="$2"; shift 2;;
+      --room) room="$2"; shift 2;;
+      --display|--name) display="$2"; shift 2;;
+      *) echo "unknown $1" >&2; return 2;;
+    esac
+  done
+  [[ -n "$seat" ]] || { echo "error: --seat required" >&2; return 2; }
+  # Seat ids: slug for unit dirs / host-agentd paths
+  if [[ ! "$seat" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$ ]]; then
+    echo "error: seat id must be 1–63 chars [A-Za-z0-9._-], start alnum" >&2
+    return 2
+  fi
+  if [[ ! -f "$REGISTRY" ]]; then
+    cmd_init
+  fi
+  python3 - "$REGISTRY" "$seat" "${model:-}" "${notes:-}" "${room:-}" "${display:-}" <<'PY'
+import json, sys, time
+path, seat, model, notes, room, display = sys.argv[1:7]
+with open(path) as f:
+    d = json.load(f)
+seats = d.setdefault("seats", [])
+found = None
+for s in seats:
+    if s.get("seat_id") == seat:
+        found = s
+        break
+if found is None:
+    found = {"seat_id": seat, "expected_online": False, "channels": [], "runtimes": []}
+    seats.append(found)
+if model:
+    found["model"] = model
+if notes:
+    found["notes"] = notes
+if display:
+    found["display_name"] = display
+if room:
+    ch = found.get("channels") or []
+    if room not in ch:
+        ch.append(room)
+    found["channels"] = ch
+# Default runtimes for remote internal seats
+if not found.get("runtimes"):
+    found["runtimes"] = ["watch", "local-llm"] if (model or "").startswith(("gemma", "llama", "qwen")) else ["watch"]
+d["updated_at"] = int(time.time())
+with open(path, "w") as f:
+    json.dump(d, f, indent=2)
+    f.write("\n")
+print(json.dumps({"ok": True, "seat_id": seat, "model": found.get("model"), "display_name": found.get("display_name")}))
+PY
+  echo "BUZZ_HOST registered seat=$seat model=${model:-} room=${room:-}"
 }
 
 load_registry_or_empty() {
@@ -366,16 +427,30 @@ PY
 }
 
 cmd_arm() {
-  local preset="" seat="home-grok" room=""
+  local preset="" seat="home-grok" room="" model=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --preset) preset="$2"; shift 2;;
       --seat) seat="$2"; shift 2;;
       --room) room="$2"; shift 2;;
+      --model) model="$2"; shift 2;;
       *) echo "unknown $1" >&2; return 2;;
     esac
   done
   [[ -n "$preset" ]] || { echo "error: --preset required" >&2; return 2; }
+  # Ensure seat exists in registry before arming (create-from-UI path)
+  if [[ -f "$REGISTRY" ]]; then
+    if ! python3 - "$REGISTRY" "$seat" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+sys.exit(0 if any(s.get("seat_id")==sys.argv[2] for s in (d.get("seats") or [])) else 1)
+PY
+    then
+      cmd_register --seat "$seat" --model "${model:-}" --room "${room:-}" || true
+    fi
+  else
+    cmd_register --seat "$seat" --model "${model:-}" --room "${room:-}" || true
+  fi
   [[ -n "$room" ]] || room="$METABOLISM_CHANNEL"
   ensure_dirs
   local adir
@@ -402,8 +477,20 @@ cmd_arm() {
   fi
 
   export BUZZ_SEAT_ID="$seat"
+  export BUZZ_HOST_ID="${BUZZ_HOST_ID:-$HOST_ID}"
+  export BUZZ_HOST_ROLE="${BUZZ_HOST_ROLE:-$HOST_ROLE}"
   export BUZZ_ADAPTER_STATE_DIR="${BUZZ_ADAPTER_STATE_DIR:-$HOME/.buzz-dev/adapters/${HOST_ROLE}-${seat}}"
   mkdir -p "$BUZZ_ADAPTER_STATE_DIR"
+
+  # Entity holon R3: inject self-location (public env + PLACE_PROMPT) — place wins
+  if [[ -f "$SCRIPT_DIR/location_proof.py" ]]; then
+    python3 "$SCRIPT_DIR/location_proof.py" --inject-seat "$seat" --unit-dir "$unit" \
+      >/dev/null 2>&1 || true
+    if [[ -f "$unit/self-location.env" ]]; then
+      # shellcheck disable=SC1090
+      set -a; source "$unit/self-location.env"; set +a
+    fi
+  fi
 
   case "$preset" in
     status-only)
@@ -416,7 +503,7 @@ cmd_arm() {
       ;;
     co-lab-gemma)
       export BUZZ_DRIVER_DRY_RUN="${BUZZ_DRIVER_DRY_RUN:-0}"
-      export BUZZ_DRIVER_LOCAL_LLM_MODEL="${BUZZ_DRIVER_LOCAL_LLM_MODEL:-gemma3:4b}"
+      export BUZZ_DRIVER_LOCAL_LLM_MODEL="${model:-${BUZZ_DRIVER_LOCAL_LLM_MODEL:-gemma3:4b}}"
       export BUZZ_DRIVER=local-llm
       ;;
     push-nerve|codex-home|codex@home)
@@ -516,6 +603,7 @@ main() {
     path) cmd_path "$@";;
     list) cmd_list "$@";;
     status) cmd_status "$@";;
+    register|seat-add|create) cmd_register "$@";;
     arm) cmd_arm "$@";;
     disarm) cmd_disarm "$@";;
     -h|--help|help) usage;;

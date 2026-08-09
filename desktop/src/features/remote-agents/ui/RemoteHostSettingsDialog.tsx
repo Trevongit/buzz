@@ -29,7 +29,7 @@ export function RemoteHostSettingsDialog({
 }: RemoteHostSettingsDialogProps) {
   const [label, setLabel] = React.useState(initial?.label ?? "home");
   const [baseUrl, setBaseUrl] = React.useState(
-    initial?.baseUrl ?? "http://127.0.0.1:8787",
+    initial?.baseUrl ?? "http://100.79.175.63:8787",
   );
   const [token, setToken] = React.useState(initial?.token ?? "");
   const [defaultRoom, setDefaultRoom] = React.useState(
@@ -39,7 +39,7 @@ export function RemoteHostSettingsDialog({
   React.useEffect(() => {
     if (!open) return;
     setLabel(initial?.label ?? "home");
-    setBaseUrl(initial?.baseUrl ?? "http://127.0.0.1:8787");
+    setBaseUrl(initial?.baseUrl ?? "http://100.79.175.63:8787");
     setToken(initial?.token ?? "");
     setDefaultRoom(
       initial?.defaultRoom ?? "92297894-c2e8-4df1-a710-d1cfd1032d5e",
@@ -56,8 +56,9 @@ export function RemoteHostSettingsDialog({
           <DialogTitle>Remote host connection</DialogTitle>
           <DialogDescription>
             Connect to headless <code className="text-xs">host-agentd</code> on
-            home (SSH tunnel to localhost:8787 or Tailscale IP). Token is stored
-            locally in this profile — do not paste it into Buzz rooms.
+            home over Tailscale (mesh IP, e.g.{" "}
+            <code className="text-xs">http://100.79.175.63:8787</code>). Token
+            is stored locally in this profile — do not paste it into Buzz rooms.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
@@ -83,7 +84,7 @@ export function RemoteHostSettingsDialog({
             </label>
             <Input
               id="remote-host-url"
-              placeholder="http://127.0.0.1:8787"
+              placeholder="http://100.79.175.63:8787"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
             />
