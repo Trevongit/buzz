@@ -166,10 +166,43 @@ void main() {
     // Snapshot returns older offline — must not clobber live.
     relaySession.snapshotEvents = [
       _presence('alice', 'offline', createdAt: 100),
+      _presence('bob', 'away', createdAt: 50),
     ];
     container.read(presenceCacheProvider.notifier).track(['bob']); // new track
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(container.read(presenceCacheProvider)['alice'], 'online');
+    expect(container.read(presenceCacheProvider)['bob'], 'away');
+  });
+
+  test('concurrent track snapshots both apply', () async {
+    final relaySession = _RecordingRelaySessionNotifier();
+    // First query returns alice; second returns bob — both must land.
+    var queryCount = 0;
+    relaySession.snapshotEventsBuilder = (filters) {
+      queryCount++;
+      final authors = filters.first.authors ?? <String>[];
+      if (authors.contains('alice')) {
+        return [_presence('alice', 'online', createdAt: 10)];
+      }
+      if (authors.contains('bob')) {
+        return [_presence('bob', 'away', createdAt: 11)];
+      }
+      return const [];
+    };
+    final container = _buildContainer(relaySession: relaySession);
+    addTearDown(container.dispose);
+
+    container.read(presenceCacheProvider);
+    await _pumpEventQueue();
+
+    final notifier = container.read(presenceCacheProvider.notifier);
+    notifier.track(['alice']);
+    notifier.track(['bob']);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(queryCount, greaterThanOrEqualTo(2));
+    expect(container.read(presenceCacheProvider)['alice'], 'online');
+    expect(container.read(presenceCacheProvider)['bob'], 'away');
   });
 }
 
@@ -205,6 +238,7 @@ class _RecordingRelaySessionNotifier extends RelaySessionNotifier {
   final List<NostrFilter> queryFilters = [];
   final List<void Function(NostrEvent)> _listeners = [];
   List<NostrEvent> snapshotEvents = const [];
+  List<NostrEvent> Function(List<NostrFilter> filters)? snapshotEventsBuilder;
 
   @override
   SessionState build() => const SessionState(status: SessionStatus.connected);
@@ -229,6 +263,8 @@ class _RecordingRelaySessionNotifier extends RelaySessionNotifier {
     Duration timeout = const Duration(seconds: 8),
   }) async {
     queryFilters.addAll(filters);
+    final builder = snapshotEventsBuilder;
+    if (builder != null) return builder(filters);
     return snapshotEvents;
   }
 

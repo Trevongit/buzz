@@ -8,32 +8,49 @@ import '../../shared/relay/relay.dart';
 /// In-memory cache of other users' presence.
 ///
 /// Live path: kind:20001 over WebSocket.
-/// Snapshot path (entity holon R4 / upstream #4417 spirit): on [track], issue
-/// a one-shot HTTP `POST /query` for the latest kind:20001 per author so the
-/// phone does not claim "offline" until the next heartbeat.
+/// Snapshot path (entity holon R4 / Codex P2): on [track], issue a one-shot
+/// HTTP `POST /query` for the latest kind:20001 per author so the phone does
+/// not claim "offline" until the next heartbeat.
 ///
-/// Place-aware host proofs (host-agentd) remain Desktop/Remote Agents; mobile
-/// uses relay presence status only (online/away/offline) — no host paths.
+/// Concurrent [track] calls each snapshot independently (no shared generation
+/// that drops earlier results). On reconnect, all tracked pubkeys are
+/// re-snapshotted.
 class PresenceCacheNotifier extends Notifier<Map<String, String>> {
   final Set<String> _tracked = {};
   void Function()? _presenceUnsub;
   int _subscriptionVersion = 0;
-  int _snapshotGeneration = 0;
 
   /// Created_at of the latest applied event per pubkey (live or snapshot).
   final Map<String, int> _latestCreatedAt = {};
 
+  /// For detecting offline → online transitions (re-snapshot tracked set).
+  bool _wasConnected = false;
+
   @override
   Map<String, String> build() {
     final sessionState = ref.watch(relaySessionProvider);
+    final connected = sessionState.status == SessionStatus.connected;
 
     ref.onDispose(() {
       _presenceUnsub?.call();
       _presenceUnsub = null;
+      _wasConnected = false;
     });
 
-    if (sessionState.status == SessionStatus.connected) {
+    if (connected) {
       _subscribePresenceUpdates();
+      // P2: track-while-disconnected leaves pubkeys in _tracked with no
+      // snapshot; when we become connected, snapshot the full set.
+      if (!_wasConnected) {
+        _wasConnected = true;
+        if (_tracked.isNotEmpty) {
+          unawaited(_fetchPresenceSnapshot(_tracked.toList()));
+        }
+      }
+    } else {
+      _wasConnected = false;
+      _presenceUnsub?.call();
+      _presenceUnsub = null;
     }
 
     return {};
@@ -56,24 +73,23 @@ class PresenceCacheNotifier extends Notifier<Map<String, String>> {
   }
 
   Future<void> _fetchPresenceSnapshot(List<String> pubkeys) async {
-    final generation = ++_snapshotGeneration;
+    if (pubkeys.isEmpty) return;
     final sessionState = ref.read(relaySessionProvider);
+    // Offline: keep in _tracked; reconnect path re-snapshots the full set.
     if (sessionState.status != SessionStatus.connected) return;
 
     final session = ref.read(relaySessionProvider.notifier);
+    final authors = List<String>.from(pubkeys);
     try {
-      // Relay synthesizes/retains presence via query; authors-scoped 20001.
       final events = await session.queryRelay([
         NostrFilter(
           kinds: [EventKind.presenceUpdate],
-          authors: pubkeys,
-          limit: pubkeys.length,
+          authors: authors,
+          limit: authors.length,
         ),
       ]);
-      if (generation != _snapshotGeneration) return;
       if (events.isEmpty) return;
 
-      // Latest event per subject (author, or p-tag for relay-synthesized).
       final best = <String, NostrEvent>{};
       for (final event in events) {
         final subject = _presenceSubject(event);
@@ -85,6 +101,8 @@ class PresenceCacheNotifier extends Notifier<Map<String, String>> {
       }
       if (best.isEmpty) return;
 
+      // Apply with created_at fence only — concurrent tracks must not cancel
+      // each other's successful snapshots (Codex P2).
       var changed = false;
       final updated = Map<String, String>.from(state);
       best.forEach((pubkey, event) {
@@ -105,7 +123,6 @@ class PresenceCacheNotifier extends Notifier<Map<String, String>> {
     }
   }
 
-  /// Subscribe to kind:20001 presence events over WebSocket.
   Future<void> _subscribePresenceUpdates() async {
     _presenceUnsub?.call();
     _presenceUnsub = null;
@@ -137,7 +154,6 @@ class PresenceCacheNotifier extends Notifier<Map<String, String>> {
     if (status != 'online' && status != 'away' && status != 'offline') return;
 
     final prevTs = _latestCreatedAt[pubkey] ?? 0;
-    // Live events win over equal/older snapshot; prefer newer created_at.
     if (event.createdAt < prevTs) return;
     _latestCreatedAt[pubkey] = event.createdAt;
 
@@ -147,7 +163,6 @@ class PresenceCacheNotifier extends Notifier<Map<String, String>> {
     state = updated;
   }
 
-  /// Subject of a presence event: self-signed uses author; relay-signed may use p.
   static String _presenceSubject(NostrEvent event) {
     for (final tag in event.tags) {
       if (tag.length >= 2 && tag[0] == 'p' && tag[1].isNotEmpty) {

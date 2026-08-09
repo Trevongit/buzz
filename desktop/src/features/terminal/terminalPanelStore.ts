@@ -44,8 +44,14 @@ export function useTerminalPanel() {
   );
 }
 
-export function resetTerminalPanelForTests() {
+/** Community / relay boundary reset — closes panel and drops session channels. */
+export function resetTerminalPanelState() {
   snapshot = { mode: "closed", sessionChannelIds: new Set() };
+  for (const listener of listeners) listener();
+}
+
+export function resetTerminalPanelForTests() {
+  resetTerminalPanelState();
 }
 
 export function getTerminalPanelSnapshotForTests() {

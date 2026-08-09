@@ -50,8 +50,11 @@ test("relay-mesh agents delegate start to the backend preflight", async () => {
   });
 
   let calledWith = null;
+  // Empty lookup = offline / not online elsewhere (skip live getPresence in tests).
+  const offline = {};
   await startManagedAgentWithRules({
     agent: meshAgent,
+    presenceLookup: offline,
     startManagedAgent: async (pubkey) => {
       calledWith = pubkey;
     },
@@ -62,6 +65,7 @@ test("relay-mesh agents delegate start to the backend preflight", async () => {
   await assert.rejects(
     startManagedAgentWithRules({
       agent: meshAgent,
+      presenceLookup: offline,
       startManagedAgent: async () => {
         throw new Error("no live serve target is available for this model");
       },
@@ -74,11 +78,26 @@ test("ordinary local agents still start normally", async () => {
   let calledWith = null;
   await startManagedAgentWithRules({
     agent: agent(),
+    presenceLookup: {},
     startManagedAgent: async (pubkey) => {
       calledWith = pubkey;
     },
   });
   assert.equal(calledWith, "deadbeef".repeat(8));
+});
+
+test("startManagedAgentWithRules refuses when presence says online", async () => {
+  const pk = "deadbeef".repeat(8);
+  await assert.rejects(
+    startManagedAgentWithRules({
+      agent: agent({ pubkey: pk }),
+      presenceLookup: { [pk]: "online" },
+      startManagedAgent: async () => {
+        throw new Error("should not start");
+      },
+    }),
+    /Refuse dual body/,
+  );
 });
 
 // --- respawnManagedAgentWithRules: stop→clear→start boundary tests -----------

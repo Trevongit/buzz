@@ -33,6 +33,7 @@ import { resetAvatarProfileSync } from "@/features/profile/avatarProfileSync";
 import { resetSidebarRelayConnectionCardState } from "@/features/sidebar/ui/useSidebarRelayConnectionCard";
 import { clearMarkdownNodeCache } from "@/shared/ui/markdown/nodeCache";
 import { resetVideoPlayerState } from "@/shared/ui/videoPlayerState";
+import { resetTerminalPanelState } from "@/features/terminal/terminalPanelStore";
 
 import {
   initFirstCommunity,
@@ -73,6 +74,7 @@ function resetCommunityState({
   clearSearchHitEventCache();
   clearMarkdownNodeCache();
   resetLinkPreviewTitleCache();
+  resetTerminalPanelState();
 }
 
 type CommunityInitResult =

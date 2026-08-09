@@ -96,4 +96,15 @@ describe("refuseDualBodyIfPresentElsewhere", () => {
       }),
     );
   });
+
+  it("omitted presenceLookup is treated as unknown (caller must resolve)", () => {
+    // Pure refuse only acts when status is online/away. startManagedAgentWithRules
+    // now fetches presence when omitted so production paths cannot skip the guard.
+    assert.doesNotThrow(() =>
+      refuseDualBodyIfPresentElsewhere({
+        agent: base,
+        presenceLookup: undefined,
+      }),
+    );
+  });
 });

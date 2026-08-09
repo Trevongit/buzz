@@ -115,6 +115,33 @@ export function refuseDualBodyIfPresentElsewhere(input: {
   );
 }
 
+/**
+ * Every local start path must dual-guard. Callers may pass a cached lookup;
+ * otherwise we fetch presence here so Agents view / sidebar cannot bypass.
+ * Fail closed if presence cannot be verified (avoids silent dual-body).
+ *
+ * Dynamic import keeps node unit tests free of the Tauri bridge module.
+ */
+async function resolvePresenceForDualGuard(
+  agent: ManagedAgent,
+  presenceLookup: PresenceLookup | null | undefined,
+  allowDualBody: boolean | undefined,
+): Promise<PresenceLookup | null | undefined> {
+  if (allowDualBody) return presenceLookup;
+  if (agent.backend.type !== "local") return presenceLookup;
+  if (isManagedAgentActive(agent)) return presenceLookup;
+  if (presenceLookup) return presenceLookup;
+  try {
+    const { getPresence } = await import("@/shared/api/tauri");
+    return await getPresence([normalizePubkey(agent.pubkey)]);
+  } catch {
+    throw new Error(
+      `Refuse dual body for ${agent.name}: could not verify presence elsewhere. ` +
+        "Reconnect and try again — do not start a second body while online status is unknown.",
+    );
+  }
+}
+
 export async function startManagedAgentWithRules({
   agent,
   startManagedAgent,
@@ -132,9 +159,14 @@ export async function startManagedAgentWithRules({
   } | null;
   allowDualBody?: boolean;
 }) {
-  refuseDualBodyIfPresentElsewhere({
+  const resolved = await resolvePresenceForDualGuard(
     agent,
     presenceLookup,
+    allowDualBody,
+  );
+  refuseDualBodyIfPresentElsewhere({
+    agent,
+    presenceLookup: resolved,
     placeHint,
     allowDualBody,
   });
@@ -175,9 +207,14 @@ export async function respawnManagedAgentWithRules({
     return;
   }
 
-  refuseDualBodyIfPresentElsewhere({
+  const resolved = await resolvePresenceForDualGuard(
     agent,
     presenceLookup,
+    allowDualBody,
+  );
+  refuseDualBodyIfPresentElsewhere({
+    agent,
+    presenceLookup: resolved,
     placeHint,
     allowDualBody,
   });
