@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0b1118" />
+  <meta name="description" content="Multi-Host Agent Doctrine — a readable doctrine for coherent, long-lived multi-agent systems across machines." />
+  <title>Multi-Host Agent Doctrine — A Different Class of System</title>
+  <style>
+    :root {
+      --bg: #0b1118;
+      --surface: #111923;
+      --surface-2: #172231;
+      --surface-soft: rgba(255,255,255,.035);
+      --text: #e8eef6;
+      --text-soft: #c9d5e3;
+      --muted: #93a4b8;
+      --border: #2a394c;
+      --blue: #60a5fa;
+      --blue-soft: rgba(96,165,250,.14);
+      --purple: #c084fc;
+      --purple-soft: rgba(192,132,252,.12);
+      --green: #34d399;
+      --green-soft: rgba(52,211,153,.11);
+      --amber: #fbbf24;
+      --amber-soft: rgba(251,191,36,.10);
+      --shadow: 0 12px 40px rgba(0,0,0,.22);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --content: 980px;
+      --reading: 760px;
+      --tap: 44px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(59,130,246,.10), transparent 30rem),
+        radial-gradient(circle at 88% 6%, rgba(139,92,246,.08), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: clamp(1rem, .96rem + .16vw, 1.075rem);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      overflow-wrap: anywhere;
+    }
+
+    a { color: var(--blue); text-underline-offset: .18em; }
+    strong { color: #f3f7fb; }
+
+    .skip-link {
+      position: fixed;
+      left: 1rem;
+      top: .75rem;
+      z-index: 1000;
+      padding: .7rem 1rem;
+      border-radius: 10px;
+      background: #fff;
+      color: #000;
+      transform: translateY(-180%);
+      transition: transform .15s ease;
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .page-shell {
+      width: min(100% - 2rem, var(--content));
+      margin-inline: auto;
+      padding: clamp(1rem, 2.4vw, 2rem) 0 calc(2rem + env(safe-area-inset-bottom));
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(1.4rem, 4vw, 3rem);
+      margin-bottom: clamp(1rem, 3vw, 2rem);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background:
+        linear-gradient(135deg, rgba(30,58,95,.95), rgba(45,27,78,.93)),
+        var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 17rem;
+      height: 17rem;
+      right: -7rem;
+      top: -7rem;
+      border-radius: 50%;
+      background: rgba(255,255,255,.05);
+      pointer-events: none;
+    }
+    .hero-inner { position: relative; z-index: 1; max-width: 760px; }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: .35rem .72rem;
+      border: 1px solid rgba(147,197,253,.24);
+      border-radius: 999px;
+      background: rgba(59,130,246,.12);
+      color: #bfdbfe;
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 { margin-top: 0; line-height: 1.18; }
+    h1 {
+      margin: .85rem 0 .7rem;
+      max-width: 15ch;
+      font-size: clamp(2rem, 7vw, 4.2rem);
+      letter-spacing: -.035em;
+      background: linear-gradient(90deg, #93c5fd, #d8b4fe);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 66ch;
+      color: #c9d5e3;
+      font-size: clamp(1rem, .92rem + .45vw, 1.28rem);
+    }
+
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: .7rem;
+      margin: 0 0 clamp(1rem, 3vw, 2rem);
+    }
+    .toc a {
+      display: flex;
+      align-items: center;
+      min-height: var(--tap);
+      padding: .7rem .85rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(17,25,35,.78);
+      color: var(--text-soft);
+      font-size: .88rem;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .toc a:hover, .toc a:focus-visible {
+      background: var(--surface-2);
+      border-color: #44607f;
+      outline: none;
+    }
+
+    main { display: grid; gap: clamp(.9rem, 2.3vw, 1.4rem); }
+
+    .section {
+      scroll-margin-top: 1rem;
+      padding: clamp(1.15rem, 3.2vw, 2rem);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: linear-gradient(180deg, rgba(255,255,255,.012), transparent 30%), var(--surface);
+      box-shadow: 0 6px 24px rgba(0,0,0,.10);
+    }
+    .section > * { max-width: var(--reading); }
+    .section > .wide { max-width: none; }
+
+    h2 {
+      display: flex;
+      gap: .7rem;
+      align-items: flex-start;
+      margin-bottom: .9rem;
+      font-size: clamp(1.25rem, 1.05rem + .8vw, 1.75rem);
+      letter-spacing: -.018em;
+    }
+    h2 .icon {
+      flex: 0 0 auto;
+      display: inline-grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 9px;
+      background: var(--blue-soft);
+      font-size: 1.05rem;
+    }
+    p { margin: 0 0 1rem; color: var(--text-soft); }
+    p:last-child { margin-bottom: 0; }
+
+    .callout {
+      margin: 1.15rem 0;
+      padding: 1rem 1.1rem;
+      border-left: 4px solid;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+    .callout.problem { border-color: var(--amber); background: var(--amber-soft); }
+    .callout.highlight { border-color: var(--green); background: var(--green-soft); }
+
+    .principle-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: .8rem;
+      margin: 1.1rem 0;
+      max-width: none;
+    }
+    .principle-card {
+      min-width: 0;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-soft);
+    }
+    .principle-card h3 {
+      margin-bottom: .35rem;
+      color: #bfdbfe;
+      font-size: 1rem;
+    }
+    .principle-card p { margin: 0; color: var(--muted); font-size: .93rem; }
+
+    .table-wrap {
+      max-width: none;
+      margin: 1rem 0 0;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      -webkit-overflow-scrolling: touch;
+    }
+    table {
+      width: 100%;
+      min-width: 690px;
+      border-collapse: collapse;
+      font-size: .92rem;
+    }
+    th, td {
+      padding: .85rem .9rem;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: rgba(59,130,246,.10);
+      color: #bfdbfe;
+      font-weight: 750;
+    }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:nth-child(even) { background: rgba(255,255,255,.018); }
+    .doctrine-value { color: var(--green); font-weight: 700; }
+
+    ul {
+      margin: .7rem 0 0;
+      padding-left: 1.25rem;
+    }
+    li { margin: .45rem 0; color: var(--text-soft); }
+    li::marker { color: #7dd3fc; }
+
+    .agent-box {
+      max-width: none;
+      margin-top: 1rem;
+      padding: 1.1rem 1.2rem;
+      border: 1px solid rgba(192,132,252,.30);
+      border-radius: var(--radius-sm);
+      background: var(--purple-soft);
+    }
+    .agent-box h3 { margin-bottom: .55rem; color: #ddd6fe; font-size: 1rem; }
+
+    .closing {
+      text-align: center;
+      background: linear-gradient(135deg, rgba(59,130,246,.11), rgba(139,92,246,.11)), var(--surface);
+    }
+    .closing > * { margin-inline: auto; }
+    .closing .lead { font-size: clamp(1.05rem, .98rem + .35vw, 1.2rem); }
+
+    footer {
+      padding: 1.6rem .5rem .4rem;
+      color: var(--muted);
+      text-align: center;
+      font-size: .88rem;
+    }
+
+    :focus-visible {
+      outline: 3px solid rgba(96,165,250,.75);
+      outline-offset: 3px;
+    }
+
+    @media (max-width: 760px) {
+      .page-shell { width: min(100% - 1.25rem, var(--content)); }
+      .toc { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .principle-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      body { line-height: 1.62; }
+      .page-shell { width: min(100% - .9rem, var(--content)); padding-top: .45rem; }
+      .hero { border-radius: 18px; padding: 1.25rem 1rem; }
+      .hero p br { display: none; }
+      .toc { grid-template-columns: 1fr; gap: .45rem; }
+      .toc a { font-size: .92rem; }
+      .section { border-radius: 14px; padding: 1.05rem .95rem; }
+      h2 .icon { width: 1.8rem; height: 1.8rem; }
+      .callout { padding: .9rem; }
+
+      /* On phones, comparison rows become readable cards instead of a squeezed table. */
+      .table-wrap { overflow: visible; border: 0; }
+      table, thead, tbody, tr, th, td { display: block; width: 100%; min-width: 0; }
+      thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+      tbody { display: grid; gap: .7rem; }
+      tbody tr {
+        padding: .85rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: rgba(255,255,255,.025);
+      }
+      td { padding: .38rem 0; border: 0; }
+      td::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: .08rem;
+        color: var(--muted);
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+      td:first-child { padding-top: 0; font-weight: 800; color: #f8fafc; }
+      td:last-child { padding-bottom: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+    }
+
+    @media print {
+      :root { --text: #111827; --text-soft: #1f2937; --muted: #4b5563; --border: #cbd5e1; }
+      body { background: #fff; color: #111827; font-size: 10.5pt; }
+      .page-shell { width: 100%; max-width: none; padding: 0; }
+      .hero, .section { box-shadow: none; break-inside: avoid; background: #fff; border-color: #cbd5e1; }
+      .hero h1 { color: #111827; background: none; -webkit-text-fill-color: initial; }
+      .hero p, p, li { color: #1f2937; }
+      .toc { display: none; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; }
+      footer { color: #4b5563; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-inner">
+        <div class="eyebrow">Multi-Host Agent Doctrine</div>
+        <h1>A Different Class of System</h1>
+        <p>Most agent experiences feel magical at first. The real test is whether they stay coherent after weeks of real work across multiple machines.</p>
+      </div>
+    </header>
+
+    <nav class="toc" aria-label="On this page">
+      <a href="#quiet-problem">The Quiet Problem</a>
+      <a href="#requirements">Higher-Class Requirements</a>
+      <a href="#comparison">At a Glance</a>
+      <a href="#operator">Operator View</a>
+      <a href="#contracts">Load-Bearing Contracts</a>
+      <a href="#agent-layer">Agent Standing Orders</a>
+    </nav>
+
+    <main id="main">
+      <section class="section" id="quiet-problem">
+        <h2><span class="icon" aria-hidden="true">👀</span><span>The Quiet Problem</span></h2>
+        <p>An agent that sits in the same channel as the team, remembers context, and takes on real work is a genuine step forward. Many people love that experience.</p>
+        <div class="callout problem">
+          <strong>But a deeper problem appears quickly:</strong><br />
+          Agents drift. They lose track of where their body is. They burn tokens silently. Rooms and attention multiply until the human can no longer hold the system in their head. A promising project slowly becomes a mess.
+        </div>
+        <p>The systems that feel best in the first two weeks often have the least protection against this drift.</p>
+      </section>
+
+      <section class="section" id="requirements">
+        <h2><span class="icon" aria-hidden="true">🔑</span><span>What a Higher Class of System Requires</span></h2>
+        <p>Shared context and task ownership are necessary but not sufficient. A system that can stay coherent over time also needs:</p>
+
+        <div class="principle-grid wide">
+          <article class="principle-card">
+            <h3>Body Awareness</h3>
+            <p>The agent knows which machine it is running on and refuses to pretend it is in two places at once.</p>
+          </article>
+          <article class="principle-card">
+            <h3>Metabolic Honesty</h3>
+            <p>Clear difference between “always-on local presence” and “full cloud brain is burning money right now.”</p>
+          </article>
+          <article class="principle-card">
+            <h3>Attention Budgets</h3>
+            <p>Lean defaults so rooms and soft-wakes do not quietly multiply.</p>
+          </article>
+          <article class="principle-card">
+            <h3>Enforceable Contracts</h3>
+            <p>Rules the agents themselves restate and obey — not only admin policy.</p>
+          </article>
+        </div>
+
+        <div class="callout highlight">
+          These are not features. They are the difference between a clever tool and infrastructure you can actually build a long-lived multi-agent practice on.
+        </div>
+      </section>
+
+      <section class="section" id="comparison">
+        <h2><span class="icon" aria-hidden="true">📊</span><span>At a Glance</span></h2>
+        <div class="table-wrap wide" role="region" aria-label="Comparison of typical agent-in-chat systems and the multi-host doctrine" tabindex="0">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Concern</th>
+                <th scope="col">Typical agent-in-chat systems</th>
+                <th scope="col">Multi-host doctrine</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Concern">Shared context</td>
+                <td data-label="Typical systems">Strong</td>
+                <td data-label="Multi-host doctrine" class="doctrine-value">Strong</td>
+              </tr>
+              <tr>
+                <td data-label="Concern">Task ownership</td>
+                <td data-label="Typical systems">Strong</td>
+                <td data-label="Multi-host doctrine" class="doctrine-value">Strong</td>
+              </tr>
+              <tr>
+                <td data-label="Concern">Body / place awareness</td>
+                <td data-label="Typical systems">Weak or absent</td>
+                <td data-label="Multi-host doctrine" class="doctrine-value">Explicit (DNA ≠ place ≠ face)</td>
+              </tr>
+              <tr>
+                <td data-label="Concern">Burn control</td>
+                <td data-label="Typical systems">Admin spend limits</td>
+                <td data-label="Multi-host doctrine" class="doctrine-value">Staff lifecycle + soft-wake contract</td>
+              </tr>
+              <tr>
+                <td data-label="Concern">Multi-device continuity</td>
+                <td data-label="Typical systems">Fragile</td>
+                <td data-label="Multi-host doctrine" class="doctrine-value">Designed in from the start</td>
+              </tr>
+              <tr>
+                <td data-label="Concern">Drift protection</td>
+                <td data-label="Typical systems">Mostly social / policy</td>
+                <td data-label="Multi-host doctrine" class="doctrine-value">Contractual + agent-enforced</td>
+              </tr>
+              <tr>
+                <td data-label="Concern">Sovereignty</td>
+                <td data-label="Typical systems">Often locked to one platform</td>
+                <td data-label="Multi-host doctrine" class="doctrine-value">Self-hostable open substrate</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="operator">
+        <h2><span class="icon" aria-hidden="true">🧭</span><span>Why This Matters to a Tired Operator</span></h2>
+        <p>You should be able to walk away from the laptop, travel with a second machine, or glance at a phone and still know:</p>
+        <ul>
+          <li>Which brains are currently burning money</li>
+          <li>Which rooms are intentionally hot</li>
+          <li>That no agent is pretending to be in two places at once</li>
+          <li>That the system will not quietly grow a jungle of attention while you sleep</li>
+        </ul>
+        <p>When those guarantees are missing, the human becomes the only real governor. That does not scale — and it is exhausting.</p>
+      </section>
+
+      <section class="section" id="contracts">
+        <h2><span class="icon" aria-hidden="true">⚙️</span><span>Technical Layer — Load-Bearing Contracts</span></h2>
+        <ul>
+          <li><strong>Soft-wake stdout discipline</strong> — the product only wakes on intentional signals</li>
+          <li><strong>Staff start / staff stop</strong> — a visible, reversible mode rather than ambient cloud spend</li>
+          <li><strong>Lean room default</strong> — owner DM + 0–1 hot co-lab</li>
+          <li><strong>Presence leases</strong> — separate “watching” from “display online”</li>
+          <li><strong>Dual-body refusal</strong> — an agent cannot claim two live places under the same DNA</li>
+          <li><strong>Clear inject map</strong> — chat path vs control plane vs companion surfaces</li>
+        </ul>
+        <p>These contracts are simple enough for a human to hold and precise enough for agents to obey.</p>
+      </section>
+
+      <section class="section" id="agent-layer">
+        <h2><span class="icon" aria-hidden="true">🤖</span><span>Agent Layer — What Every Seat Must Know</span></h2>
+        <div class="agent-box">
+          <h3>Standing orders for every agent seat</h3>
+          <ul>
+            <li>You have <strong>one live place</strong> at a time. Dual-body is refused.</li>
+            <li>Soft-wake is a <strong>contract</strong>, not a firehose. Diagnostics stay in logs.</li>
+            <li>Full cloud burn is an <strong>explicit mode</strong>. When the mode ends, the burn ends.</li>
+            <li>Prefer <strong>lean rooms</strong>. Do not invent omnibox attention.</li>
+            <li>Restate the relevant contract when you join a doctrine or ops room.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section closing" aria-label="Closing statement">
+        <p class="lead"><strong>The systems that feel most magical in the short term are often the ones that leave the hard problems of body, burn, and drift to the human.</strong></p>
+        <p>A higher class of system makes those problems first-class.<br />
+          It gives agents honest place, explicit metabolism, and contracts they help enforce.<br />
+          That is the difference between a clever coworker and infrastructure that can actually grow with you.</p>
+      </section>
+    </main>
+
+    <footer>
+      Multi-Host Agent Doctrine · Readable Doctrine principle<br />
+      Human first → Technical precision → Agent-enforceable contracts
+    </footer>
+  </div>
+</body>
+</html>
