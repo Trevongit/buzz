@@ -74,14 +74,8 @@ concurrency:
 
 permissions: {}
 
-env:
-  # Single source of truth for image names. Defaults to this repository's GHCR
-  # namespace so forks (and block/buzz) can write buildcache without touching
-  # another org's packages. Override with repo variables when needed.
-  #   block/buzz     → ghcr.io/block/buzz
-  #   Trevongit/buzz → ghcr.io/Trevongit/buzz
-  IMAGE_NAME: ${{ vars.GHCR_IMAGE != '' && vars.GHCR_IMAGE || format('ghcr.io/{0}/buzz', github.repository_owner) }}
-  GATEWAY_IMAGE: ${{ vars.GHCR_PUSH_GATEWAY_IMAGE != '' && vars.GHCR_PUSH_GATEWAY_IMAGE || format('ghcr.io/{0}/buzz-push-gateway', github.repository_owner) }}
+# Image names are resolved per-job (GHCR requires fully lowercase refs;
+# github.repository_owner can be mixed-case on personal forks).
 
 jobs:
   build:
@@ -110,6 +104,30 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Resolve GHCR image names (lowercase)
+        env:
+          GHCR_IMAGE_VAR: ${{ vars.GHCR_IMAGE }}
+          GHCR_GATEWAY_VAR: ${{ vars.GHCR_PUSH_GATEWAY_IMAGE }}
+        run: |
+          set -euo pipefail
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "${GHCR_IMAGE_VAR}" ]; then
+            image="${GHCR_IMAGE_VAR}"
+          else
+            image="ghcr.io/${owner}/buzz"
+          fi
+          if [ -n "${GHCR_GATEWAY_VAR}" ]; then
+            gateway="${GHCR_GATEWAY_VAR}"
+          else
+            gateway="ghcr.io/${owner}/buzz-push-gateway"
+          fi
+          # GHCR rejects mixed-case repository names
+          image="$(echo "$image" | tr '[:upper:]' '[:lower:]')"
+          gateway="$(echo "$gateway" | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE_NAME=${image}" >> "$GITHUB_ENV"
+          echo "GATEWAY_IMAGE=${gateway}" >> "$GITHUB_ENV"
+          echo "Resolved IMAGE_NAME=${image} GATEWAY_IMAGE=${gateway}"
 
       - name: Verify tag-bound release source
         if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
@@ -248,6 +266,18 @@ jobs:
             tag_prefix: debug-
 
     steps:
+      - name: Resolve GHCR image names (lowercase)
+        env:
+          GHCR_IMAGE_VAR: ${{ vars.GHCR_IMAGE }}
+          GHCR_GATEWAY_VAR: ${{ vars.GHCR_PUSH_GATEWAY_IMAGE }}
+        run: |
+          set -euo pipefail
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "${GHCR_IMAGE_VAR}" ]; then image="${GHCR_IMAGE_VAR}"; else image="ghcr.io/${owner}/buzz"; fi
+          if [ -n "${GHCR_GATEWAY_VAR}" ]; then gateway="${GHCR_GATEWAY_VAR}"; else gateway="ghcr.io/${owner}/buzz-push-gateway"; fi
+          echo "IMAGE_NAME=$(echo "$image" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "GATEWAY_IMAGE=$(echo "$gateway" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
       - name: Download all per-arch digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
@@ -368,6 +398,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Resolve GHCR image names (lowercase)
+        env:
+          GHCR_IMAGE_VAR: ${{ vars.GHCR_IMAGE }}
+          GHCR_GATEWAY_VAR: ${{ vars.GHCR_PUSH_GATEWAY_IMAGE }}
+        run: |
+          set -euo pipefail
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "${GHCR_IMAGE_VAR}" ]; then image="${GHCR_IMAGE_VAR}"; else image="ghcr.io/${owner}/buzz"; fi
+          if [ -n "${GHCR_GATEWAY_VAR}" ]; then gateway="${GHCR_GATEWAY_VAR}"; else gateway="ghcr.io/${owner}/buzz-push-gateway"; fi
+          echo "IMAGE_NAME=$(echo "$image" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "GATEWAY_IMAGE=$(echo "$gateway" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
       - name: Verify tag-bound release source
         if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         env:
@@ -434,6 +475,17 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: Resolve GHCR image names (lowercase)
+        env:
+          GHCR_IMAGE_VAR: ${{ vars.GHCR_IMAGE }}
+          GHCR_GATEWAY_VAR: ${{ vars.GHCR_PUSH_GATEWAY_IMAGE }}
+        run: |
+          set -euo pipefail
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          if [ -n "${GHCR_IMAGE_VAR}" ]; then image="${GHCR_IMAGE_VAR}"; else image="ghcr.io/${owner}/buzz"; fi
+          if [ -n "${GHCR_GATEWAY_VAR}" ]; then gateway="${GHCR_GATEWAY_VAR}"; else gateway="ghcr.io/${owner}/buzz-push-gateway"; fi
+          echo "IMAGE_NAME=$(echo "$image" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "GATEWAY_IMAGE=$(echo "$gateway" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
       - name: Download per-arch digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
