@@ -503,6 +503,31 @@ pub enum MessagesCmd {
         #[arg(long)]
         direction: String,
     },
+    /// Watch channel messages over WebSocket (NIP-42 + REQ, JSONL on stdout)
+    #[command(
+        after_help = "Streams matching events as JSONL on stdout. Lifecycle diagnostics \
+(AUTH, EOSE, NOTICE, CLOSED, reconnect) go to stderr only — never secrets.\n\n\
+Examples:\n  \
+buzz messages watch --channel <UUID> --format jsonl --timeout 15\n  \
+buzz messages watch --channel <UUID> --channel <DM-UUID> --since 1786060000"
+    )]
+    Watch {
+        /// Channel UUID to watch (repeatable for multi-channel fan-in)
+        #[arg(long = "channel", required = true)]
+        channels: Vec<String>,
+        /// Unix timestamp — only events at or after this time (transport watermark)
+        #[arg(long)]
+        since: Option<i64>,
+        /// Output format (jsonl only for v1)
+        #[arg(long, default_value = "jsonl")]
+        format: String,
+        /// Exit successfully after this many seconds of watching (after AUTH)
+        #[arg(long)]
+        timeout: Option<u64>,
+        /// Maximum live events to print before exiting (0 = unlimited)
+        #[arg(long, default_value_t = 0)]
+        limit: u32,
+    },
 }
 
 #[derive(Subcommand)]

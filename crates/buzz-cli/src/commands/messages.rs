@@ -988,7 +988,317 @@ pub async fn dispatch(
         MessagesCmd::Vote { event, direction } => {
             cmd_vote_on_post(client, &event, &direction).await
         }
+        MessagesCmd::Watch {
+            channels,
+            since,
+            format,
+            timeout,
+            limit,
+        } => cmd_watch_messages(client, &channels, since, &format, timeout, limit).await,
     }
+}
+
+/// F2: id-primary dedupe — first sight of an event id emits; repeats skip.
+fn watch_should_emit(seen: &mut std::collections::HashSet<String>, event_id: &str) -> bool {
+    seen.insert(event_id.to_string())
+}
+
+/// F3: transport watermark — max `created_at` among successfully emitted facts.
+/// Used as REQ `since` on reconnect (with id-dedupe providing replay overlap safety).
+fn watch_advance_watermark(watermark: &mut Option<u64>, created_at: u64) {
+    *watermark = Some(watermark.map_or(created_at, |w| w.max(created_at)));
+}
+
+/// F3: resume cursor for REQ after reconnect.
+///
+/// Prefers the emit watermark (with optional 1s overlap for same-second bursts).
+/// Falls back to the caller-supplied initial `--since`.
+fn watch_resume_since(initial_since: Option<i64>, watermark: Option<u64>) -> Option<i64> {
+    match (watermark, initial_since) {
+        (Some(w), Some(s)) => Some(i64::try_from(w.saturating_sub(1)).unwrap_or(0).max(s)),
+        (Some(w), None) => Some(i64::try_from(w.saturating_sub(1)).unwrap_or(0)),
+        (None, s) => s,
+    }
+}
+
+/// F3 deterministic fixture: feed synthetic (id, created_at) through emit+watermark
+/// state across a simulated disconnect. Returns emitted ids in order.
+#[cfg(test)]
+fn watch_f3_replay_sequence(
+    events_before_drop: &[(&str, u64)],
+    events_after_resume: &[(&str, u64)],
+) -> (Vec<String>, Option<u64>, Option<i64>) {
+    let mut seen = std::collections::HashSet::new();
+    let mut watermark = None;
+    let mut out = Vec::new();
+    for (id, ts) in events_before_drop {
+        if watch_should_emit(&mut seen, id) {
+            watch_advance_watermark(&mut watermark, *ts);
+            out.push((*id).to_string());
+        }
+    }
+    let resume = watch_resume_since(None, watermark);
+    for (id, ts) in events_after_resume {
+        if watch_should_emit(&mut seen, id) {
+            watch_advance_watermark(&mut watermark, *ts);
+            out.push((*id).to_string());
+        }
+    }
+    (out, watermark, resume)
+}
+
+/// Build one stdout JSONL fact object from a Nostr event (v1 field set).
+fn watch_jsonl_fact(event: &nostr::Event) -> serde_json::Value {
+    let id = event.id.to_hex();
+    let channel_id = event
+        .tags
+        .iter()
+        .find_map(|t| {
+            let v = t.clone().to_vec();
+            if v.first().map(String::as_str) == Some("h") {
+                v.get(1).cloned()
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+    let tags: Vec<Vec<String>> = event.tags.iter().map(|t| t.clone().to_vec()).collect();
+    serde_json::json!({
+        "id": id,
+        "created_at": event.created_at.as_secs(),
+        "kind": event.kind.as_u16(),
+        "pubkey": event.pubkey.to_hex(),
+        "channel_id": channel_id,
+        "content": event.content,
+        "tags": tags,
+    })
+}
+
+/// Stream channel events over WebSocket with NIP-42 AUTH (F1–F3 push path).
+///
+/// Contract (co-lab locked):
+/// - stdout: JSONL facts only (`id`, `created_at`, `kind`, `pubkey`, `channel_id`, `content`, `tags`)
+/// - stderr: AUTH / EOSE / NOTICE / CLOSED / reconnect diagnostics (never secrets)
+/// - AUTH failure → non-zero exit, zero JSONL during unauthenticated intervals
+/// - id-primary dedupe within the process (survives reconnect)
+/// - F3: on drop, re-AUTH + REQ with transport watermark overlap; no replay storm
+/// - `--timeout` / SIGINT after AUTH → exit 0 (clean end of watch)
+async fn cmd_watch_messages(
+    client: &BuzzClient,
+    channels: &[String],
+    since: Option<i64>,
+    format: &str,
+    timeout_secs: Option<u64>,
+    limit: u32,
+) -> Result<(), CliError> {
+    use buzz_ws_client::{NostrWsConnection, RelayMessage, WsClientError};
+    use std::collections::HashSet;
+    use std::io::{self, Write};
+    use std::time::Duration;
+
+    if format != "jsonl" {
+        return Err(CliError::Usage(
+            "messages watch only supports --format jsonl in v1".into(),
+        ));
+    }
+    if channels.is_empty() {
+        return Err(CliError::Usage(
+            "messages watch requires at least one --channel UUID".into(),
+        ));
+    }
+
+    let mut channel_ids = Vec::with_capacity(channels.len());
+    for ch in channels {
+        let uuid = parse_uuid(ch)?;
+        channel_ids.push(uuid.to_string());
+    }
+
+    let ws_url = client
+        .relay_url()
+        .replace("https://", "wss://")
+        .replace("http://", "ws://");
+
+    let deadline = timeout_secs.map(|s| tokio::time::Instant::now() + Duration::from_secs(s));
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut watermark: Option<u64> = None;
+    let mut emitted: u32 = 0;
+    let mut stdout = io::stdout();
+    let mut reconnect_attempt: u32 = 0;
+    const MAX_RECONNECT: u32 = 8;
+
+    'sessions: loop {
+        if let Some(d) = deadline {
+            if tokio::time::Instant::now() >= d {
+                eprintln!("BUZZ_WATCH timeout");
+                break;
+            }
+        }
+
+        let resume_since = watch_resume_since(since, watermark);
+        if reconnect_attempt > 0 {
+            eprintln!(
+                "BUZZ_WATCH reconnect attempt={reconnect_attempt} resume_since={resume_since:?} watermark={watermark:?}"
+            );
+        } else {
+            eprintln!("BUZZ_WATCH connecting {ws_url}");
+        }
+
+        // Unauthenticated intervals must not emit JSONL (no conn ⇒ no facts).
+        let mut conn =
+            match NostrWsConnection::connect_authenticated(&ws_url, client.keys(), None).await {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("BUZZ_WATCH AUTH_FAIL {e}");
+                    // Permanent auth/config failures: do not spin forever.
+                    if matches!(
+                        e,
+                        WsClientError::AuthFailed(_) | WsClientError::NoAuthChallenge
+                    ) {
+                        return Err(CliError::Other(format!(
+                            "messages watch auth/connect failed: {e}"
+                        )));
+                    }
+                    reconnect_attempt += 1;
+                    if reconnect_attempt > MAX_RECONNECT {
+                        return Err(CliError::Other(format!(
+                            "messages watch reconnect exhausted after AUTH/connect errors: {e}"
+                        )));
+                    }
+                    let backoff = Duration::from_secs(u64::from(reconnect_attempt.min(5)));
+                    eprintln!("BUZZ_WATCH backoff {}s", backoff.as_secs());
+                    tokio::time::sleep(backoff).await;
+                    continue 'sessions;
+                }
+            };
+
+        eprintln!("BUZZ_WATCH AUTH_OK");
+        reconnect_attempt = 0;
+
+        let sub_id = format!("buzz-watch-{}", &uuid::Uuid::new_v4().to_string()[..8]);
+        let mut filter = serde_json::json!({
+            "kinds": [9, 40002, 40008, 45001, 45003],
+            "#h": channel_ids,
+            "limit": 50,
+        });
+        if let Some(ts) = resume_since {
+            filter["since"] = serde_json::json!(ts);
+        }
+
+        let req = serde_json::json!(["REQ", sub_id, filter]);
+        if let Err(e) = conn.send_raw(&req).await {
+            eprintln!("BUZZ_WATCH error REQ failed: {e}");
+            reconnect_attempt += 1;
+            if reconnect_attempt > MAX_RECONNECT {
+                return Err(CliError::Other(format!("messages watch REQ failed: {e}")));
+            }
+            let _ = conn.disconnect().await;
+            continue 'sessions;
+        }
+        eprintln!(
+            "BUZZ_WATCH REQ sub={sub_id} channels={} since={resume_since:?}",
+            channel_ids.len()
+        );
+
+        // Stream until timeout, interrupt, limit, or connection drop → reconnect.
+        loop {
+            if let Some(d) = deadline {
+                if tokio::time::Instant::now() >= d {
+                    eprintln!("BUZZ_WATCH timeout");
+                    let _ = conn.disconnect().await;
+                    break 'sessions;
+                }
+            }
+
+            let wait = match deadline {
+                Some(d) => d.saturating_duration_since(tokio::time::Instant::now()),
+                None => Duration::from_secs(30),
+            };
+
+            let msg = tokio::select! {
+                biased;
+                _ = tokio::signal::ctrl_c() => {
+                    eprintln!("BUZZ_WATCH interrupt");
+                    let _ = conn.disconnect().await;
+                    break 'sessions;
+                }
+                result = conn.next_event(wait) => result,
+            };
+
+            let msg = match msg {
+                Ok(m) => m,
+                Err(WsClientError::Timeout) => continue,
+                Err(e @ (WsClientError::ConnectionClosed | WsClientError::WebSocket(_))) => {
+                    eprintln!("BUZZ_WATCH disconnect {e}");
+                    let _ = conn.disconnect().await;
+                    reconnect_attempt += 1;
+                    if reconnect_attempt > MAX_RECONNECT {
+                        return Err(CliError::Other(format!(
+                            "messages watch reconnect exhausted: {e}"
+                        )));
+                    }
+                    continue 'sessions;
+                }
+                Err(e) => {
+                    eprintln!("BUZZ_WATCH error {e}");
+                    return Err(CliError::Other(format!("messages watch stream error: {e}")));
+                }
+            };
+
+            match msg {
+                RelayMessage::Event { event, .. } => {
+                    let id = event.id.to_hex();
+                    let created = event.created_at.as_secs();
+                    if !watch_should_emit(&mut seen, &id) {
+                        continue; // F2/F3: suppress replay across reconnect
+                    }
+                    watch_advance_watermark(&mut watermark, created);
+                    let fact = watch_jsonl_fact(&event);
+                    writeln!(stdout, "{fact}").map_err(|e| CliError::Other(e.to_string()))?;
+                    stdout.flush().ok();
+                    emitted += 1;
+                    if limit > 0 && emitted >= limit {
+                        eprintln!("BUZZ_WATCH limit reached count={emitted}");
+                        let _ = conn.disconnect().await;
+                        break 'sessions;
+                    }
+                }
+                RelayMessage::Eose { subscription_id } => {
+                    eprintln!("BUZZ_WATCH EOSE sub={subscription_id}");
+                }
+                RelayMessage::Closed {
+                    subscription_id,
+                    message,
+                } => {
+                    eprintln!("BUZZ_WATCH CLOSED sub={subscription_id} reason={message}");
+                    let _ = conn.disconnect().await;
+                    // Treat as drop → reconnect with watermark (unless never emitted).
+                    if emitted == 0 && watermark.is_none() {
+                        return Err(CliError::Other(format!(
+                            "subscription closed before events: {message}"
+                        )));
+                    }
+                    reconnect_attempt += 1;
+                    if reconnect_attempt > MAX_RECONNECT {
+                        break 'sessions;
+                    }
+                    continue 'sessions;
+                }
+                RelayMessage::Notice { message } => {
+                    eprintln!("BUZZ_WATCH NOTICE {message}");
+                }
+                RelayMessage::Auth { .. } => {
+                    eprintln!("BUZZ_WATCH NOTICE unexpected AUTH challenge while streaming");
+                }
+                RelayMessage::Ok(_) | RelayMessage::Count { .. } => {}
+            }
+        }
+    }
+
+    eprintln!(
+        "BUZZ_WATCH done emitted={emitted} watermark={watermark:?} seen={}",
+        seen.len()
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -996,12 +1306,14 @@ mod tests {
     use super::{
         event_mention_pubkeys, find_root_from_tags, match_profiles_by_name, merge_message_mentions,
         missing_members, normalize_explicit_mentions, parse_member_pubkeys,
-        resolve_names_to_pubkeys,
+        resolve_names_to_pubkeys, watch_advance_watermark, watch_f3_replay_sequence,
+        watch_resume_since, watch_should_emit,
     };
     use buzz_sdk::mentions::{
         extract_at_mentions_with_known, extract_at_names, match_names_to_profiles, MentionProfile,
     };
     use serde_json::json;
+    use std::collections::HashSet;
 
     const ID_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const ID_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -1012,6 +1324,103 @@ mod tests {
     const PK_VALID_A: &str = "35c18ae273fccfaf80d629e20e7f8721b90499379addff533054acc2504c12b4";
     const PK_VALID_B: &str = "c6237ef84fa537c78dcee78efd2d4e59f728859c7f194da42ac51ededfa0be05";
     const PK_VALID_C: &str = "f4a42a97e594b77bdbd8ee35191c8b28a94a4cb871d96f32921558275421fb68";
+
+    /// F2a: same event id only emits once within a watch process.
+    #[test]
+    fn watch_dedupe_same_id_emits_once() {
+        let mut seen = HashSet::new();
+        assert!(watch_should_emit(&mut seen, ID_A));
+        assert!(!watch_should_emit(&mut seen, ID_A));
+        assert!(!watch_should_emit(&mut seen, ID_A));
+        assert!(watch_should_emit(&mut seen, ID_B));
+        assert!(!watch_should_emit(&mut seen, ID_B));
+        assert_eq!(seen.len(), 2);
+    }
+
+    /// F3: after event A, reconnect replay of A + new B → stdout A,B exactly once.
+    #[test]
+    fn watch_f3_reconnect_replay_overlap_no_storm() {
+        let (out, watermark, resume) = watch_f3_replay_sequence(
+            &[(ID_A, 1000)],
+            // Replay A (same id) plus new B — A must not re-emit.
+            &[(ID_A, 1000), (ID_B, 1005)],
+        );
+        assert_eq!(out, vec![ID_A.to_string(), ID_B.to_string()]);
+        assert_eq!(watermark, Some(1005));
+        // Resume cursor is watermark-1 for overlap window.
+        assert_eq!(resume, Some(999));
+    }
+
+    #[test]
+    fn watch_resume_since_prefers_watermark_overlap() {
+        assert_eq!(watch_resume_since(Some(50), Some(100)), Some(99));
+        assert_eq!(watch_resume_since(Some(100), Some(100)), Some(100));
+        assert_eq!(watch_resume_since(None, Some(10)), Some(9));
+        assert_eq!(watch_resume_since(Some(7), None), Some(7));
+        let mut w = None;
+        watch_advance_watermark(&mut w, 5);
+        watch_advance_watermark(&mut w, 3);
+        watch_advance_watermark(&mut w, 9);
+        assert_eq!(w, Some(9));
+    }
+
+    /// F4.1: two watch processes (seats) each emit shared event E once.
+    #[test]
+    fn watch_f4_two_seats_each_emit_shared_event_once() {
+        let event_e = ID_A;
+        let mut seat_a = HashSet::new();
+        let mut seat_b = HashSet::new();
+        assert!(watch_should_emit(&mut seat_a, event_e));
+        assert!(watch_should_emit(&mut seat_b, event_e));
+        // Replays on either process do not re-emit.
+        assert!(!watch_should_emit(&mut seat_a, event_e));
+        assert!(!watch_should_emit(&mut seat_b, event_e));
+        assert_eq!(seat_a.len(), 1);
+        assert_eq!(seat_b.len(), 1);
+    }
+
+    /// F4.2: one process fan-in (two channels / two deliveries of same id) → one fact.
+    #[test]
+    fn watch_f4_fan_in_one_process_one_emit() {
+        let mut seen = HashSet::new();
+        // Same event id arrives twice (e.g. multi-channel fan-in).
+        assert!(watch_should_emit(&mut seen, ID_A));
+        assert!(!watch_should_emit(&mut seen, ID_A));
+        assert_eq!(seen.len(), 1);
+    }
+
+    /// F4.3 + F4.5: transport cursors (watermarks) are process-local; reconnect
+    /// dedupe state does not cross seats.
+    #[test]
+    fn watch_f4_cursors_and_replay_are_process_local() {
+        let mut wa: Option<u64> = None;
+        let mut wb: Option<u64> = None;
+        watch_advance_watermark(&mut wa, 1000);
+        watch_advance_watermark(&mut wb, 500);
+        assert_eq!(watch_resume_since(None, wa), Some(999));
+        assert_eq!(watch_resume_since(None, wb), Some(499));
+        // Advancing A must not change B.
+        watch_advance_watermark(&mut wa, 2000);
+        assert_eq!(watch_resume_since(None, wb), Some(499));
+        assert_eq!(watch_resume_since(None, wa), Some(1999));
+
+        // Independent reconnect sequences.
+        let (out_a, _, _) = watch_f3_replay_sequence(&[(ID_A, 100)], &[(ID_A, 100), (ID_B, 110)]);
+        let (out_b, _, _) = watch_f3_replay_sequence(&[(ID_B, 50)], &[(ID_B, 50), (ID_A, 60)]);
+        assert_eq!(out_a, vec![ID_A.to_string(), ID_B.to_string()]);
+        assert_eq!(out_b, vec![ID_B.to_string(), ID_A.to_string()]);
+    }
+
+    /// F4.4 (CLI half): self-pubkey events are still transport facts if the
+    /// relay delivers them — skill L1 self-suppress is separate (F6). CLI
+    /// dedupe treats them like any other id.
+    #[test]
+    fn watch_f4_cli_emits_self_pubkey_as_transport_fact() {
+        let mut seen = HashSet::new();
+        // "Self" is a skill concern; CLI still one-emits by id.
+        assert!(watch_should_emit(&mut seen, ID_A));
+        assert!(!watch_should_emit(&mut seen, ID_A));
+    }
 
     #[test]
     fn root_marker_wins_over_reply_marker() {
