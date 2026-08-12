@@ -16,6 +16,11 @@ ignore = [
     { id = "RUSTSEC-2026-0194", reason = "transitive via rust-s3 and mesh-llm→plist; trusted-input XML only; no upstream fix available yet" },
     { id = "RUSTSEC-2026-0195", reason = "transitive via rust-s3 and mesh-llm→plist; trusted-input XML only; no upstream fix available yet" },
 ]
+# flume 0.11.x still depends on spin 0.9.8, which crates.io has yanked.
+# spin 0.10.0 already coexists in the lockfile for other edges. There is no
+# safe single-crate bump without coordinating flume/mesh-llm consumers.
+# Warn (do not fail CI) until that path upgrades; re-evaluate on next mesh bump.
+yanked = "warn"
 
 [licenses]
 allow = [
