@@ -2188,7 +2188,8 @@ mod tests {
                 "send",
                 "send-diff",
                 "thread",
-                "vote"
+                "vote",
+                "watch"
             ]
         );
         assert_eq!(
@@ -2321,7 +2322,7 @@ mod tests {
             ("feed", 1),
             ("issues", 4),
             ("media", 1),
-            ("messages", 8),
+            ("messages", 9),
             ("pack", 2),
             ("patches", 4),
             ("pr", 5),
