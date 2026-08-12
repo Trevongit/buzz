@@ -15,6 +15,9 @@ ignore = [
     # remove these when upstream catches up.
     { id = "RUSTSEC-2026-0194", reason = "transitive via rust-s3 and mesh-llm→plist; trusted-input XML only; no upstream fix available yet" },
     { id = "RUSTSEC-2026-0195", reason = "transitive via rust-s3 and mesh-llm→plist; trusted-input XML only; no upstream fix available yet" },
+    # nostr-relay-pool folded into nostr-sdk; still pulled as a path of nostr-sdk 0.44
+    # via mesh-llm. Unmaintained advisory is informational until mesh bumps nostr.
+    { id = "RUSTSEC-2026-0243", reason = "transitive via mesh-llm → nostr-sdk 0.44; functionality lives in nostr-sdk; no direct consumer of standalone pool" },
 ]
 # flume 0.11.x still depends on spin 0.9.8, which crates.io has yanked.
 # spin 0.10.0 already coexists in the lockfile for other edges. There is no

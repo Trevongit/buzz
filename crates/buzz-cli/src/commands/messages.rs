@@ -623,9 +623,10 @@ pub async fn cmd_send_message(
         let basename = std::path::Path::new(file_path)
             .file_name()
             .and_then(|s| s.to_str());
-        media_tags.push(crate::client::build_imeta_tag_with_filename(
-            &desc, basename,
-        ));
+        media_tags.push(match basename {
+            Some(name) => crate::client::build_imeta_tag_with_filename(&desc, Some(name)),
+            None => crate::client::build_imeta_tag(&desc),
+        });
         media_content.push_str(&crate::client::format_attachment_markdown(file_path, &desc));
     }
     let final_content = if media_content.is_empty() {
