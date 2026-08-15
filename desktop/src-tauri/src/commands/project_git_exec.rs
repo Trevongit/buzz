@@ -304,7 +304,7 @@ pub(crate) fn validate_clone_url(clone_url: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_github_clone_url(clone_url: &str) -> Result<(), String> {
+pub(crate) fn validate_github_clone_url(clone_url: &str) -> Result<(), String> {
     let parsed = Url::parse(clone_url).map_err(|error| format!("invalid clone URL: {error}"))?;
     if parsed.scheme() != "https"
         || parsed.host_str() != Some("github.com")

@@ -17,6 +17,7 @@ import {
 import { useRepositoryActivitySummariesQuery } from "@/features/projects/repositoryActivityHooks";
 import { useCreateProjectMutation } from "@/features/projects/useCreateProject";
 import { selectProjectRepository } from "@/features/projects/projectModels";
+import { initProjectLocalRepository } from "@/shared/api/projectGit";
 import { useProjectsRepoSnapshotsQuery } from "@/features/projects/useProjectsRepoSnapshots";
 import {
   projectRepoHostForProject,
@@ -801,7 +802,31 @@ export function ProjectsView() {
         isCreating={createProjectMutation.isPending}
         onCreate={async (input) => {
           const result = await createProjectMutation.mutateAsync(input);
-          if (result.compatibilityWarning) {
+          if (!input.cloneUrl) {
+            const repository = selectProjectRepository(result.project, null);
+            if (repository) {
+              try {
+                const local = await initProjectLocalRepository({
+                  description: result.project.description,
+                  projectDtag: repository.dtag,
+                  projectName: result.project.name,
+                  reposDir: activeCommunity?.reposDir,
+                });
+                toast.success(`Project "${result.project.name}" created.`, {
+                  description: local.message,
+                });
+              } catch (error) {
+                toast.warning(`Project "${result.project.name}" created.`, {
+                  description:
+                    error instanceof Error
+                      ? error.message
+                      : "Could not create the local git repository.",
+                });
+              }
+            } else {
+              toast.success(`Project "${result.project.name}" created.`);
+            }
+          } else if (result.compatibilityWarning) {
             toast.warning("Created as a standalone project", {
               description: result.compatibilityWarning,
             });

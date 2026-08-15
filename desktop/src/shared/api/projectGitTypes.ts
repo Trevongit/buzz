@@ -95,6 +95,12 @@ export type ProjectRepoCloneResult = {
   message: string;
 };
 
+export type ProjectRepoPublishResult = {
+  published: boolean;
+  destCloneUrl: string;
+  message: string;
+};
+
 export type ProjectRepoBranchResult = {
   branch: string;
   commit: string;

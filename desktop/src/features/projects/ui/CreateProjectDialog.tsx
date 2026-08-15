@@ -103,7 +103,7 @@ export function CreateProjectDialog({
         className="max-w-lg"
         contentClassName="pt-3"
         data-testid="create-project-dialog"
-        description="Projects group one or more repositories published to this workspace's relay."
+        description="Start on this computer. Optionally attach a public GitHub URL, or host a copy on this relay later."
         footer={
           <div className="flex w-full items-center justify-end gap-3">
             <Button
@@ -240,7 +240,9 @@ export function CreateProjectDialog({
               htmlFor="create-project-clone-url"
             >
               Initial repository clone URL
-              <span className={CREATE_LABEL_OPTIONAL_CLASS}>Optional</span>
+              <span className={CREATE_LABEL_OPTIONAL_CLASS}>
+                Optional — leave empty for local-first
+              </span>
             </label>
             <div
               className={cn(
@@ -263,11 +265,15 @@ export function CreateProjectDialog({
                   setCloneUrl(event.target.value);
                   setErrorMessage(null);
                 }}
-                placeholder="https://relay.example.com/git/bee-garden-game.git"
+                placeholder="https://github.com/owner/repo.git"
                 spellCheck={false}
                 value={cloneUrl}
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Leave empty to create a local git repo first. Add GitHub later, or
+              publish a copy to this relay when you choose.
+            </p>
           </div>
 
           <div className="space-y-1.5">

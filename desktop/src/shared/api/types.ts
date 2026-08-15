@@ -180,6 +180,7 @@ export type {
   ProjectRepoDiffFile,
   ProjectRepoFile,
   ProjectRepoMergeResult,
+  ProjectRepoPublishResult,
   ProjectRepoPullResult,
   ProjectRepoPushResult,
   ProjectRepoSnapshot,

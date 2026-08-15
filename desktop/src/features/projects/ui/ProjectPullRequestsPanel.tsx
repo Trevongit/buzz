@@ -31,6 +31,10 @@ import {
   relativeTime,
 } from "@/features/projects/lib/projectsViewHelpers";
 import { canReviewProjectPullRequest } from "@/features/projects/pullRequestReviews";
+import {
+  GithubPullRequestsSection,
+  hasGithubCloneUrl,
+} from "./ProjectGithubPullRequests";
 import type { UserProfileLookup } from "@/features/profile/lib/identity";
 import { useIdentityQuery } from "@/shared/api/hooks";
 import type { ChannelMember } from "@/shared/api/types";
@@ -923,16 +927,6 @@ export function PullRequestsPanel({
     );
   }
 
-  if (pullRequests.length === 0) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground">
-        {error
-          ? "Could not load pull requests for this repository."
-          : "No pull requests yet."}
-      </p>
-    );
-  }
-
   if (selectedPullRequest) {
     return (
       <ProjectPullRequestDetail
@@ -947,16 +941,40 @@ export function PullRequestsPanel({
     );
   }
 
+  const buzzEmpty = pullRequests.length === 0;
+  const showGithubSection = hasGithubCloneUrl(project.cloneUrls[0]);
+
+  if (buzzEmpty && !showGithubSection) {
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        {error
+          ? "Could not load pull requests for this repository."
+          : "No pull requests yet."}
+      </p>
+    );
+  }
+
   return (
-    <div className="divide-y divide-border/50">
-      {pullRequests.map((pullRequest) => (
-        <PullRequestRow
-          key={pullRequest.id}
-          onOpen={() => onSelectedPullRequestIdChange(pullRequest.id)}
-          profiles={profiles}
-          pullRequest={pullRequest}
-        />
-      ))}
+    <div>
+      {buzzEmpty ? (
+        <p className="p-4 text-sm text-muted-foreground">
+          {error
+            ? "Could not load Buzz pull requests for this repository."
+            : "No Buzz pull requests yet."}
+        </p>
+      ) : (
+        <div className="divide-y divide-border/50">
+          {pullRequests.map((pullRequest) => (
+            <PullRequestRow
+              key={pullRequest.id}
+              onOpen={() => onSelectedPullRequestIdChange(pullRequest.id)}
+              profiles={profiles}
+              pullRequest={pullRequest}
+            />
+          ))}
+        </div>
+      )}
+      <GithubPullRequestsSection cloneUrl={project.cloneUrls[0]} />
     </div>
   );
 }

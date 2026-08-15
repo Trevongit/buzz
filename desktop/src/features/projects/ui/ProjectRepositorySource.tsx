@@ -189,6 +189,10 @@ export type RepoSourceHeaderControls = {
   /** Clones the repository when no local checkout is available. */
   onCloneLocal?: () => void;
   clonePending?: boolean;
+  /** One-way GitHub → this Buzz relay copy. Does not rewrite the clone tag. */
+  onPublishCopy?: () => void;
+  publishPending?: boolean;
+  publishTitle?: string;
   /** Push of local commits, available when the local checkout is ahead. */
   canPush?: boolean;
   onPush?: () => void;
@@ -292,20 +296,44 @@ export function RepoSyncActionButton({
   controls: RepoSourceHeaderControls;
 }) {
   if (controls.remoteKind === "external") {
-    return controls.externalUrl ? (
-      <Button
-        asChild
-        className={PROJECT_PANEL_ACTION_BUTTON_CLASS}
-        size="sm"
-        title={`Open repository on ${controls.remoteLabel}`}
-        variant="ghost"
-      >
-        <a href={controls.externalUrl} rel="noreferrer" target="_blank">
-          <ExternalLink className="h-4 w-4" />
-          Open
-        </a>
-      </Button>
-    ) : null;
+    return (
+      <div className="flex items-center gap-1">
+        {controls.onPublishCopy ? (
+          <Button
+            className={PROJECT_PANEL_ACTION_BUTTON_CLASS}
+            disabled={controls.publishPending}
+            onClick={controls.onPublishCopy}
+            size="sm"
+            title={
+              controls.publishTitle ??
+              "Publish a one-way copy to this Buzz relay"
+            }
+            variant="ghost"
+          >
+            {controls.publishPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <UploadCloud className="h-4 w-4" />
+            )}
+            {controls.publishPending ? "Publishing…" : "Publish copy"}
+          </Button>
+        ) : null}
+        {controls.externalUrl ? (
+          <Button
+            asChild
+            className={PROJECT_PANEL_ACTION_BUTTON_CLASS}
+            size="sm"
+            title={`Open repository on ${controls.remoteLabel}`}
+            variant="ghost"
+          >
+            <a href={controls.externalUrl} rel="noreferrer" target="_blank">
+              <ExternalLink className="h-4 w-4" />
+              Open
+            </a>
+          </Button>
+        ) : null}
+      </div>
+    );
   }
 
   const pull = controls.canPull && controls.onPull;
