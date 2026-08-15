@@ -69,17 +69,9 @@ fn checkout_git_config(
     config.starts_with(repos_root).then_some(config)
 }
 
-fn checkout_origin_matches(
-    repo_dir: &std::path::Path,
-    repos_root: &std::path::Path,
-    clone_url: &str,
-) -> bool {
-    let Some(config_path) = checkout_git_config(repo_dir, repos_root) else {
-        return false;
-    };
-    let Ok(config) = std::fs::read_to_string(config_path) else {
-        return false;
-    };
+fn checkout_origin_url(repo_dir: &std::path::Path, repos_root: &std::path::Path) -> Option<String> {
+    let config_path = checkout_git_config(repo_dir, repos_root)?;
+    let config = std::fs::read_to_string(config_path).ok()?;
     let mut in_origin = false;
     for line in config.lines() {
         let line = line.trim();
@@ -90,12 +82,21 @@ fn checkout_origin_matches(
         if in_origin {
             if let Some((key, value)) = line.split_once('=') {
                 if key.trim() == "url" {
-                    return normalized_clone_url(value) == normalized_clone_url(clone_url);
+                    return Some(value.trim().to_string());
                 }
             }
         }
     }
-    false
+    None
+}
+
+fn checkout_origin_matches(
+    repo_dir: &std::path::Path,
+    repos_root: &std::path::Path,
+    clone_url: &str,
+) -> bool {
+    checkout_origin_url(repo_dir, repos_root)
+        .is_some_and(|origin| normalized_clone_url(&origin) == normalized_clone_url(clone_url))
 }
 
 pub(crate) fn local_repo_candidates(project_dtag: &str, clone_url: Option<&str>) -> Vec<String> {
@@ -134,7 +135,10 @@ pub(crate) fn find_local_repo_dir(
             }
             if candidate_path.join(".git").exists()
                 && clone_url
-                    .map(|url| checkout_origin_matches(&candidate_path, &repos_root, url))
+                    .map(|url| {
+                        checkout_origin_matches(&candidate_path, &repos_root, url)
+                            || checkout_origin_url(&candidate_path, &repos_root).is_none()
+                    })
                     .unwrap_or(true)
             {
                 return Ok(Some(candidate_path));

@@ -11761,6 +11761,24 @@ export function maybeInstallE2eTauriMocks() {
           message: "Cloned repository.",
         };
       }
+      case "init_project_local_repository": {
+        const path = "/tmp/buzz/REPOS/mock-local-project";
+        return {
+          path,
+          cloned: true,
+          message: "Created local repository.",
+        };
+      }
+      case "publish_github_repo_to_buzz": {
+        const input = payload as { destCloneUrl?: string };
+        return {
+          published: true,
+          dest_clone_url:
+            input.destCloneUrl ??
+            "https://relay.example/git/0000000000000000000000000000000000000000000000000000000000000000/repo",
+          message: "Published a one-way copy to this relay.",
+        };
+      }
       case "create_project_remote_branch": {
         const input = payload as {
           cloneUrl: string;

@@ -59,12 +59,14 @@ import {
   projectBranchOptionsFromSync,
   resolveProjectDefaultBranch,
 } from "@/features/projects/lib/projectBranches";
+import { usePublishGithubCopy } from "@/features/projects/lib/usePublishGithubCopy";
 import { normalizeRepositoryUrl } from "@/features/projects/lib/projectsViewHelpers";
 import {
   shareTabForWorkspaceTab,
   workspaceTabForShareTab,
 } from "@/features/projects/lib/projectShareLinks";
 import { selectProjectRepository } from "@/features/projects/projectModels";
+import { useRelayOrigin } from "@/shared/lib/useRelayOrigin";
 import { KIND_REPO_ANNOUNCEMENT } from "@/shared/constants/kinds";
 import type { EntityLinkTab } from "@/shared/lib/entityLink";
 import { useProjectRepoPresentation } from "@/features/projects/useProjectRepoHost";
@@ -146,6 +148,8 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
   }, [projectId, repositoryId]);
   const repository = selectProjectRepository(project, routeRepositoryId);
   const repoRemote = useProjectRepoPresentation(repository);
+  const relayOrigin = useRelayOrigin();
+  const identityQuery = useIdentityQuery();
   const { applyPatch: applyRepositorySearch } = useHistorySearchState(
     PROJECT_REPOSITORY_SEARCH_KEYS,
   );
@@ -261,6 +265,12 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
       (repoRemote.host.kind === "external" &&
         repoRemote.host.host === "github.com"),
   );
+  const publishCopy = usePublishGithubCopy({
+    onPublished: () => repoSnapshotQuery.refetch(),
+    relayOrigin,
+    repository,
+    viewerPubkey: identityQuery.data?.pubkey,
+  });
   const repoDiffQuery = useProjectRepoDiffQuery(
     repository,
     activeBranch,
@@ -393,8 +403,6 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
     }
     toast.success("Remote state refreshed.");
   }, [repoSnapshotQuery, repoStateQuery, repoSyncStatusQuery]);
-  // Compact branch + remote/local controls shared by the readme and Files
-  // tab headers.
   const filesSourceControls: RepoSourceHeaderControls = {
     branch: activeBranch ?? "",
     branchOptions: branchOptionsWithLocal,
@@ -424,17 +432,18 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
     ...repoRemote.controls,
     onCloneLocal:
       !selectedTag && repository?.cloneUrls[0] && repoRemote.canCloneLocally
-        ? () => {
-            void handleCloneRepo();
-          }
+        ? () => void handleCloneRepo()
         : undefined,
     clonePending: cloneRepoMutation.isPending,
+    onPublishCopy:
+      !selectedTag && publishCopy.canPublish
+        ? () => void publishCopy.publish()
+        : undefined,
+    publishPending: publishCopy.pending,
+    publishTitle:
+      "Publish heads and tags to this relay. GitHub stays the advertised remote.",
     canPush: !selectedTag && (repoSyncStatusQuery.data?.canPush ?? false),
-    onPush: selectedTag
-      ? undefined
-      : () => {
-          void handlePushLocalRepo();
-        },
+    onPush: selectedTag ? undefined : () => void handlePushLocalRepo(),
     pushDisabled:
       pushLocalRepoMutation.isPending || !repoSyncStatusQuery.data?.canPush,
     pushPending: pushLocalRepoMutation.isPending,
@@ -442,11 +451,7 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
       repoSyncStatusQuery.data?.pushBlockReason ??
       pushPullTitle("Push", repoSyncStatusQuery.data?.aheadCount, "local"),
     canPull: !selectedTag && (repoSyncStatusQuery.data?.canPull ?? false),
-    onPull: selectedTag
-      ? undefined
-      : () => {
-          void handlePullLocalRepo();
-        },
+    onPull: selectedTag ? undefined : () => void handlePullLocalRepo(),
     pullDisabled:
       pullLocalRepoMutation.isPending || !repoSyncStatusQuery.data?.canPull,
     pullPending: pullLocalRepoMutation.isPending,
@@ -530,7 +535,6 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
       ),
     [currentProfileQuery.data, profilesQuery.data?.profiles],
   );
-  const identityQuery = useIdentityQuery();
   const gitIdentityQuery = useGitIdentityQuery();
   const viewerGitIdentity = React.useMemo<ViewerGitIdentity | null>(() => {
     const pubkey = identityQuery.data?.pubkey ?? null;

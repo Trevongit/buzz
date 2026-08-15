@@ -5,6 +5,7 @@ import type {
   ProjectRepoCloneResult,
   ProjectRepoDiff,
   ProjectRepoMergeResult,
+  ProjectRepoPublishResult,
   ProjectRepoPullResult,
   ProjectRepoPushResult,
   ProjectRepoSnapshot,
@@ -437,6 +438,39 @@ export async function cloneProjectRepository(input: {
     cloneUrl: input.cloneUrl,
     defaultBranch: input.defaultBranch ?? null,
   });
+}
+
+export async function initProjectLocalRepository(input: {
+  reposDir?: string | null;
+  projectDtag: string;
+  projectName: string;
+  description?: string | null;
+}): Promise<ProjectRepoCloneResult> {
+  return invokeTauri<ProjectRepoCloneResult>("init_project_local_repository", {
+    reposDir: input.reposDir ?? null,
+    projectDtag: input.projectDtag,
+    projectName: input.projectName,
+    description: input.description ?? null,
+  });
+}
+
+export async function publishGithubRepoToBuzz(input: {
+  githubCloneUrl: string;
+  destCloneUrl: string;
+}): Promise<ProjectRepoPublishResult> {
+  const result = await invokeTauri<{
+    published: boolean;
+    dest_clone_url: string;
+    message: string;
+  }>("publish_github_repo_to_buzz", {
+    githubCloneUrl: input.githubCloneUrl,
+    destCloneUrl: input.destCloneUrl,
+  });
+  return {
+    published: result.published,
+    destCloneUrl: result.dest_clone_url,
+    message: result.message,
+  };
 }
 
 export async function createProjectRemoteBranch(input: {

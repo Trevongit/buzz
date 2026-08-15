@@ -333,6 +333,23 @@ export function ReadmePanel({
                 {sourceControls.clonePending ? "Cloning…" : "Clone locally"}
               </Button>
             ) : null}
+            {externalHost === "github.com" && sourceControls?.onPublishCopy ? (
+              <Button
+                disabled={sourceControls.publishPending}
+                onClick={sourceControls.onPublishCopy}
+                size="sm"
+                variant="outline"
+              >
+                {sourceControls.publishPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {sourceControls.publishPending
+                  ? "Publishing…"
+                  : "Publish copy to this relay"}
+              </Button>
+            ) : null}
             {externalUrl ? (
               <Button asChild size="sm" variant="outline">
                 <a href={externalUrl} rel="noreferrer" target="_blank">

@@ -320,7 +320,9 @@ fn same_repository(left: &str, right: &str) -> bool {
         .eq_ignore_ascii_case(right.trim().trim_end_matches('/').trim_end_matches(".git"))
 }
 
-fn clone_destination_root(repos_dir: Option<&str>) -> Result<std::path::PathBuf, String> {
+pub(crate) fn clone_destination_root(
+    repos_dir: Option<&str>,
+) -> Result<std::path::PathBuf, String> {
     match canonical_repos_roots(repos_dir) {
         Ok(roots) => roots
             .into_iter()
