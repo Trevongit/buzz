@@ -31,6 +31,10 @@ Thumbs.db
 # Scratch / working files (AI reviews, notes, drafts)
 .scratch/
 
+# Operator-local extras dogfood notes (not for origin PRs)
+HANDOFF.md
+.grok/
+
 # Playwright artifacts
 playwright-report/
 test-results/
