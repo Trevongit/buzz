@@ -17,4 +17,8 @@ export const BACKOFF_RESET_STABLE_MS = 60_000;
 
 /** Passive liveness thresholds for the relay heartbeat stream. */
 export const STALL_CHECK_INTERVAL_MS = 10_000;
-export const STALL_IDLE_TIMEOUT_MS = 60_000;
+// Quiet threads (no EVENT frames) used to look stalled at 60s and force a
+// reconnect; the next AUTH then flaps every few seconds. Relay pings plus
+// native Pong keep the socket; give inbound traffic 5 minutes before we
+// declare a stall.
+export const STALL_IDLE_TIMEOUT_MS = 5 * 60_000;

@@ -82,6 +82,8 @@ import { buildThreadReferenceTags } from "@/features/messages/lib/threading";
 export class RelayClient {
   private wsId: number | null = null;
   private relayUrl: string | null = null;
+  /** Native disconnect still in flight after `wsId` was cleared. */
+  private closingPromise: Promise<void> | null = null;
   private connectPromise: Promise<void> | null = null;
   private reconnectTimeout: number | null = null;
   private reconnectWaiters = new RelayReconnectWaiters();
@@ -114,6 +116,18 @@ export class RelayClient {
   setVisibleChannelId(id: string | null) {
     this.visibleChannelId = id;
   }
+
+  private beginClose(id: number, reason: string) {
+    const previous = this.closingPromise ?? Promise.resolve();
+    this.closingPromise = previous.then(() => closeWebSocket(id, reason));
+  }
+
+  private async waitForClose() {
+    if (this.closingPromise === null) return;
+    await this.closingPromise;
+    this.closingPromise = null;
+  }
+
   disconnect() {
     const error = new Error("Relay disconnected for community switch.");
 
@@ -137,7 +151,7 @@ export class RelayClient {
     this.connectionStateEmitter.set("idle");
 
     if (this.wsId !== null) {
-      void closeWebSocket(this.wsId, "community switch");
+      this.beginClose(this.wsId, "community switch");
       this.wsId = null;
     }
 
@@ -549,13 +563,14 @@ export class RelayClient {
       if (!this.relayUrl) {
         this.relayUrl = await getRelayWsUrl();
       }
+      await this.waitForClose();
       const wsId = await invoke<number>("plugin:websocket|connect", {
         url: this.relayUrl,
         onMessage: this.onMessageChannel,
         config: {},
       });
       if (generation !== this.connectionGeneration) {
-        void closeWebSocket(wsId, "stale connection attempt");
+        await closeWebSocket(wsId, "stale connection attempt");
         throw new Error("Relay connection attempt was superseded.");
       }
       this.wsId = wsId;
@@ -1049,7 +1064,7 @@ export class RelayClient {
     }
 
     if (this.wsId !== null) {
-      void closeWebSocket(this.wsId, "connection reset");
+      this.beginClose(this.wsId, "connection reset");
     }
 
     this.wsId = null;

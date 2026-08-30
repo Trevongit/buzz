@@ -273,6 +273,13 @@ async fn run_connection<S>(
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     let mut batch = FrameBatch::default();
+    // WS Ping/Pong is stripped by some proxies (Tailscale serve). A NIP-01
+    // REQ/CLOSE pair is ordinary text, so the relay counts traffic and the
+    // JS stall watchdog sees inbound EOSE. Skip the immediate first tick so
+    // AUTH can finish first (~5–15s).
+    let mut keepalive = tokio::time::interval(Duration::from_secs(20));
+    keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    keepalive.tick().await;
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
@@ -286,6 +293,39 @@ async fn run_connection<S>(
                 break;
             }
             _ = batch.due() => batch.flush(&on_message),
+            _ = keepalive.tick() => {
+                eprintln!("buzz-desktop: ws keepalive req");
+                let req = concat!(
+                    r#"["REQ","__buzz_ka",{"ids":["#,
+                    r#""0000000000000000000000000000000000000000000000000000000000000000""#,
+                    r#"],"limit":1}]"#,
+                );
+                let close = r#"["CLOSE","__buzz_ka"]"#;
+                let req_failed = tokio::time::timeout(
+                    WRITE_TIMEOUT,
+                    socket.send(Message::Text(req.to_string().into())),
+                )
+                .await
+                .map(|result| result.is_err())
+                .unwrap_or(true);
+                let close_failed = tokio::time::timeout(
+                    WRITE_TIMEOUT,
+                    socket.send(Message::Text(close.to_string().into())),
+                )
+                .await
+                .map(|result| result.is_err())
+                .unwrap_or(true);
+                if req_failed || close_failed {
+                    let message = OutboundMessage::Error(
+                        "failed to send WebSocket keepalive req".to_string(),
+                    );
+                    if let Ok(frame) = serde_json::to_string(&message) {
+                        batch.push(frame);
+                        batch.flush(&on_message);
+                    }
+                    break;
+                }
+            }
             request = receiver.recv() => {
                 let Some(request) = request else { break };
                 let result = tokio::time::timeout(WRITE_TIMEOUT, socket.send(request.message))
@@ -297,8 +337,30 @@ async fn run_connection<S>(
                 if failed { break; }
             }
             incoming = socket.next() => {
+                // Origin #4885 / #4749: tokio-tungstenite queues an automatic
+                // Pong when read returns Ping, but that frame stays off the
+                // wire until write or flush. Idle Desktop never flushed, so
+                // the relay closed after ~90s (`3 missed pongs`). Flush here;
+                // keep forwarding Ping so the stall watchdog still ticks.
                 let message = match incoming {
-                    Some(Ok(message)) => outbound_message(message),
+                    Some(Ok(message)) => {
+                        if matches!(&message, Message::Ping(_)) {
+                            let result = tokio::time::timeout(WRITE_TIMEOUT, socket.flush())
+                                .await
+                                .map_err(|_| "WebSocket Pong flush timed out".to_string())
+                                .and_then(|result| result.map_err(|error| error.to_string()));
+                            if let Err(error) = result {
+                                let message = OutboundMessage::Error(error);
+                                if let Ok(frame) = serde_json::to_string(&message) {
+                                    batch.push(frame);
+                                    batch.flush(&on_message);
+                                }
+                                break;
+                            }
+                            eprintln!("buzz-desktop: ws pong flush");
+                        }
+                        outbound_message(message)
+                    }
                     Some(Err(error)) => OutboundMessage::Error(error.to_string()),
                     None => OutboundMessage::Close(None),
                 };
@@ -461,6 +523,31 @@ mod tests {
         fn deliveries(&self) -> Vec<String> {
             self.deliveries.lock().unwrap().clone()
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn relay_ping_is_answered_with_pong() {
+        let mut harness = LoopHarness::start().await;
+        harness
+            .server
+            .send(Message::Ping(bytes::Bytes::from_static(&[1, 2, 3])))
+            .await
+            .unwrap();
+        harness.settle().await;
+
+        let incoming = harness.server.next().now_or_never();
+        match incoming {
+            Some(Some(Ok(Message::Pong(payload)))) => {
+                assert_eq!(&payload[..], &[1, 2, 3], "pong must echo the ping payload");
+            }
+            other => panic!("expected Pong, got {other:?}"),
+        }
+
+        let seen = harness.deliveries().join("");
+        assert!(
+            seen.contains("Ping"),
+            "Ping must still reach the renderer for the stall watchdog: {seen}"
+        );
     }
 
     #[tokio::test(start_paused = true)]

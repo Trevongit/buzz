@@ -69,13 +69,14 @@ export class ReadOnlyRelayClient {
     }
   }
 
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     const error = new Error("Read-only relay observer disconnected.");
     this.generation++;
 
-    if (this.wsId !== null) {
-      void closeWebSocket(this.wsId, "observer disconnected");
-      this.wsId = null;
+    const wsId = this.wsId;
+    this.wsId = null;
+    if (wsId !== null) {
+      await closeWebSocket(wsId, "observer disconnected");
     }
 
     if (this.authRequest) {
@@ -148,7 +149,7 @@ export class ReadOnlyRelayClient {
     await new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         this.authRequest = null;
-        this.disconnect();
+        void this.disconnect();
         reject(new Error("Timed out while authenticating observer relay."));
       }, AUTH_TIMEOUT_MS);
 
@@ -218,7 +219,7 @@ export class ReadOnlyRelayClient {
       "type" in message &&
       (message.type === "Close" || message.type === "Error")
     ) {
-      this.disconnect();
+      void this.disconnect();
       return;
     }
 
@@ -306,7 +307,7 @@ export class ReadOnlyRelayClient {
         ? new Error(message)
         : new Error("Observer relay authentication rejected."),
     );
-    this.disconnect();
+    void this.disconnect();
   }
 
   private handleEose(subId: string): void {
@@ -328,6 +329,6 @@ export async function withReadOnlyRelayClient<T>(
   try {
     return await callback(client);
   } finally {
-    client.disconnect();
+    await client.disconnect();
   }
 }
