@@ -11611,6 +11611,12 @@ export function maybeInstallE2eTauriMocks() {
       }
       case "interrupt_huddle_speech":
         return;
+      case "speak_listen_text":
+        return;
+      case "summarize_listen_text": {
+        const text = (payload as { text?: string })?.text ?? "";
+        return text ? `Summary of: ${text.slice(0, 80)}` : "Empty summary";
+      }
       case "set_pocket_voice": {
         const voiceKey = (payload as { voiceKey?: string })?.voiceKey;
         if (!voiceKey) throw new Error("Missing Pocket voice key");

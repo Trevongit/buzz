@@ -39,6 +39,7 @@ import { KIND_HUDDLE_STARTED } from "@/shared/constants/kinds";
 import { Button } from "@/shared/ui/button";
 import { HashArrowIn } from "@/shared/ui/icons";
 import { DeleteMessageConfirmDialog } from "./DeleteMessageConfirmDialog";
+import { MessageListenButton } from "./MessageListenButton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -424,6 +425,7 @@ export const MessageActionBar = React.memo(function MessageActionBar({
 }) {
   const [isReactionPickerOpen, setIsReactionPickerOpen] = React.useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+  const [isListenOpen, setIsListenOpen] = React.useState(false);
   const customEmoji = useCustomEmoji();
   const quickReactionEmojis = useQuickReactionEmojis(3, customEmoji);
   const quickReactionItems = React.useMemo(
@@ -494,7 +496,7 @@ export const MessageActionBar = React.memo(function MessageActionBar({
         "opacity-100 sm:pointer-events-none sm:opacity-0",
         "sm:group-hover/message:pointer-events-auto sm:group-hover/message:opacity-100",
         "sm:group-focus-within/message:pointer-events-auto sm:group-focus-within/message:opacity-100",
-        isReactionPickerOpen || isDropdownOpen
+        isReactionPickerOpen || isDropdownOpen || isListenOpen
           ? "sm:pointer-events-auto sm:opacity-100"
           : "",
       )}
@@ -561,6 +563,12 @@ export const MessageActionBar = React.memo(function MessageActionBar({
               </PopoverContent>
             </Popover>
           ) : null}
+
+          <MessageListenButton
+            channelId={channelId}
+            message={message}
+            onOpenChange={setIsListenOpen}
+          />
 
           {hasReactionAction && quickReactionItems.length > 0 ? (
             <div

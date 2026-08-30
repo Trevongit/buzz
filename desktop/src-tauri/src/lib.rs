@@ -71,8 +71,8 @@ use huddle::{
     interrupt_huddle_speech, join_huddle, leave_huddle, open_huddle_window, push_audio_pcm,
     reconnect::reconnect_huddle_audio,
     remove_agent_from_huddle, set_huddle_manual_mic_unmuted, set_huddle_transcription_enabled,
-    set_tts_enabled, set_voice_input_mode, speak_agent_message, start_huddle, start_stt_pipeline,
-    HuddlePhase,
+    set_tts_enabled, set_voice_input_mode, speak_agent_message, speak_listen_text, start_huddle,
+    start_stt_pipeline, summarize_listen_text, HuddlePhase,
 };
 use initial_window::*;
 use managed_agents::{
@@ -802,6 +802,8 @@ pub fn run() {
             huddle::agent_voice::set_huddle_agent_tts_enabled,
             huddle::agent_voice::set_huddle_agent_voice,
             speak_agent_message,
+            speak_listen_text,
+            summarize_listen_text,
             interrupt_huddle_speech,
             add_agent_to_huddle,
             remove_agent_from_huddle,

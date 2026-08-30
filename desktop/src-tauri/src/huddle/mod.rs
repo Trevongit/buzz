@@ -33,6 +33,7 @@ mod human_floor;
 pub mod jitter;
 #[cfg(test)]
 mod latency_bench;
+mod listen_tts;
 mod local_barge_in;
 pub mod models;
 pub mod pipeline;
@@ -79,6 +80,7 @@ pub use commands::{
     add_agent_to_huddle, interrupt_huddle_speech, remove_agent_from_huddle,
     set_huddle_manual_mic_unmuted,
 };
+pub use listen_tts::{speak_listen_text, summarize_listen_text};
 pub use state::{HuddleJoinInfo, HuddlePhase, HuddleState, VoiceInputMode};
 pub use transcription::{set_huddle_transcription_enabled, start_stt_pipeline};
 pub use tts_settings::set_tts_enabled;

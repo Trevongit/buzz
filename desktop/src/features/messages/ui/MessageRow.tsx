@@ -34,6 +34,7 @@ import {
 import { getConfigNudgeAuthorPubkey } from "@/features/messages/ui/configNudgeAuthPubkey";
 import { cn } from "@/shared/lib/cn";
 import { normalizePubkey } from "@/shared/lib/pubkey";
+import { Button } from "@/shared/ui/button";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
 import { useChannelNavigation } from "@/shared/context/ChannelNavigationContext";
 import { parseImetaTags } from "@/shared/ui/markdown/parseImeta";
@@ -43,6 +44,11 @@ import { resolveSnapshotSharedBy } from "@/features/messages/lib/snapshotSharedB
 import { resolveMentionProps } from "@/shared/lib/resolveMentionNames";
 import type { VideoReviewContext } from "@/shared/ui/VideoPlayer";
 import { VideoReviewCommentMarkdown } from "@/shared/ui/VideoReviewCommentMarkdown";
+import { speakListenText } from "@/features/messages/lib/listenPlayback";
+import {
+  isFollowAlongMessage,
+  spokenProseFromReaderReply,
+} from "@/features/messages/lib/listenSpeech";
 import { MessageActionBar } from "./MessageActionBar";
 import { editMessage } from "@/shared/api/tauri";
 import { hasLinkPreviewSuppression } from "@/features/messages/lib/formatTimelineMessages";
@@ -425,7 +431,7 @@ export const MessageRow = React.memo(
             );
           }
 
-          return (
+          const markdown = (
             <VideoReviewCommentMarkdown
               channelNames={channelNames}
               className={cn(
@@ -457,6 +463,35 @@ export const MessageRow = React.memo(
               videoReviewCommentRootId={videoReviewCommentRootId}
               videoReviewContext={videoReviewContext}
             />
+          );
+          if (!isFollowAlongMessage(message)) return markdown;
+          const playFollowAlong = () => {
+            toast.message("Following along…");
+            void speakListenText(
+              spokenProseFromReaderReply(message.body),
+            ).catch((error) => {
+              toast.error("Could not listen", {
+                description:
+                  error instanceof Error
+                    ? error.message
+                    : "Check Voice settings.",
+              });
+            });
+          };
+          return (
+            <div className="flex flex-col gap-2">
+              <Button
+                className="h-8 w-fit rounded-full px-3"
+                data-testid={`follow-along-${message.id}`}
+                onClick={playFollowAlong}
+                size="sm"
+                type="button"
+                variant="secondary"
+              >
+                Follow along
+              </Button>
+              {markdown}
+            </div>
           );
         }
       }
