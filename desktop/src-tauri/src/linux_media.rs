@@ -27,11 +27,19 @@
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const PROD_ORIGIN: &str = "tauri://localhost";
 
-/// The Vite dev-server origin (`devUrl` in `tauri.conf.json`, `strictPort`
-/// 1420 in `vite.config.ts`). Only trusted in debug builds.
-#[cfg(debug_assertions)]
+/// Vite origin from `devUrl` in `tauri.conf.json` (`strictPort` 1420).
+///
+/// Origin 0.5.20 extras still ships `cargo build --release` with `devUrl` set,
+/// so the live webview URI is this origin — not `tauri://localhost`. Trusting
+/// it only under `debug_assertions` auto-denies huddle `getUserMedia` with
+/// WebKit's "request is not allowed by the user agent or the platform" toast.
+/// Packaged `tauri build` still uses [`PROD_ORIGIN`].
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const DEV_ORIGIN: &str = "http://localhost:1420";
+
+/// Same Vite preview bound to IPv4 loopback (`vite preview --host 127.0.0.1`).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const DEV_ORIGIN_LOOPBACK: &str = "http://127.0.0.1:1420";
 
 /// Whether `uri` (the webview's current document URI) is a trusted app origin
 /// allowed to use mic/camera. Matches the origin exactly or as a path prefix so
@@ -46,14 +54,7 @@ fn is_trusted_media_origin(uri: &str) -> bool {
                 .is_some_and(|rest| rest.starts_with('/'))
     }
 
-    if matches(uri, PROD_ORIGIN) {
-        return true;
-    }
-    #[cfg(debug_assertions)]
-    if matches(uri, DEV_ORIGIN) {
-        return true;
-    }
-    false
+    matches(uri, PROD_ORIGIN) || matches(uri, DEV_ORIGIN) || matches(uri, DEV_ORIGIN_LOOPBACK)
 }
 
 /// Enable microphone/camera capture for `webview` if it is running on
@@ -91,6 +92,11 @@ pub fn enable_media_capture<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
             if for_device && is_trusted_media_origin(&uri) {
                 request.allow();
             } else {
+                eprintln!(
+                    "buzz-desktop: denying WebKitGTK UserMedia request uri={uri:?} audio={} video={}",
+                    request.is_for_audio_device(),
+                    request.is_for_video_device()
+                );
                 request.deny();
             }
             true
@@ -128,19 +134,17 @@ mod tests {
         assert!(!is_trusted_media_origin("tauri://localhostfoo"));
     }
 
-    #[cfg(debug_assertions)]
     #[test]
-    fn allows_dev_origin_in_debug_only() {
+    fn allows_vite_devurl_origin() {
         assert!(is_trusted_media_origin("http://localhost:1420"));
         assert!(is_trusted_media_origin("http://localhost:1420/"));
+        assert!(is_trusted_media_origin("http://127.0.0.1:1420"));
+        assert!(is_trusted_media_origin(
+            "http://127.0.0.1:1420/channels/general"
+        ));
         // A different localhost port is still untrusted.
         assert!(!is_trusted_media_origin("http://localhost:14200"));
         assert!(!is_trusted_media_origin("http://localhost:3000"));
-    }
-
-    #[cfg(not(debug_assertions))]
-    #[test]
-    fn denies_dev_origin_in_release() {
-        assert!(!is_trusted_media_origin("http://localhost:1420"));
+        assert!(!is_trusted_media_origin("http://127.0.0.1:3000"));
     }
 }
