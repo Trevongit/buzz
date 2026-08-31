@@ -70,7 +70,7 @@ import {
   STALL_CHECK_INTERVAL_MS,
   STALL_IDLE_TIMEOUT_MS,
 } from "@/shared/api/relayClientTimings";
-import { closeWebSocket } from "@/shared/api/relayWebSocketClose";
+import { NativeSocketCloser } from "@/shared/api/relayWebSocketClose";
 import {
   armRelayAuthentication,
   AuthOkTracker,
@@ -78,12 +78,10 @@ import {
 } from "@/shared/api/relayAuthPolicy";
 import { createRelayInboundBuffer } from "@/shared/api/relayInboundBuffer";
 import { buildThreadReferenceTags } from "@/features/messages/lib/threading";
-
 export class RelayClient {
   private wsId: number | null = null;
   private relayUrl: string | null = null;
-  /** Native disconnect still in flight after `wsId` was cleared. */
-  private closingPromise: Promise<void> | null = null;
+  private socketCloser = new NativeSocketCloser();
   private connectPromise: Promise<void> | null = null;
   private reconnectTimeout: number | null = null;
   private reconnectWaiters = new RelayReconnectWaiters();
@@ -103,7 +101,6 @@ export class RelayClient {
   private visibleChannelId: string | null = null;
   private authOkTracker = new AuthOkTracker();
   private terminal = false;
-
   private connectionStateEmitter = new RelayConnectionStateEmitter("idle");
   private stallWatchdog = new RelayStallWatchdog({
     intervalMs: STALL_CHECK_INTERVAL_MS,
@@ -116,18 +113,6 @@ export class RelayClient {
   setVisibleChannelId(id: string | null) {
     this.visibleChannelId = id;
   }
-
-  private beginClose(id: number, reason: string) {
-    const previous = this.closingPromise ?? Promise.resolve();
-    this.closingPromise = previous.then(() => closeWebSocket(id, reason));
-  }
-
-  private async waitForClose() {
-    if (this.closingPromise === null) return;
-    await this.closingPromise;
-    this.closingPromise = null;
-  }
-
   disconnect() {
     const error = new Error("Relay disconnected for community switch.");
 
@@ -151,7 +136,7 @@ export class RelayClient {
     this.connectionStateEmitter.set("idle");
 
     if (this.wsId !== null) {
-      this.beginClose(this.wsId, "community switch");
+      this.socketCloser.begin(this.wsId, "community switch");
       this.wsId = null;
     }
 
@@ -563,14 +548,14 @@ export class RelayClient {
       if (!this.relayUrl) {
         this.relayUrl = await getRelayWsUrl();
       }
-      await this.waitForClose();
+      await this.socketCloser.wait();
       const wsId = await invoke<number>("plugin:websocket|connect", {
         url: this.relayUrl,
         onMessage: this.onMessageChannel,
         config: {},
       });
       if (generation !== this.connectionGeneration) {
-        await closeWebSocket(wsId, "stale connection attempt");
+        await this.socketCloser.discard(wsId, "stale connection attempt");
         throw new Error("Relay connection attempt was superseded.");
       }
       this.wsId = wsId;
@@ -1064,7 +1049,7 @@ export class RelayClient {
     }
 
     if (this.wsId !== null) {
-      this.beginClose(this.wsId, "connection reset");
+      this.socketCloser.begin(this.wsId, "connection reset");
     }
 
     this.wsId = null;

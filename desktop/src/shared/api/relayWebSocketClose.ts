@@ -18,6 +18,27 @@ export function closeWebSocket(
   );
 }
 
+/** Serialize native disconnect so a new connect does not race a close. */
+export class NativeSocketCloser {
+  private pending: Promise<void> | null = null;
+
+  begin(id: number, reason: string) {
+    this.pending = (this.pending ?? Promise.resolve()).then(() =>
+      closeWebSocket(id, reason),
+    );
+  }
+
+  async wait() {
+    if (this.pending === null) return;
+    await this.pending;
+    this.pending = null;
+  }
+
+  discard(id: number, reason: string) {
+    return closeWebSocket(id, reason);
+  }
+}
+
 export function closeAllWebSockets(
   invokeFn: typeof invoke = invoke,
 ): Promise<void> {

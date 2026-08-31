@@ -1,5 +1,6 @@
 import * as React from "react";
 import { AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import {
   depthGuideActionsEqual,
   numberArrayEqual,
@@ -34,7 +35,6 @@ import {
 import { getConfigNudgeAuthorPubkey } from "@/features/messages/ui/configNudgeAuthPubkey";
 import { cn } from "@/shared/lib/cn";
 import { normalizePubkey } from "@/shared/lib/pubkey";
-import { Button } from "@/shared/ui/button";
 import { UserAvatar } from "@/shared/ui/UserAvatar";
 import { useChannelNavigation } from "@/shared/context/ChannelNavigationContext";
 import { parseImetaTags } from "@/shared/ui/markdown/parseImeta";
@@ -44,22 +44,10 @@ import { resolveSnapshotSharedBy } from "@/features/messages/lib/snapshotSharedB
 import { resolveMentionProps } from "@/shared/lib/resolveMentionNames";
 import type { VideoReviewContext } from "@/shared/ui/VideoPlayer";
 import { VideoReviewCommentMarkdown } from "@/shared/ui/VideoReviewCommentMarkdown";
-import {
-  pauseListenPlayback,
-  resumeListenPlayback,
-  speakListenText,
-  stopListenPlayback,
-} from "@/features/messages/lib/listenPlayback";
-import { useListenPlayback } from "@/features/messages/lib/useListenPlayback";
-import { readListenSummaryAgentPreference } from "@/features/messages/lib/listenSummaryAgentPreference";
-import {
-  isFollowAlongMessage,
-  spokenProseFromReaderReply,
-} from "@/features/messages/lib/listenSpeech";
 import { MessageActionBar } from "./MessageActionBar";
+import { MessageFollowAlong } from "./MessageFollowAlong";
 import { editMessage } from "@/shared/api/tauri";
 import { hasLinkPreviewSuppression } from "@/features/messages/lib/formatTimelineMessages";
-import { toast } from "sonner";
 import { MessageAgentOwner } from "./MessageAgentOwner";
 import {
   MessageAuthorText,
@@ -73,10 +61,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { getAgentAddressMentionPubkeys } from "@/features/messages/lib/agentAddressMention.mjs";
 import { getVisibleAgentAddressPubkeys } from "@/features/messages/lib/getVisibleAgentAddressPubkeys";
 import { MessageAgentAddressPrefix } from "./MessageAgentAddressPrefix";
-
 const DiffMessage = React.lazy(() => import("./DiffMessage"));
 const DiffMessageExpanded = React.lazy(() => import("./DiffMessageExpanded"));
-
 export type ThreadDepthGuideAction = {
   active?: boolean;
   depth: number;
@@ -263,7 +249,6 @@ export const MessageRow = React.memo(
     // O(1) checks — no per-row rescan of `profiles` (that duplicated parent
     // work in every mounted row and re-ran on each profile-lookup change).
     const knownAgentPubkeys = useKnownAgentPubkeys();
-    const listenPlayback = useListenPlayback();
     const isKnownAgentPubkey = React.useCallback(
       (pubkey: string) => {
         const normalized = normalizePubkey(pubkey);
@@ -439,125 +424,40 @@ export const MessageRow = React.memo(
             );
           }
 
-          const markdown = (
-            <VideoReviewCommentMarkdown
-              channelNames={channelNames}
-              className={cn(
-                "max-w-full text-message",
-                emojiOnly &&
-                  "text-4xl leading-tight [&_p]:leading-tight [&_img[data-custom-emoji]]:h-[1.45em] [&_img[data-custom-emoji]]:align-middle [&_button:has(img[data-custom-emoji])]:align-middle",
-              )}
-              // Only pass the author pubkey for agent-authored messages so
-              // config-nudge cards can authenticate the sender. Uses the
-              // raw event signer (signerPubkey), not a relay-delegated display
-              // author, because the agent itself must have signed the card.
-              configNudgeAuthorPubkey={getConfigNudgeAuthorPubkey(
-                message,
-                isKnownAgentPubkey,
-              )}
-              content={message.body}
-              messageId={message.id}
-              linkPreviewsSuppressed={linkPreviewsSuppressed}
-              linkPreviewTags={message.tags}
-              leadingInlineContent={agentAddressPrefix}
-              onRemoveLinkPreviewsForEveryone={removeLinkPreviewsForEveryone}
-              customEmoji={customEmoji}
-              imetaByUrl={imetaByUrl}
-              agentMentionPubkeysByName={agentMentionPubkeysByName}
-              mentionNames={mentionNames}
-              mentionPubkeysByName={mentionPubkeysByName}
-              searchQuery={searchQuery}
-              snapshotSharedBy={snapshotSharedBy}
-              videoReviewCommentRootId={videoReviewCommentRootId}
-              videoReviewContext={videoReviewContext}
-            />
-          );
-          if (
-            !isFollowAlongMessage(
-              message,
-              readListenSummaryAgentPreference()?.name,
-            )
-          )
-            return markdown;
-          const playFollowAlong = () => {
-            toast.message("Following along…");
-            void speakListenText(
-              spokenProseFromReaderReply(message.body),
-            ).catch((error) => {
-              toast.error("Could not listen", {
-                description:
-                  error instanceof Error
-                    ? error.message
-                    : "Check Voice settings.",
-              });
-            });
-          };
           return (
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  className="h-8 w-fit rounded-full px-3"
-                  data-testid={`follow-along-${message.id}`}
-                  onClick={playFollowAlong}
-                  size="sm"
-                  type="button"
-                  variant="secondary"
-                >
-                  Follow along
-                </Button>
-                {listenPlayback === "playing" || listenPlayback === "paused" ? (
-                  <>
-                    {listenPlayback === "playing" ? (
-                      <Button
-                        className="h-8 w-fit rounded-full px-3"
-                        data-testid={`listen-pause-${message.id}`}
-                        onClick={() => {
-                          void pauseListenPlayback();
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        Pause
-                      </Button>
-                    ) : (
-                      <Button
-                        className="h-8 w-fit rounded-full px-3"
-                        data-testid={`listen-resume-${message.id}`}
-                        onClick={() => {
-                          void resumeListenPlayback().catch((error) => {
-                            toast.error("Could not listen", {
-                              description:
-                                error instanceof Error
-                                  ? error.message
-                                  : "Check Voice settings.",
-                            });
-                          });
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      >
-                        Resume
-                      </Button>
-                    )}
-                    <Button
-                      className="h-8 w-fit rounded-full px-3"
-                      data-testid={`listen-stop-${message.id}`}
-                      onClick={() => {
-                        void stopListenPlayback();
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      Stop
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-              {markdown}
-            </div>
+            <MessageFollowAlong message={message}>
+              <VideoReviewCommentMarkdown
+                channelNames={channelNames}
+                className={cn(
+                  "max-w-full text-message",
+                  emojiOnly &&
+                    "text-4xl leading-tight [&_p]:leading-tight [&_img[data-custom-emoji]]:h-[1.45em] [&_img[data-custom-emoji]]:align-middle [&_button:has(img[data-custom-emoji])]:align-middle",
+                )}
+                // Only pass the author pubkey for agent-authored messages so
+                // config-nudge cards can authenticate the sender. Uses the
+                // raw event signer (signerPubkey), not a relay-delegated display
+                // author, because the agent itself must have signed the card.
+                configNudgeAuthorPubkey={getConfigNudgeAuthorPubkey(
+                  message,
+                  isKnownAgentPubkey,
+                )}
+                content={message.body}
+                messageId={message.id}
+                linkPreviewsSuppressed={linkPreviewsSuppressed}
+                linkPreviewTags={message.tags}
+                leadingInlineContent={agentAddressPrefix}
+                onRemoveLinkPreviewsForEveryone={removeLinkPreviewsForEveryone}
+                customEmoji={customEmoji}
+                imetaByUrl={imetaByUrl}
+                agentMentionPubkeysByName={agentMentionPubkeysByName}
+                mentionNames={mentionNames}
+                mentionPubkeysByName={mentionPubkeysByName}
+                searchQuery={searchQuery}
+                snapshotSharedBy={snapshotSharedBy}
+                videoReviewCommentRootId={videoReviewCommentRootId}
+                videoReviewContext={videoReviewContext}
+              />
+            </MessageFollowAlong>
           );
         }
       }
