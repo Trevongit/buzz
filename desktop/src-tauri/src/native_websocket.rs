@@ -369,6 +369,7 @@ async fn run_connection<S>(
                 // structure is still readable.
                 let urgent = match &message {
                     OutboundMessage::Text(payload) => is_auth_challenge(payload),
+                    OutboundMessage::Ping(_) => true,
                     _ => false,
                 };
                 let Ok(frame) = serde_json::to_string(&message) else { continue };
