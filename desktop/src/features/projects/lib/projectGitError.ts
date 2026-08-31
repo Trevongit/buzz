@@ -34,14 +34,14 @@ export function projectCloneErrorPresentation(
     };
   }
   if (
-    /\b(?:401|403)\b|authenticat|authoriz|permission denied|access denied|ssh certificate/.test(
+    /\b(?:401|403)\b|authenticat|authoriz|permission denied|access denied|ssh certificate|could not read username|terminal prompts disabled/.test(
       message,
     )
   ) {
     return {
       title: "Repository access required",
       description: github
-        ? "This repository requires GitHub authentication. Buzz currently clones public GitHub repositories without credentials."
+        ? "This GitHub repository is private. Enable GitHub machine git in Settings → Experiments, run `gh auth login` on this computer, then Clone locally. Buzz never sends your Nostr key to GitHub."
         : "Buzz could not authenticate with this repository. Check your access and try again.",
     };
   }

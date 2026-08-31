@@ -30,6 +30,12 @@
       "name": "Agent-managed profiles",
       "description": "Let agents manage their own relay name and avatar instead of restoring the desktop copy",
       "platforms": ["desktop"]
+    },
+    {
+      "id": "githubMachineGit",
+      "name": "GitHub machine git",
+      "description": "Clone, fetch, pull, and push github.com remotes (including private) with this computer's gh/git login. Buzz never puts your Nostr key in that git process.",
+      "platforms": ["desktop"]
     }
   ]
 }

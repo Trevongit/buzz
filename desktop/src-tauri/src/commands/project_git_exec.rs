@@ -54,6 +54,9 @@ pub(crate) struct GitAuthConfig {
     /// `Authorization: Nostr …` for git older than 2.46, which has no
     /// credential `authtype` and so never invokes `git-credential-nostr`.
     extra_auth_header: Option<String>,
+    /// github.com HTTPS using this machine's `gh` / git login. Must never
+    /// carry `nsec` or `NOSTR_PRIVATE_KEY` — those stay on the Buzz-relay path.
+    github_login: bool,
 }
 
 fn read_pipe_lossy(pipe: Option<impl Read>) -> String {
@@ -135,7 +138,6 @@ pub(crate) fn run_git(
 
 fn configure_git_auth(command: &mut Command, auth: &GitAuthConfig, needs_credentials: bool) {
     command.env("GIT_TERMINAL_PROMPT", "0");
-    command.env("GIT_CONFIG_NOSYSTEM", "1");
     for key in [
         "GIT_DIR",
         "GIT_WORK_TREE",
@@ -144,9 +146,15 @@ fn configure_git_auth(command: &mut Command, auth: &GitAuthConfig, needs_credent
         "GIT_ALTERNATE_OBJECT_DIRECTORIES",
         "GIT_SSH_COMMAND",
         "GIT_EXTERNAL_DIFF",
+        "NOSTR_PRIVATE_KEY",
     ] {
         command.env_remove(key);
     }
+    if auth.github_login {
+        configure_github_machine_git(command, auth);
+        return;
+    }
+    command.env("GIT_CONFIG_NOSYSTEM", "1");
     // Git for Windows maps `/dev/null` to `NUL` internally, so this value
     // disables the global config file on every platform.
     command.env("GIT_CONFIG_GLOBAL", "/dev/null");
@@ -189,6 +197,37 @@ fn configure_git_auth(command: &mut Command, auth: &GitAuthConfig, needs_credent
         }
     }
     apply_git_config(command, &entries);
+}
+
+/// github.com HTTPS using this machine's git/`gh` login. The Buzz nsec is
+/// never placed in this process — origin #5943: helpers must not inherit it.
+fn configure_github_machine_git(command: &mut Command, auth: &GitAuthConfig) {
+    debug_assert!(
+        auth.nsec.is_empty() && auth.credential_helper.is_none(),
+        "GitHub git spawn must not carry a Nostr key"
+    );
+    command.env_remove("NOSTR_PRIVATE_KEY");
+    let mut entries: Vec<(String, String)> = vec![
+        ("core.hooksPath".into(), "/dev/null".into()),
+        ("core.fsmonitor".into(), "false".into()),
+        ("protocol.allow".into(), "never".into()),
+        ("protocol.http.allow".into(), "always".into()),
+        ("protocol.https.allow".into(), "always".into()),
+        ("protocol.ext.allow".into(), "never".into()),
+        ("protocol.file.allow".into(), "never".into()),
+    ];
+    if let Some(gh) = resolve_command("gh") {
+        let helper = format!(
+            "!{} auth git-credential",
+            credential_helper_config_value(&gh)
+        );
+        entries.push(("credential.https://github.com.helper".into(), helper));
+    }
+    command.env("GIT_CONFIG_COUNT", entries.len().to_string());
+    for (index, (key, value)) in entries.iter().enumerate() {
+        command.env(format!("GIT_CONFIG_KEY_{index}"), key);
+        command.env(format!("GIT_CONFIG_VALUE_{index}"), value);
+    }
 }
 
 /// `git version 2.43.0` → `(2, 43)`.
@@ -240,11 +279,16 @@ pub(crate) fn build_git_auth_config(state: &AppState) -> Result<GitAuthConfig, S
     build_git_auth_config_for_keys(&keys)
 }
 
+pub(crate) fn is_github_https_clone_url(clone_url: &str) -> bool {
+    validate_github_clone_url(clone_url).is_ok()
+}
+
 pub(crate) fn build_git_clone_auth_config(
     clone_url: &str,
     state: &AppState,
+    github_login: bool,
 ) -> Result<GitAuthConfig, String> {
-    if validate_github_clone_url(clone_url).is_ok() {
+    if is_github_https_clone_url(clone_url) {
         return Ok(GitAuthConfig {
             git_path: resolve_command("git")
                 .ok_or_else(|| "git was not found on PATH".to_string())?,
@@ -252,6 +296,7 @@ pub(crate) fn build_git_clone_auth_config(
             nsec: String::new(),
             allow_file_transport: false,
             extra_auth_header: None,
+            github_login,
         });
     }
     let mut auth = build_git_auth_config(state)?;
@@ -290,6 +335,7 @@ pub(crate) fn build_git_auth_config_for_keys(keys: &Keys) -> Result<GitAuthConfi
         nsec,
         allow_file_transport: false,
         extra_auth_header: None,
+        github_login: false,
     })
 }
 
@@ -453,8 +499,9 @@ fn validate_clone_url_against_relay(clone_url: &str, relay_base: &str) -> Result
 mod tests {
     use super::{
         clean_branch, clean_target_ref, credential_helper_config_value, git_needs_credentials,
-        git_subcommand, git_supports_credential_authtype, parse_git_version, validate_clone_url,
-        validate_clone_url_against_relay, validate_local_clone_url,
+        git_subcommand, git_supports_credential_authtype, is_github_https_clone_url,
+        parse_git_version, validate_clone_url, validate_clone_url_against_relay,
+        validate_local_clone_url, GitAuthConfig,
     };
 
     #[test]
@@ -589,5 +636,23 @@ mod tests {
         assert!(validate_local_clone_url("https://user@github.com/block/buzz").is_err());
         assert!(validate_local_clone_url("https://github.com.evil.test/block/buzz").is_err());
         assert!(validate_local_clone_url("https://gitlab.com/block/buzz").is_err());
+    }
+
+    #[test]
+    fn github_machine_login_never_carries_a_nostr_key() {
+        let auth = GitAuthConfig {
+            git_path: std::path::PathBuf::from("git"),
+            credential_helper: None,
+            nsec: String::new(),
+            allow_file_transport: false,
+            extra_auth_header: None,
+            github_login: true,
+        };
+        assert!(auth.nsec.is_empty());
+        assert!(auth.credential_helper.is_none());
+        assert!(auth.github_login);
+        assert!(is_github_https_clone_url(
+            "https://github.com/Trevongit/sovereign-patterns.git"
+        ));
     }
 }

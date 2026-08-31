@@ -119,7 +119,7 @@ pub async fn open_project_terminal(
     // identity. Keep the result outside the blocking task so it borrows no
     // Tauri state.
     let auth = if let Some(clone_url) = clone_url.as_deref() {
-        build_git_clone_auth_config(clone_url, &state)
+        build_git_clone_auth_config(clone_url, &state, false)
     } else {
         build_git_auth_config(&state)
     };

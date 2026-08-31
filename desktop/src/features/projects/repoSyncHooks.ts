@@ -11,6 +11,7 @@ import type {
   Repository as Project,
 } from "@/features/projects/hooks";
 import { useProjectRepoHost } from "@/features/projects/useProjectRepoHost";
+import { useFeatureEnabled } from "@/shared/features";
 import { useFocusedRefetchInterval } from "@/shared/lib/useDocumentVisible";
 import { publishProjectPullRequestUpdate } from "./pullRequestMutations";
 
@@ -28,9 +29,14 @@ export function useProjectRepoSyncStatusQuery(
   const refetchInterval = useFocusedRefetchInterval(60_000);
   const selectedBaseBranch = baseBranch ?? project?.defaultBranch ?? null;
   const host = useProjectRepoHost(project);
+  const githubMachineGit = useFeatureEnabled("githubMachineGit");
+  const githubRemote = host.kind === "external" && host.host === "github.com";
 
   return useQuery({
-    enabled: Boolean(host.kind === "buzz" && project?.cloneUrls[0]),
+    enabled: Boolean(
+      project?.cloneUrls[0] &&
+        (host.kind === "buzz" || (githubRemote && githubMachineGit)),
+    ),
     queryKey: [
       "project",
       project?.id ?? "none",

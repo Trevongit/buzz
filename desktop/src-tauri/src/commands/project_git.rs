@@ -1,6 +1,7 @@
 use super::project_git_exec::{
-    build_git_auth_config, clean_branch, clean_target_ref, run_git,
-    validate_local_clone_url_for_workspace, validate_workspace_clone_url, GitAuthConfig,
+    build_git_auth_config, build_git_clone_auth_config, clean_branch, clean_target_ref,
+    is_github_https_clone_url, run_git, validate_local_clone_url_for_workspace,
+    validate_workspace_clone_url, GitAuthConfig,
 };
 use super::project_git_file_content::{checkout_project_repo, read_preview_content};
 use super::project_git_push::push_project_local_repository_blocking;
@@ -624,12 +625,14 @@ pub async fn get_project_repo_snapshot(
     base_branch: Option<String>,
     target_ref: Option<String>,
     target_commit: Option<String>,
+    github_login: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<ProjectRepoSnapshotInfo, String> {
     // Public GitHub is a first-class *read* remote. Buzz-hosted git still
-    // has to live on this workspace's relay.
+    // has to live on this workspace's relay. github.com never receives the
+    // Buzz nsec (see `build_git_clone_auth_config`).
     validate_local_clone_url_for_workspace(&clone_url, &state)?;
-    let auth = build_git_auth_config(&state)?;
+    let auth = build_git_clone_auth_config(&clone_url, &state, github_login.unwrap_or(false))?;
     let branch = clean_branch(default_branch);
     let base_branch = clean_branch(base_branch);
     let target_ref = clean_target_ref(target_ref);
@@ -755,10 +758,11 @@ pub async fn get_project_repo_sync_status(
     clone_url: String,
     branch_name: Option<String>,
     base_branch: Option<String>,
+    github_login: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<ProjectRepoSyncStatusInfo, String> {
     validate_local_clone_url_for_workspace(&clone_url, &state)?;
-    let auth = build_git_auth_config(&state)?;
+    let auth = build_git_clone_auth_config(&clone_url, &state, github_login.unwrap_or(false))?;
 
     tauri::async_runtime::spawn_blocking(move || {
         let Some(repo_dir) =
@@ -806,10 +810,22 @@ pub async fn push_project_local_repository(
     clone_url: String,
     branch_name: Option<String>,
     base_branch: Option<String>,
+    github_login: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<ProjectRepoPushResult, String> {
-    validate_workspace_clone_url(&clone_url, &state)?;
-    let auth = build_git_auth_config(&state)?;
+    let github_login = github_login.unwrap_or(false);
+    if is_github_https_clone_url(&clone_url) {
+        if !github_login {
+            return Err(
+                "Enable GitHub machine git in Settings → Experiments to push to github.com."
+                    .to_string(),
+            );
+        }
+        validate_local_clone_url_for_workspace(&clone_url, &state)?;
+    } else {
+        validate_workspace_clone_url(&clone_url, &state)?;
+    }
+    let auth = build_git_clone_auth_config(&clone_url, &state, github_login)?;
 
     tauri::async_runtime::spawn_blocking(move || {
         let Some(repo_dir) =
@@ -837,10 +853,11 @@ pub async fn pull_project_local_repository(
     project_dtag: String,
     clone_url: String,
     branch_name: Option<String>,
+    github_login: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<ProjectRepoPullResult, String> {
     validate_local_clone_url_for_workspace(&clone_url, &state)?;
-    let auth = build_git_auth_config(&state)?;
+    let auth = build_git_clone_auth_config(&clone_url, &state, github_login.unwrap_or(false))?;
 
     tauri::async_runtime::spawn_blocking(move || {
         let Some(repo_dir) =

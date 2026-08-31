@@ -14,8 +14,20 @@ test("explains unsupported authenticated GitHub clones without exposing git outp
     {
       title: "Repository access required",
       description:
-        "This repository requires GitHub authentication. Buzz currently clones public GitHub repositories without credentials.",
+        "This GitHub repository is private. Enable GitHub machine git in Settings → Experiments, run `gh auth login` on this computer, then Clone locally. Buzz never sends your Nostr key to GitHub.",
     },
+  );
+});
+
+test("maps git's non-interactive GitHub prompt to the private-repo copy", () => {
+  assert.equal(
+    projectCloneErrorPresentation(
+      new Error(
+        "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+      ),
+      "https://github.com/Trevongit/sovereign-patterns.git",
+    ).title,
+    "Repository access required",
   );
 });
 

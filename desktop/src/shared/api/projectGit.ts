@@ -12,6 +12,20 @@ import type {
   RelayEvent,
 } from "@/shared/api/types";
 import { invokeTauri, TauriInvokeError } from "@/shared/api/tauri";
+import { getFeature } from "@/shared/features";
+import { resolveEnabled } from "@/shared/features/resolveEnabled";
+import { getOverrides } from "@/shared/features/store";
+
+/** Settings → Experiments → GitHub machine git. Default off. */
+export function githubMachineGitEnabled(): boolean {
+  const feature = getFeature("githubMachineGit");
+  if (!feature) return false;
+  return resolveEnabled(
+    "githubMachineGit",
+    getOverrides(),
+    feature.defaultEnabled,
+  );
+}
 
 type RawProjectRepoCommit = {
   hash: string;
@@ -172,6 +186,7 @@ export async function getProjectRepoSnapshot(input: {
       baseBranch: input.baseBranch ?? null,
       targetRef: input.targetRef ?? null,
       targetCommit: input.targetCommit ?? null,
+      githubLogin: githubMachineGitEnabled(),
     },
   );
   return fromRawProjectRepoSnapshot(snapshot);
@@ -349,6 +364,7 @@ export async function getProjectRepoSyncStatus(input: {
       cloneUrl: input.cloneUrl,
       branchName: input.branchName ?? null,
       baseBranch: input.baseBranch ?? null,
+      githubLogin: githubMachineGitEnabled(),
     },
   );
   return fromRawProjectRepoSyncStatus(status);
@@ -435,6 +451,7 @@ export async function pushProjectLocalRepository(input: {
       cloneUrl: input.cloneUrl,
       branchName: input.branchName ?? null,
       baseBranch: input.baseBranch ?? null,
+      githubLogin: githubMachineGitEnabled(),
     },
   );
   return {
@@ -459,6 +476,7 @@ export async function pullProjectLocalRepository(input: {
       projectDtag: input.projectDtag,
       cloneUrl: input.cloneUrl,
       branchName: input.branchName ?? null,
+      githubLogin: githubMachineGitEnabled(),
     },
   );
   return {
@@ -478,6 +496,7 @@ export async function cloneProjectRepository(input: {
     projectDtag: input.projectDtag,
     cloneUrl: input.cloneUrl,
     defaultBranch: input.defaultBranch ?? null,
+    githubLogin: githubMachineGitEnabled(),
   });
 }
 

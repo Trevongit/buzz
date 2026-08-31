@@ -423,10 +423,11 @@ pub async fn clone_project_repository(
     project_dtag: String,
     clone_url: String,
     default_branch: Option<String>,
+    github_login: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<ProjectRepoCloneResult, String> {
     validate_local_clone_url_for_workspace(&clone_url, &state)?;
-    let auth = build_git_clone_auth_config(&clone_url, &state)?;
+    let auth = build_git_clone_auth_config(&clone_url, &state, github_login.unwrap_or(false))?;
     tauri::async_runtime::spawn_blocking(move || {
         clone_project_repository_blocking(
             repos_dir.as_deref(),
