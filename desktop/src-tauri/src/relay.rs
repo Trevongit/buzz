@@ -282,6 +282,50 @@ fn extract_retry_in_hint(body: &str) -> Option<u64> {
     digits.parse::<u64>().ok()
 }
 
+fn extract_clock_skew_delta_secs(message: &str) -> Option<u64> {
+    let marker = "delta: ";
+    let start = message.find(marker)? + marker.len();
+    let digits: String = message[start..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
+}
+
+fn humanize_clock_skew(delta_secs: u64) -> String {
+    if delta_secs < 90 {
+        format!("{delta_secs} seconds")
+    } else if delta_secs < 90 * 60 {
+        let minutes = delta_secs.div_ceil(60);
+        if minutes == 1 {
+            "1 minute".to_string()
+        } else {
+            format!("{minutes} minutes")
+        }
+    } else {
+        let hours = (delta_secs + 1_800) / 3_600;
+        if hours <= 1 {
+            "1 hour".to_string()
+        } else {
+            format!("{hours} hours")
+        }
+    }
+}
+
+/// NIP-98 ±60s failures look like auth bugs. Point at the computer clock.
+fn rewrite_clock_skew_auth_error(relay_message: &str) -> Option<String> {
+    let lower = relay_message.to_ascii_lowercase();
+    if !lower.contains("timestamp outside") || !lower.contains("window") {
+        return None;
+    }
+    let skew = extract_clock_skew_delta_secs(relay_message)
+        .map(|delta| format!("about {} ", humanize_clock_skew(delta)))
+        .unwrap_or_default();
+    Some(format!(
+        "This computer's clock is {skew}off the community. Sync time, then retry."
+    ))
+}
+
 pub async fn relay_error_message(response: reqwest::Response) -> String {
     let status = response.status();
 
@@ -338,10 +382,16 @@ pub async fn relay_error_message(response: reqwest::Response) -> String {
 
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) {
         if let Some(message) = value.get("message").and_then(serde_json::Value::as_str) {
+            if let Some(clock) = rewrite_clock_skew_auth_error(message) {
+                return clock;
+            }
             return format!("relay returned {status}: {message}");
         }
 
         if let Some(error) = value.get("error").and_then(serde_json::Value::as_str) {
+            if let Some(clock) = rewrite_clock_skew_auth_error(error) {
+                return clock;
+            }
             return format!("relay returned {status}: {error}");
         }
     }

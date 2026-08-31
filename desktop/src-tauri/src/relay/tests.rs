@@ -491,6 +491,42 @@ async fn non_stalled_error_response_yields_status_message() {
 // ── parse_json_response malformed-body contract ──────────────────────────
 
 #[test]
+fn clock_skew_auth_error_names_the_laptop_not_the_relay() {
+    let raw =
+        "NIP-98 HTTP Auth verification failed: event timestamp outside ±60s window (delta: 46805s)";
+    assert_eq!(
+        super::rewrite_clock_skew_auth_error(raw).as_deref(),
+        Some("This computer's clock is about 13 hours off the community. Sync time, then retry.")
+    );
+}
+
+#[test]
+fn clock_skew_auth_error_uses_minutes_under_an_hour() {
+    let raw = "event timestamp outside ±60s window (delta: 180s)";
+    assert_eq!(
+        super::rewrite_clock_skew_auth_error(raw).as_deref(),
+        Some("This computer's clock is about 3 minutes off the community. Sync time, then retry.")
+    );
+}
+
+#[test]
+fn clock_skew_auth_error_without_delta_still_points_at_the_clock() {
+    let raw = "auth event timestamp outside ±60s window";
+    assert_eq!(
+        super::rewrite_clock_skew_auth_error(raw).as_deref(),
+        Some("This computer's clock is off the community. Sync time, then retry.")
+    );
+}
+
+#[test]
+fn clock_skew_auth_error_leaves_other_auth_failures_alone() {
+    assert_eq!(
+        super::rewrite_clock_skew_auth_error("NIP-98 HTTP Auth verification failed: URL mismatch"),
+        None
+    );
+}
+
+#[test]
 fn malformed_response_message_stays_off_unreachable_bucket() {
     // A reached-but-malformed 2xx body is not a connectivity failure. If this
     // message ever regains the "relay unreachable:" prefix, the frontend
