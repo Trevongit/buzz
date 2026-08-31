@@ -41,7 +41,6 @@ import {
 } from "@/features/projects/lib/projectDetailAgentContext";
 import { projectDetailSelectionItem } from "@/features/projects/lib/projectDetailSelectionItem";
 import {
-  projectRepoUnavailablePresentation,
   projectRepoUnavailableReason,
   refineRepoUnavailableReason,
 } from "@/features/projects/lib/projectRepoAvailability";
@@ -339,10 +338,7 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
         repositoryChannelId: repository?.channelId,
         memberChannelIds,
       });
-      const presentation = projectRepoUnavailablePresentation(reason);
-      toast.error(presentation.title, {
-        description: presentation.description,
-      });
+      showProjectCloneErrorToast(error, repository?.cloneUrls[0], reason);
       return;
     }
     toast.success("Remote state refreshed.");
@@ -352,6 +348,7 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
     repoStateQuery,
     repoSyncStatusQuery,
     repository?.channelId,
+    repository?.cloneUrls,
   ]);
   const cloneBlockedByRemote =
     remoteUnavailableReason !== undefined &&

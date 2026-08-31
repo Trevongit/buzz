@@ -1,6 +1,6 @@
 use super::project_git_exec::{
-    build_git_auth_config, clean_branch, clean_target_ref, run_git, validate_local_clone_url,
-    validate_workspace_clone_url, GitAuthConfig,
+    build_git_auth_config, clean_branch, clean_target_ref, run_git,
+    validate_local_clone_url_for_workspace, validate_workspace_clone_url, GitAuthConfig,
 };
 use super::project_git_file_content::{checkout_project_repo, read_preview_content};
 use super::project_git_push::push_project_local_repository_blocking;
@@ -628,10 +628,7 @@ pub async fn get_project_repo_snapshot(
 ) -> Result<ProjectRepoSnapshotInfo, String> {
     // Public GitHub is a first-class *read* remote. Buzz-hosted git still
     // has to live on this workspace's relay.
-    validate_local_clone_url(&clone_url)?;
-    if !clone_url.to_ascii_lowercase().contains("://github.com/") {
-        validate_workspace_clone_url(&clone_url, &state)?;
-    }
+    validate_local_clone_url_for_workspace(&clone_url, &state)?;
     let auth = build_git_auth_config(&state)?;
     let branch = clean_branch(default_branch);
     let base_branch = clean_branch(base_branch);
@@ -739,7 +736,7 @@ pub async fn open_project_repository_folder(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    validate_workspace_clone_url(&clone_url, &state)?;
+    validate_local_clone_url_for_workspace(&clone_url, &state)?;
     let repo_dir = tauri::async_runtime::spawn_blocking(move || {
         find_local_repo_dir(repos_dir.as_deref(), &project_dtag, Some(&clone_url))?
             .ok_or_else(|| "No local checkout found.".to_string())
@@ -760,7 +757,7 @@ pub async fn get_project_repo_sync_status(
     base_branch: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ProjectRepoSyncStatusInfo, String> {
-    validate_workspace_clone_url(&clone_url, &state)?;
+    validate_local_clone_url_for_workspace(&clone_url, &state)?;
     let auth = build_git_auth_config(&state)?;
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -842,7 +839,7 @@ pub async fn pull_project_local_repository(
     branch_name: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ProjectRepoPullResult, String> {
-    validate_workspace_clone_url(&clone_url, &state)?;
+    validate_local_clone_url_for_workspace(&clone_url, &state)?;
     let auth = build_git_auth_config(&state)?;
 
     tauri::async_runtime::spawn_blocking(move || {
