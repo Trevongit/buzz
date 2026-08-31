@@ -11613,6 +11613,10 @@ export function maybeInstallE2eTauriMocks() {
         return;
       case "speak_listen_text":
         return;
+      case "pause_listen_text":
+        return;
+      case "resume_listen_text":
+        return;
       case "stop_listen_text":
         return;
       case "summarize_listen_text": {

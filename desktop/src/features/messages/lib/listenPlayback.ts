@@ -8,6 +8,7 @@ const LISTEN_TOAST_ID = "listen-playback";
 
 let status: ListenPlaybackStatus = "idle";
 let lastText: string | null = null;
+let playGeneration = 0;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -65,7 +66,7 @@ function showPausedToast() {
   toast.message("Paused", {
     id: LISTEN_TOAST_ID,
     duration: Number.POSITIVE_INFINITY,
-    description: "Resume plays this reading from the start.",
+    description: "Resume continues from this point.",
     action: {
       label: "Resume",
       onClick: () => {
@@ -86,15 +87,39 @@ async function invokeStop(): Promise<void> {
   }
 }
 
+async function invokePause(): Promise<void> {
+  try {
+    await invokeTauri("pause_listen_text");
+  } catch {
+    // Nothing playing is fine.
+  }
+  if (canUseWebSpeech()) {
+    window.speechSynthesis?.pause();
+  }
+}
+
+async function invokeResume(): Promise<void> {
+  try {
+    await invokeTauri("resume_listen_text");
+  } catch {
+    // Nothing paused is fine.
+  }
+  if (canUseWebSpeech()) {
+    window.speechSynthesis?.resume();
+  }
+}
+
 /** Speak through Pocket TTS. WebKitGTK has no speechSynthesis fallback. */
 export async function speakListenText(text: string): Promise<void> {
   lastText = text;
+  const generation = ++playGeneration;
   setStatus("playing");
   showPlayingToast();
   try {
     await invokeTauri("speak_listen_text", { text });
   } catch (error) {
-    if (getListenPlaybackStatus() === "paused") return;
+    if (generation !== playGeneration) return;
+    if (getListenPlaybackStatus() !== "playing") return;
     setStatus("idle");
     toast.dismiss(LISTEN_TOAST_ID);
     if (canUseWebSpeech()) {
@@ -103,6 +128,7 @@ export async function speakListenText(text: string): Promise<void> {
     }
     throw nativeListenError(error);
   }
+  if (generation !== playGeneration) return;
   if (getListenPlaybackStatus() === "playing") {
     setStatus("idle");
     toast.dismiss(LISTEN_TOAST_ID);
@@ -113,19 +139,25 @@ export async function pauseListenPlayback(): Promise<void> {
   if (getListenPlaybackStatus() !== "playing") return;
   setStatus("paused");
   showPausedToast();
-  await invokeStop();
+  await invokePause();
 }
 
 export async function resumeListenPlayback(): Promise<void> {
-  const text = lastText;
-  if (!text) {
-    throw new Error("Nothing paused.");
+  if (getListenPlaybackStatus() !== "paused") {
+    if (!lastText) {
+      throw new Error("Nothing paused.");
+    }
+    await speakListenText(lastText);
+    return;
   }
-  await speakListenText(text);
+  setStatus("playing");
+  showPlayingToast();
+  await invokeResume();
 }
 
 export async function stopListenPlayback(): Promise<void> {
   lastText = null;
+  playGeneration += 1;
   abortListenSummaryWait();
   setStatus("idle");
   toast.dismiss(LISTEN_TOAST_ID);

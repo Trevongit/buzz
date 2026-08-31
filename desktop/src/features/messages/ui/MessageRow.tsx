@@ -46,6 +46,7 @@ import type { VideoReviewContext } from "@/shared/ui/VideoPlayer";
 import { VideoReviewCommentMarkdown } from "@/shared/ui/VideoReviewCommentMarkdown";
 import {
   pauseListenPlayback,
+  resumeListenPlayback,
   speakListenText,
   stopListenPlayback,
 } from "@/features/messages/lib/listenPlayback";
@@ -504,20 +505,42 @@ export const MessageRow = React.memo(
                 >
                   Follow along
                 </Button>
-                {listenPlayback === "playing" ? (
+                {listenPlayback === "playing" || listenPlayback === "paused" ? (
                   <>
-                    <Button
-                      className="h-8 w-fit rounded-full px-3"
-                      data-testid={`listen-pause-${message.id}`}
-                      onClick={() => {
-                        void pauseListenPlayback();
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      Pause
-                    </Button>
+                    {listenPlayback === "playing" ? (
+                      <Button
+                        className="h-8 w-fit rounded-full px-3"
+                        data-testid={`listen-pause-${message.id}`}
+                        onClick={() => {
+                          void pauseListenPlayback();
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        Pause
+                      </Button>
+                    ) : (
+                      <Button
+                        className="h-8 w-fit rounded-full px-3"
+                        data-testid={`listen-resume-${message.id}`}
+                        onClick={() => {
+                          void resumeListenPlayback().catch((error) => {
+                            toast.error("Could not listen", {
+                              description:
+                                error instanceof Error
+                                  ? error.message
+                                  : "Check Voice settings.",
+                            });
+                          });
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        Resume
+                      </Button>
+                    )}
                     <Button
                       className="h-8 w-fit rounded-full px-3"
                       data-testid={`listen-stop-${message.id}`}

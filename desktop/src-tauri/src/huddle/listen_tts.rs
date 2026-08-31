@@ -7,7 +7,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, OnceLock,
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::Deserialize;
 use tauri::{AppHandle, State};
@@ -31,6 +31,7 @@ struct ListenRuntime {
     pipeline: Arc<TtsPipeline>,
     active: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
+    paused: Arc<AtomicBool>,
 }
 
 fn listen_runtime() -> &'static Mutex<Option<ListenRuntime>> {
@@ -90,6 +91,7 @@ fn ensure_listen_runtime(app: &AppHandle, state: &AppState) -> Result<ListenRunt
     let voice_name = tts_settings::pocket_voice_reference(app, &voice_preferences)?;
     let active = Arc::new(AtomicBool::new(false));
     let cancel = Arc::new(AtomicBool::new(false));
+    let paused = Arc::new(AtomicBool::new(false));
     let pipeline = Arc::new(TtsPipeline::new_with_voice(
         model_dir,
         Arc::clone(&active),
@@ -103,6 +105,7 @@ fn ensure_listen_runtime(app: &AppHandle, state: &AppState) -> Result<ListenRunt
         pipeline,
         active,
         cancel,
+        paused,
     })
 }
 
@@ -115,6 +118,7 @@ fn runtime_snapshot() -> Result<ListenRuntime, String> {
             pipeline: Arc::clone(&runtime.pipeline),
             active: Arc::clone(&runtime.active),
             cancel: Arc::clone(&runtime.cancel),
+            paused: Arc::clone(&runtime.paused),
         })
         .ok_or_else(|| "Listen TTS pipeline is unavailable".to_string())
 }
@@ -156,34 +160,69 @@ pub async fn speak_listen_text(
     }
 
     let runtime = runtime_snapshot()?;
+    runtime.paused.store(false, Ordering::Release);
     runtime.cancel.store(false, Ordering::Release);
+    runtime.pipeline.resume_playback();
     runtime
         .pipeline
         .speak(text)
         .map_err(|error| format!("Listen TTS failed: {error}"))?;
 
     tokio::task::spawn_blocking(move || {
-        let started = Instant::now();
+        let mut waited_for_start = Duration::ZERO;
         let mut heard_audio = false;
-        while started.elapsed() < LISTEN_PLAYBACK_TIMEOUT {
+        loop {
             if runtime.cancel.load(Ordering::Acquire) {
                 return Ok(());
+            }
+            if runtime.paused.load(Ordering::Acquire) {
+                std::thread::sleep(Duration::from_millis(25));
+                continue;
             }
             let is_active = runtime.active.load(Ordering::Acquire);
             heard_audio |= is_active;
             if heard_audio && !is_active {
                 return Ok(());
             }
+            if !heard_audio {
+                waited_for_start += Duration::from_millis(25);
+                if waited_for_start >= LISTEN_PLAYBACK_TIMEOUT {
+                    return Err(
+                        "Listen timed out before audio started. Check Voice settings.".to_string(),
+                    );
+                }
+            }
             std::thread::sleep(Duration::from_millis(25));
-        }
-        if heard_audio {
-            Ok(())
-        } else {
-            Err("Listen timed out before audio started. Check Voice settings.".to_string())
         }
     })
     .await
     .map_err(|error| format!("Listen TTS task failed: {error}"))?
+}
+
+/// Pause Listen / Follow along Pocket playback without dropping the queue.
+#[tauri::command]
+pub fn pause_listen_text() -> Result<(), String> {
+    let slot = listen_runtime()
+        .lock()
+        .map_err(|error| format!("listen TTS lock poisoned: {error}"))?;
+    if let Some(runtime) = slot.as_ref() {
+        runtime.paused.store(true, Ordering::Release);
+        runtime.pipeline.pause_playback();
+    }
+    Ok(())
+}
+
+/// Resume a paused Listen / Follow along utterance from the pause point.
+#[tauri::command]
+pub fn resume_listen_text() -> Result<(), String> {
+    let slot = listen_runtime()
+        .lock()
+        .map_err(|error| format!("listen TTS lock poisoned: {error}"))?;
+    if let Some(runtime) = slot.as_ref() {
+        runtime.paused.store(false, Ordering::Release);
+        runtime.pipeline.resume_playback();
+    }
+    Ok(())
 }
 
 /// Stop Listen / Follow along Pocket playback. Safe if nothing is playing.
@@ -193,6 +232,7 @@ pub fn stop_listen_text() -> Result<(), String> {
         .lock()
         .map_err(|error| format!("listen TTS lock poisoned: {error}"))?;
     if let Some(runtime) = slot.as_ref() {
+        runtime.paused.store(false, Ordering::Release);
         runtime.cancel.store(true, Ordering::Release);
     }
     Ok(())
@@ -283,5 +323,11 @@ mod tests {
     #[test]
     fn stop_without_runtime_is_ok() {
         assert!(super::stop_listen_text().is_ok());
+    }
+
+    #[test]
+    fn pause_and_resume_without_runtime_are_ok() {
+        assert!(super::pause_listen_text().is_ok());
+        assert!(super::resume_listen_text().is_ok());
     }
 }

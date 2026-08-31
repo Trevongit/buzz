@@ -114,6 +114,16 @@ impl TtsPipeline {
         *self.voice.lock().unwrap_or_else(|error| error.into_inner()) = voice.to_string();
     }
 
+    /// Pause the current utterance without cancelling the queue.
+    pub fn pause_playback(&self) {
+        self.human_floor.playback().pause();
+    }
+
+    /// Resume a paused utterance from the pause point.
+    pub fn resume_playback(&self) {
+        self.human_floor.playback().play();
+    }
+
     /// Signal the worker thread to stop.
     pub fn shutdown(&self) {
         eprintln!("buzz-desktop: tts stage=cancellation reason=shutdown route_id=0");

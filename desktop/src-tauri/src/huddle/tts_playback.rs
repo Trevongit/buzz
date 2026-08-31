@@ -169,6 +169,26 @@ impl PlaybackCoordinator {
         self.lock().player.as_ref().is_none_or(Player::empty)
     }
 
+    /// Pause the current queue in place. Resume with [`Self::play`]. Replacing
+    /// the player would restart the utterance from the beginning.
+    pub(super) fn pause(&self) {
+        if let Some(player) = self.lock().player.as_ref() {
+            player.pause();
+        }
+    }
+
+    /// Resume a paused queue from the pause point.
+    pub(super) fn play(&self) {
+        if let Some(player) = self.lock().player.as_ref() {
+            player.play();
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_paused(&self) -> bool {
+        self.lock().player.as_ref().is_some_and(Player::is_paused)
+    }
+
     /// Observe playback emptiness under the coordinator so the onset decision
     /// for the audio being built is serialized with append and cancellation.
     pub(super) fn prepare_audio<R>(&self, prepare: impl FnOnce(bool) -> R) -> R {
@@ -591,6 +611,23 @@ mod tests {
         assert!(playback.human_floor_blocked());
         playback.leave_remote_human_floor(7);
         assert!(!playback.human_floor_blocked());
+    }
+
+    #[test]
+    fn pause_keeps_the_queue_and_play_resumes_it() {
+        let (playback, _unpulled_source) = coordinator();
+        append_second(&playback);
+
+        playback.pause();
+        assert!(playback.is_paused());
+        assert!(
+            !playback.empty(),
+            "pause must not drop the queued utterance"
+        );
+
+        playback.play();
+        assert!(!playback.is_paused());
+        assert!(!playback.empty());
     }
 
     #[test]
