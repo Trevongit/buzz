@@ -45,6 +45,7 @@ import { resolveMentionProps } from "@/shared/lib/resolveMentionNames";
 import type { VideoReviewContext } from "@/shared/ui/VideoPlayer";
 import { VideoReviewCommentMarkdown } from "@/shared/ui/VideoReviewCommentMarkdown";
 import { speakListenText } from "@/features/messages/lib/listenPlayback";
+import { readListenSummaryAgentPreference } from "@/features/messages/lib/listenSummaryAgentPreference";
 import {
   isFollowAlongMessage,
   spokenProseFromReaderReply,
@@ -464,7 +465,13 @@ export const MessageRow = React.memo(
               videoReviewContext={videoReviewContext}
             />
           );
-          if (!isFollowAlongMessage(message)) return markdown;
+          if (
+            !isFollowAlongMessage(
+              message,
+              readListenSummaryAgentPreference()?.name,
+            )
+          )
+            return markdown;
           const playFollowAlong = () => {
             toast.message("Following along…");
             void speakListenText(

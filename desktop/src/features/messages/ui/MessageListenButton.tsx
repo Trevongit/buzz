@@ -3,7 +3,10 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { speakListenText } from "@/features/messages/lib/listenPlayback";
-import { summarizeWithReader } from "@/features/messages/lib/listenReader";
+import {
+  resolveReaderAgent,
+  summarizeWithReader,
+} from "@/features/messages/lib/listenReader";
 import { listenPlainText } from "@/features/messages/lib/listenSpeech";
 import type { TimelineMessage } from "@/features/messages/types";
 import { Button } from "@/shared/ui/button";
@@ -17,6 +20,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 const ACTION_BUTTON_CLASS = "h-8 w-8 rounded-full p-0";
 const ACTION_ICON_CLASS = "!h-4 !w-4";
+
+function formatElapsed(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
 
 export function MessageListenButton({
   channelId,
@@ -41,15 +50,23 @@ export function MessageListenButton({
         return;
       }
       if (!channelId || message.pending) {
-        throw new Error(
-          "Reader-laptop needs a delivered channel message to summarize.",
-        );
+        throw new Error("Listen (summary) needs a delivered channel message.");
       }
+      const agent = await resolveReaderAgent();
       const waitToast = toast.loading(
-        "Asking Reader-laptop… Pocket starts when their post lands.",
+        `Asking ${agent.name}… Pocket starts when they post. 0:00`,
       );
+      const started = Date.now();
+      const tick = window.setInterval(() => {
+        const elapsed = Math.floor((Date.now() - started) / 1000);
+        toast.loading(
+          `Asking ${agent.name}… still searching ${formatElapsed(elapsed)}. Pocket starts when they post.`,
+          { id: waitToast },
+        );
+      }, 1000);
       try {
-        const summary = await summarizeWithReader({
+        const { summary } = await summarizeWithReader({
+          agent,
           channelId,
           messageId: message.id,
           text: plain,
@@ -59,13 +76,15 @@ export function MessageListenButton({
       } catch (error) {
         toast.dismiss(waitToast);
         throw error;
+      } finally {
+        window.clearInterval(tick);
       }
     } catch (error) {
       toast.error("Could not listen", {
         description:
           error instanceof Error
             ? error.message
-            : "Check that Reader-laptop is running.",
+            : "Check that a Listen (summary) agent is running.",
       });
     } finally {
       setBusy(false);

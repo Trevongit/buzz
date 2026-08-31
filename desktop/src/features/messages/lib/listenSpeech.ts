@@ -22,12 +22,22 @@ export function isReaderAgentName(name: string): boolean {
   return normalized === "reader-laptop" || normalized === "reader";
 }
 
-export function isFollowAlongMessage(message: {
-  author: string;
-  body: string;
-  isAgent?: boolean;
-}): boolean {
+export function isFollowAlongMessage(
+  message: {
+    author: string;
+    body: string;
+    isAgent?: boolean;
+  },
+  preferredAgentName?: string | null,
+): boolean {
   if (isReaderAgentName(message.author)) return true;
+  const preferred = preferredAgentName?.trim();
+  if (
+    preferred &&
+    message.author.trim().toLowerCase() === preferred.toLowerCase()
+  ) {
+    return true;
+  }
   return Boolean(message.isAgent && /\bread-along\b/i.test(message.body));
 }
 
@@ -35,9 +45,10 @@ export function listenSummaryPrompt(text: string): string {
   return `Rewrite the following Buzz message as spoken prose a person can listen to. Keep names, decisions, and numbers. Use complete sentences and always finish the last sentence. No markdown, no bullets, no preamble.\n\n${text}`;
 }
 
-/** Channel ask so Reader-laptop (Grok Build) writes Pocket prose. */
-export function listenReaderAsk(text: string): string {
-  return `@${READER_AGENT_NAME} Summarize this message in this thread for follow-along. First: spoken prose for Pocket (complete sentences, finish the last sentence, no markdown). Then in the same reply: a read-along with phone-safe bullets and glimpse diagrams or pictures if they help understanding. Prime will click your post to hear Pocket and can keep talking in the thread for more clarity.\n\n${text}`;
+/** Channel ask so the chosen Listen-summary agent writes Pocket prose. */
+export function listenReaderAsk(agentName: string, text: string): string {
+  const mention = agentName.trim() || READER_AGENT_NAME;
+  return `@${mention} Summarize this message in this thread for follow-along. First: spoken prose for Pocket (complete sentences, finish the last sentence, no markdown). Then in the same reply: a read-along with phone-safe bullets and glimpse diagrams or pictures if they help understanding. Prime will click your post to hear Pocket and can keep talking in the thread for more clarity.\n\n${text}`;
 }
 
 /** Prefer the Spoken section when Reader also attached a read-along. */

@@ -73,11 +73,34 @@ test("isFollowAlongMessage matches Reader posts and read-along agent bodies", ()
   );
 });
 
-test("listenReaderAsk mentions Reader-laptop", () => {
-  assert.match(listenReaderAsk("Ship extras tonight."), /@Reader-laptop/);
-  assert.match(listenReaderAsk("Ship extras tonight."), /Ship extras tonight/);
-  assert.match(listenReaderAsk("Ship extras tonight."), /read-along/);
-  assert.match(listenReaderAsk("Ship extras tonight."), /diagrams/);
+test("listenReaderAsk mentions the chosen agent", () => {
+  assert.match(
+    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
+    /@Reader-laptop/,
+  );
+  assert.match(listenReaderAsk("Knowing", "Ship extras tonight."), /@Knowing/);
+  assert.match(
+    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
+    /Ship extras tonight/,
+  );
+  assert.match(
+    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
+    /read-along/,
+  );
+  assert.match(
+    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
+    /diagrams/,
+  );
+});
+
+test("isFollowAlongMessage matches a preferred Listen-summary agent", () => {
+  assert.equal(
+    isFollowAlongMessage(
+      { author: "Knowing", body: "Spoken\nHello." },
+      "Knowing",
+    ),
+    true,
+  );
 });
 
 test("spokenProseFromReaderReply prefers the Spoken section", () => {

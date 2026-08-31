@@ -1,8 +1,7 @@
+import { pickListenSummaryAgent } from "@/features/messages/lib/listenSummaryAgentPreference";
 import {
   finishSpokenSummary,
-  isReaderAgentName,
   listenReaderAsk,
-  READER_AGENT_NAME,
   spokenProseFromReaderReply,
 } from "@/features/messages/lib/listenSpeech";
 import { relayClient } from "@/shared/api/relayClient";
@@ -19,10 +18,10 @@ const READER_REPLY_POLL_MS = 2_000;
 
 export async function resolveReaderAgent(): Promise<ManagedAgent> {
   const agents = await listManagedAgents();
-  const reader = agents.find((agent) => isReaderAgentName(agent.name));
+  const reader = pickListenSummaryAgent(agents);
   if (!reader) {
     throw new Error(
-      `${READER_AGENT_NAME} is not added yet. Add that agent in Agents, then try Listen (summary) again.`,
+      "No Listen (summary) agent is set. Pick one in Settings → Agents, then try again.",
     );
   }
   if (reader.status === "stopped" || reader.status === "not_deployed") {
@@ -35,10 +34,12 @@ export async function summarizeWithReader(input: {
   channelId: string;
   messageId: string;
   text: string;
-}): Promise<string> {
-  const reader = await resolveReaderAgent();
+  agent?: ManagedAgent;
+}): Promise<{ summary: string; agentName: string }> {
+  const reader = input.agent ?? (await resolveReaderAgent());
   const waiting = waitForReaderReply({
     channelId: input.channelId,
+    readerName: reader.name,
     readerPubkey: reader.pubkey,
     since: Math.floor(Date.now() / 1000) - 2,
     threadRootId: input.messageId,
@@ -46,7 +47,7 @@ export async function summarizeWithReader(input: {
   await waiting.ready;
   const sent = await sendChannelMessage(
     input.channelId,
-    listenReaderAsk(input.text),
+    listenReaderAsk(reader.name, input.text),
     input.messageId,
     undefined,
     [reader.pubkey],
@@ -55,9 +56,9 @@ export async function summarizeWithReader(input: {
   const reply = await waiting.reply;
   const spoken = spokenProseFromReaderReply(reply);
   if (!spoken) {
-    throw new Error(`${READER_AGENT_NAME} returned nothing to speak.`);
+    throw new Error(`${reader.name} returned nothing to speak.`);
   }
-  return finishSpokenSummary(spoken);
+  return { summary: finishSpokenSummary(spoken), agentName: reader.name };
 }
 
 function isReplyToAsk(event: RelayEvent, askEventId: string | null): boolean {
@@ -83,6 +84,7 @@ async function pollThreadForReply(
 
 function waitForReaderReply(input: {
   channelId: string;
+  readerName: string;
   readerPubkey: string;
   since: number;
   threadRootId: string;
@@ -116,7 +118,7 @@ function waitForReaderReply(input: {
       finish(() =>
         reject(
           new Error(
-            `${READER_AGENT_NAME} is still writing. Wait for their post in this thread, then click Follow along.`,
+            `${input.readerName} is still writing after 4 minutes. Wait for their post in this thread, then click Follow along.`,
           ),
         ),
       );
@@ -164,7 +166,7 @@ function waitForReaderReply(input: {
           reject(
             error instanceof Error
               ? error
-              : new Error("Could not wait for Reader-laptop."),
+              : new Error(`Could not wait for ${input.readerName}.`),
           ),
         );
       });
