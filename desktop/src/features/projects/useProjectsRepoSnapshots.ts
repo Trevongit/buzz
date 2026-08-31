@@ -4,8 +4,11 @@ import * as React from "react";
 import {
   getProjectLocalRepoSnapshot,
   getProjectRepoSnapshot,
+  githubRemoteReadsEnabled,
+  isGithubCloneUrl,
 } from "@/shared/api/projectGit";
 import type { ProjectRepoSnapshot } from "@/shared/api/types";
+import { useFeatureEnabled } from "@/shared/features";
 import type { Project } from "./hooks";
 import { selectProjectRepository } from "./projectModels";
 import {
@@ -49,6 +52,7 @@ async function fetchProjectSnapshot(
 
   const cloneUrl = repository.cloneUrls[0];
   if (!cloneUrl) return null;
+  if (isGithubCloneUrl(cloneUrl) && !githubRemoteReadsEnabled()) return null;
   return getProjectRepoSnapshot({
     cloneUrl,
     defaultBranch: repository.defaultBranch,
@@ -105,10 +109,19 @@ export function useProjectsRepoSnapshotsQuery(
     () => projects.map((project) => project.id).sort(),
     [projects],
   );
+  const publicGithubRead = useFeatureEnabled("publicGithubRead");
+  const githubMachineGit = useFeatureEnabled("githubMachineGit");
+  const githubReads = publicGithubRead || githubMachineGit;
 
   return useQuery({
     enabled: projects.length > 0,
-    queryKey: ["projects", "repo-snapshots", reposDir ?? "default", projectIds],
+    queryKey: [
+      "projects",
+      "repo-snapshots",
+      reposDir ?? "default",
+      projectIds,
+      githubReads,
+    ],
     queryFn: () => fetchProjectsRepoSnapshots(projects, reposDir),
     staleTime: 15 * 60_000,
     retry: 0,

@@ -14,6 +14,7 @@ import {
 } from "@/features/messages/lib/listenSpeech";
 import { useListenPlayback } from "@/features/messages/lib/useListenPlayback";
 import type { TimelineMessage } from "@/features/messages/types";
+import { useFeatureEnabled } from "@/shared/features";
 import { Button } from "@/shared/ui/button";
 
 const CONTROL_BUTTON_CLASS = "h-8 w-fit rounded-full px-3";
@@ -25,8 +26,10 @@ export function MessageFollowAlong({
   message: TimelineMessage;
   children: React.ReactNode;
 }) {
+  const listenEnabled = useFeatureEnabled("pocketListen");
   const playback = useListenPlayback();
   if (
+    !listenEnabled ||
     !isFollowAlongMessage(message, readListenSummaryAgentPreference()?.name)
   ) {
     return children;

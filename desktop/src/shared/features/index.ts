@@ -1,5 +1,6 @@
 export { FeatureGate } from "./FeatureGate";
 export { allFeatures, desktopFeatures, getFeature, manifest } from "./manifest";
+export { previewFeatureEnabled } from "./previewFeature";
 export { getOverrides, setOverride, clearOverride } from "./store";
 export type {
   FeatureDefinition,

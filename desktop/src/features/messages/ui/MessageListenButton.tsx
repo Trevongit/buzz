@@ -15,6 +15,7 @@ import {
 import { listenPlainText } from "@/features/messages/lib/listenSpeech";
 import { useListenPlayback } from "@/features/messages/lib/useListenPlayback";
 import type { TimelineMessage } from "@/features/messages/types";
+import { useFeatureEnabled } from "@/shared/features";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
@@ -47,10 +48,18 @@ export function MessageListenButton({
   message: TimelineMessage;
   onOpenChange: (open: boolean) => void;
 }) {
+  const listenEnabled = useFeatureEnabled("pocketListen");
   const [busy, setBusy] = React.useState(false);
   const playback = useListenPlayback();
   const plain = listenPlainText(message.body);
-  if (!plain) return null;
+
+  React.useEffect(() => {
+    if (!listenEnabled && (playback === "playing" || playback === "paused")) {
+      void stopListenPlayback();
+    }
+  }, [listenEnabled, playback]);
+
+  if (!listenEnabled || !plain) return null;
 
   const run = async (mode: "play" | "summary") => {
     if (busy) return;

@@ -53,6 +53,7 @@ import { useMemberChannelIds } from "@/features/projects/useRepositoryAccess";
 import { KIND_REPO_ANNOUNCEMENT } from "@/shared/constants/kinds";
 import type { EntityLinkTab } from "@/shared/lib/entityLink";
 import { useProjectRepoPresentation } from "@/features/projects/useProjectRepoHost";
+import { useFeatureEnabled } from "@/shared/features";
 import { WorkspaceTabs } from "./ProjectWorkspaceTabs";
 import type { RepoSourceHeaderControls } from "./ProjectRepositorySource";
 import { showProjectCloneErrorToast } from "./projectGitErrorToast";
@@ -107,6 +108,12 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
   }, [projectId, repositoryId]);
   const repository = selectProjectRepository(project, routeRepositoryId);
   const repoRemote = useProjectRepoPresentation(repository);
+  const publicGithubRead = useFeatureEnabled("publicGithubRead");
+  const githubMachineGit = useFeatureEnabled("githubMachineGit");
+  const canReadGithubRemote =
+    repoRemote.host.kind === "external" &&
+    repoRemote.host.host === "github.com" &&
+    (publicGithubRead || githubMachineGit);
   const { applyPatch: applyRepositorySearch } = useHistorySearchState(
     PROJECT_REPOSITORY_SEARCH_KEYS,
   );
@@ -218,10 +225,7 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
     activeBranch,
     activeRepoPullRequest,
     activeTag,
-    isBuzzHost:
-      repoRemote.host.kind === "buzz" ||
-      (repoRemote.host.kind === "external" &&
-        repoRemote.host.host === "github.com"),
+    isBuzzHost: repoRemote.host.kind === "buzz" || canReadGithubRemote,
     repository,
     reposDir: activeCommunity?.reposDir,
     repoSource,

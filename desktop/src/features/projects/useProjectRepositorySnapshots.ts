@@ -1,4 +1,5 @@
 import { useQueries } from "@tanstack/react-query";
+import { useFeatureEnabled } from "@/shared/features";
 
 import type {
   ProjectRepoSnapshot,
@@ -6,7 +7,11 @@ import type {
 } from "@/features/projects/hooks";
 import { fetchRepoState } from "@/features/projects/hooks";
 import { resolveProjectDefaultBranch } from "@/features/projects/lib/projectBranches";
-import { getProjectRepoSnapshot } from "@/shared/api/projectGit";
+import {
+  getProjectRepoSnapshot,
+  githubRemoteReadsEnabled,
+  isGithubCloneUrl,
+} from "@/shared/api/projectGit";
 
 export type ProjectRepositorySnapshotResult = {
   error: unknown;
@@ -20,12 +25,22 @@ export function useProjectRepositorySnapshots(
   repositories: Repository[],
   enabled = true,
 ): ProjectRepositorySnapshotResult[] {
+  const publicGithubRead = useFeatureEnabled("publicGithubRead");
+  const githubMachineGit = useFeatureEnabled("githubMachineGit");
+  const githubReads = publicGithubRead || githubMachineGit;
   const queries = useQueries({
     queries: repositories.map((repository) => ({
-      enabled: Boolean(enabled && repository.cloneUrls[0]),
+      enabled: Boolean(
+        enabled &&
+          repository.cloneUrls[0] &&
+          (!isGithubCloneUrl(repository.cloneUrls[0]) || githubReads),
+      ),
       queryFn: async () => {
         const cloneUrl = repository.cloneUrls[0];
         if (!cloneUrl) return null;
+        if (isGithubCloneUrl(cloneUrl) && !githubRemoteReadsEnabled()) {
+          return null;
+        }
         const repoState = await fetchRepoState(repository);
         const defaultBranch = resolveProjectDefaultBranch(
           repository.defaultBranch,
@@ -46,6 +61,7 @@ export function useProjectRepositorySnapshots(
         "none",
         "no-tag",
         "no-tag-commit",
+        githubReads,
       ],
       retry: 1,
       staleTime: 30_000,

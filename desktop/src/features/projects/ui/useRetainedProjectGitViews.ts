@@ -175,7 +175,7 @@ export function useProjectDetailGitViews({
     repository,
     reviewDiffBranch,
     activeRepoPullRequest,
-    repoSource === "remote",
+    repoSource === "remote" && isBuzzHost,
   );
   const localRepoDiffQuery = useProjectLocalRepoDiffQuery(
     repository,

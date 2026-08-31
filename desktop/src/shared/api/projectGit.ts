@@ -12,19 +12,30 @@ import type {
   RelayEvent,
 } from "@/shared/api/types";
 import { invokeTauri, TauriInvokeError } from "@/shared/api/tauri";
-import { getFeature } from "@/shared/features";
-import { resolveEnabled } from "@/shared/features/resolveEnabled";
-import { getOverrides } from "@/shared/features/store";
+import { previewFeatureEnabled } from "@/shared/features";
 
 /** Settings → Experiments → GitHub machine git. Default off. */
 export function githubMachineGitEnabled(): boolean {
-  const feature = getFeature("githubMachineGit");
-  if (!feature) return false;
-  return resolveEnabled(
-    "githubMachineGit",
-    getOverrides(),
-    feature.defaultEnabled,
-  );
+  return previewFeatureEnabled("githubMachineGit");
+}
+
+/** Settings → Experiments → Public GitHub reads. Default on. */
+export function publicGithubReadEnabled(): boolean {
+  return previewFeatureEnabled("publicGithubRead");
+}
+
+/** Overview / Files / Fetch compare on github.com (public read or machine git). */
+export function githubRemoteReadsEnabled(): boolean {
+  return publicGithubReadEnabled() || githubMachineGitEnabled();
+}
+
+export function isGithubCloneUrl(cloneUrl: string | null | undefined): boolean {
+  if (!cloneUrl) return false;
+  try {
+    return new URL(cloneUrl).hostname.toLowerCase() === "github.com";
+  } catch {
+    return false;
+  }
 }
 
 type RawProjectRepoCommit = {

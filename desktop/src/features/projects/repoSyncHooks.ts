@@ -30,12 +30,14 @@ export function useProjectRepoSyncStatusQuery(
   const selectedBaseBranch = baseBranch ?? project?.defaultBranch ?? null;
   const host = useProjectRepoHost(project);
   const githubMachineGit = useFeatureEnabled("githubMachineGit");
+  const publicGithubRead = useFeatureEnabled("publicGithubRead");
   const githubRemote = host.kind === "external" && host.host === "github.com";
 
   return useQuery({
     enabled: Boolean(
       project?.cloneUrls[0] &&
-        (host.kind === "buzz" || (githubRemote && githubMachineGit)),
+        (host.kind === "buzz" ||
+          (githubRemote && (githubMachineGit || publicGithubRead))),
     ),
     queryKey: [
       "project",

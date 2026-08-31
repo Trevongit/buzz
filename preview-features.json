@@ -36,6 +36,20 @@
       "name": "GitHub machine git",
       "description": "Clone, fetch, pull, and push github.com remotes (including private) with this computer's gh/git login. Buzz never puts your Nostr key in that git process.",
       "platforms": ["desktop"]
+    },
+    {
+      "id": "pocketListen",
+      "name": "Pocket Listen",
+      "description": "Speak a thread, pause and resume, wait for a named Reader summary, and Follow along. Turn off to hide Listen controls.",
+      "defaultEnabled": true,
+      "platforms": ["desktop"]
+    },
+    {
+      "id": "publicGithubRead",
+      "name": "Public GitHub reads",
+      "description": "Show Overview, Files, and Fetch compare for public github.com remotes without cloning. Private clone still needs GitHub machine git.",
+      "defaultEnabled": true,
+      "platforms": ["desktop"]
     }
   ]
 }

@@ -4,7 +4,9 @@ import type { ProjectPullRequest, Repository } from "@/features/projects/hooks";
 import {
   getProjectLocalRepoFileContent,
   getProjectRepoFileContent,
+  isGithubCloneUrl,
 } from "@/shared/api/projectGit";
+import { useFeatureEnabled } from "@/shared/features";
 import type { RepositoryFileContentSource } from "./useRepositoryFileContent";
 
 type RepositoryFileContentSourceInput = {
@@ -26,6 +28,9 @@ export function useRepositoryFileContentSource({
   selectedTag,
   source,
 }: RepositoryFileContentSourceInput) {
+  const publicGithubRead = useFeatureEnabled("publicGithubRead");
+  const githubMachineGit = useFeatureEnabled("githubMachineGit");
+  const githubReads = publicGithubRead || githubMachineGit;
   return React.useMemo<RepositoryFileContentSource | undefined>(() => {
     if (!repository) return undefined;
     const effectiveSource = selectedTag ? "remote" : source;
@@ -52,6 +57,7 @@ export function useRepositoryFileContentSource({
     const cloneUrl =
       contentPullRequest?.cloneUrls[0] ?? repository.cloneUrls[0];
     if (!cloneUrl) return undefined;
+    if (isGithubCloneUrl(cloneUrl) && !githubReads) return undefined;
     const targetRef = activeTag
       ? `refs/tags/${activeTag.name}`
       : contentPullRequest
@@ -84,5 +90,6 @@ export function useRepositoryFileContentSource({
     reposDir,
     selectedTag,
     source,
+    githubReads,
   ]);
 }
