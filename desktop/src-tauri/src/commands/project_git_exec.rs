@@ -4,9 +4,11 @@
 //! the identity nsec is handed to `git-credential-nostr` via environment
 //! variables so nothing key-related ever touches disk or global git config.
 
-use crate::{app_state::AppState, managed_agents::resolve_command};
+use crate::{app_state::AppState, managed_agents::resolve_command, relay};
 use nostr::{Keys, ToBech32};
+use reqwest::Method;
 use std::io::Read;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use url::Url;
@@ -49,6 +51,9 @@ pub(crate) struct GitAuthConfig {
     credential_helper: Option<std::path::PathBuf>,
     nsec: String,
     allow_file_transport: bool,
+    /// `Authorization: Nostr …` for git older than 2.46, which has no
+    /// credential `authtype` and so never invokes `git-credential-nostr`.
+    extra_auth_header: Option<String>,
 }
 
 fn read_pipe_lossy(pipe: Option<impl Read>) -> String {
@@ -169,17 +174,49 @@ fn configure_git_auth(command: &mut Command, auth: &GitAuthConfig, needs_credent
         ),
     ];
     if needs_credentials {
-        let Some(cred_helper) = &auth.credential_helper else {
-            return apply_git_config(command, &entries);
-        };
-        command.env("NOSTR_PRIVATE_KEY", &auth.nsec);
-        entries.push((
-            "credential.helper",
-            credential_helper_config_value(cred_helper),
-        ));
-        entries.push(("credential.useHttpPath", "true".to_string()));
+        if let Some(header) = &auth.extra_auth_header {
+            entries.push(("http.extraHeader", header.clone()));
+        } else {
+            let Some(cred_helper) = &auth.credential_helper else {
+                return apply_git_config(command, &entries);
+            };
+            command.env("NOSTR_PRIVATE_KEY", &auth.nsec);
+            entries.push((
+                "credential.helper",
+                credential_helper_config_value(cred_helper),
+            ));
+            entries.push(("credential.useHttpPath", "true".to_string()));
+        }
     }
     apply_git_config(command, &entries);
+}
+
+/// `git version 2.43.0` → `(2, 43)`.
+pub(crate) fn parse_git_version(output: &str) -> Option<(u32, u32)> {
+    let rest = output.trim().strip_prefix("git version ")?;
+    let mut nums = rest
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty());
+    let major = nums.next()?.parse().ok()?;
+    let minor = nums.next()?.parse().ok()?;
+    Some((major, minor))
+}
+
+fn git_supports_credential_authtype(version: (u32, u32)) -> bool {
+    version.0 > 2 || (version.0 == 2 && version.1 >= 46)
+}
+
+fn read_git_version(git_path: &Path) -> Option<(u32, u32)> {
+    let output = Command::new(git_path).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_git_version(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn git_nip98_extra_header(keys: &Keys, clone_url: &str) -> Result<String, String> {
+    let header = relay::build_nip98_auth_header_for_keys(keys, &Method::GET, clone_url, &[])?;
+    Ok(format!("Authorization: {header}"))
 }
 
 /// Format a path for git `credential.helper`.
@@ -214,9 +251,30 @@ pub(crate) fn build_git_clone_auth_config(
             credential_helper: None,
             nsec: String::new(),
             allow_file_transport: false,
+            extra_auth_header: None,
         });
     }
-    build_git_auth_config(state)
+    let mut auth = build_git_auth_config(state)?;
+    attach_legacy_git_http_auth(&mut auth, state.signing_keys()?, clone_url);
+    Ok(auth)
+}
+
+fn attach_legacy_git_http_auth(auth: &mut GitAuthConfig, keys: Keys, clone_url: &str) {
+    let Some(version) = read_git_version(&auth.git_path) else {
+        return;
+    };
+    if git_supports_credential_authtype(version) {
+        return;
+    }
+    match git_nip98_extra_header(&keys, clone_url) {
+        Ok(header) => {
+            auth.extra_auth_header = Some(header);
+            auth.credential_helper = None;
+        }
+        Err(error) => {
+            eprintln!("buzz-desktop: git extraHeader NIP-98 failed: {error}");
+        }
+    }
 }
 
 pub(crate) fn build_git_auth_config_for_keys(keys: &Keys) -> Result<GitAuthConfig, String> {
@@ -231,6 +289,7 @@ pub(crate) fn build_git_auth_config_for_keys(keys: &Keys) -> Result<GitAuthConfi
         credential_helper,
         nsec,
         allow_file_transport: false,
+        extra_auth_header: None,
     })
 }
 
@@ -394,9 +453,21 @@ fn validate_clone_url_against_relay(clone_url: &str, relay_base: &str) -> Result
 mod tests {
     use super::{
         clean_branch, clean_target_ref, credential_helper_config_value, git_needs_credentials,
-        git_subcommand, validate_clone_url, validate_clone_url_against_relay,
-        validate_local_clone_url,
+        git_subcommand, git_supports_credential_authtype, parse_git_version, validate_clone_url,
+        validate_clone_url_against_relay, validate_local_clone_url,
     };
+
+    #[test]
+    fn parse_git_version_reads_major_minor() {
+        assert_eq!(parse_git_version("git version 2.43.0"), Some((2, 43)));
+        assert_eq!(
+            parse_git_version("git version 2.46.0.windows.1"),
+            Some((2, 46))
+        );
+        assert!(!git_supports_credential_authtype((2, 43)));
+        assert!(git_supports_credential_authtype((2, 46)));
+        assert!(git_supports_credential_authtype((3, 0)));
+    }
 
     #[test]
     fn credential_helper_config_value_uses_forward_slashes() {
