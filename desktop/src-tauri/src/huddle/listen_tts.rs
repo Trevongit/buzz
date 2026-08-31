@@ -166,6 +166,9 @@ pub async fn speak_listen_text(
         let started = Instant::now();
         let mut heard_audio = false;
         while started.elapsed() < LISTEN_PLAYBACK_TIMEOUT {
+            if runtime.cancel.load(Ordering::Acquire) {
+                return Ok(());
+            }
             let is_active = runtime.active.load(Ordering::Acquire);
             heard_audio |= is_active;
             if heard_audio && !is_active {
@@ -181,6 +184,18 @@ pub async fn speak_listen_text(
     })
     .await
     .map_err(|error| format!("Listen TTS task failed: {error}"))?
+}
+
+/// Stop Listen / Follow along Pocket playback. Safe if nothing is playing.
+#[tauri::command]
+pub fn stop_listen_text() -> Result<(), String> {
+    let slot = listen_runtime()
+        .lock()
+        .map_err(|error| format!("listen TTS lock poisoned: {error}"))?;
+    if let Some(runtime) = slot.as_ref() {
+        runtime.cancel.store(true, Ordering::Release);
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -263,5 +278,10 @@ mod tests {
     fn finish_keeps_a_complete_last_sentence() {
         let spoken = finish_spoken_summary("Keep names, decisions, and numbers.");
         assert_eq!(spoken, "Keep names, decisions, and numbers.");
+    }
+
+    #[test]
+    fn stop_without_runtime_is_ok() {
+        assert!(super::stop_listen_text().is_ok());
     }
 }

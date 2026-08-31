@@ -16,6 +16,13 @@ import type { ManagedAgent, RelayEvent } from "@/shared/api/types";
 const READER_REPLY_TIMEOUT_MS = 240_000;
 const READER_REPLY_POLL_MS = 2_000;
 
+let waitGeneration = 0;
+
+/** Abort an in-flight Listen (summary) wait (Stop). */
+export function abortListenSummaryWait() {
+  waitGeneration += 1;
+}
+
 export async function resolveReaderAgent(): Promise<ManagedAgent> {
   const agents = await listManagedAgents();
   const reader = pickListenSummaryAgent(agents);
@@ -37,8 +44,10 @@ export async function summarizeWithReader(input: {
   agent?: ManagedAgent;
 }): Promise<{ summary: string; agentName: string }> {
   const reader = input.agent ?? (await resolveReaderAgent());
+  const generation = waitGeneration;
   const waiting = waitForReaderReply({
     channelId: input.channelId,
+    generation,
     readerName: reader.name,
     readerPubkey: reader.pubkey,
     since: Math.floor(Date.now() / 1000) - 2,
@@ -54,6 +63,9 @@ export async function summarizeWithReader(input: {
   );
   waiting.setAskEventId(sent.eventId);
   const reply = await waiting.reply;
+  if (generation !== waitGeneration) {
+    throw new Error("Stopped listening.");
+  }
   const spoken = spokenProseFromReaderReply(reply);
   if (!spoken) {
     throw new Error(`${reader.name} returned nothing to speak.`);
@@ -84,6 +96,7 @@ async function pollThreadForReply(
 
 function waitForReaderReply(input: {
   channelId: string;
+  generation: number;
   readerName: string;
   readerPubkey: string;
   since: number;
@@ -125,6 +138,10 @@ function waitForReaderReply(input: {
     }, READER_REPLY_TIMEOUT_MS);
 
     pollId = window.setInterval(() => {
+      if (input.generation !== waitGeneration) {
+        finish(() => reject(new Error("Stopped listening.")));
+        return;
+      }
       const roots = [input.threadRootId, askEventId].filter(
         (id): id is string => Boolean(id),
       );
@@ -135,6 +152,10 @@ function waitForReaderReply(input: {
 
     consider = (event: RelayEvent) => {
       if (settled) return;
+      if (input.generation !== waitGeneration) {
+        finish(() => reject(new Error("Stopped listening.")));
+        return;
+      }
       if (event.created_at < input.since) return;
       if (!askEventId) {
         pending.push(event);

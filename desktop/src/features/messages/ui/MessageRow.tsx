@@ -44,7 +44,12 @@ import { resolveSnapshotSharedBy } from "@/features/messages/lib/snapshotSharedB
 import { resolveMentionProps } from "@/shared/lib/resolveMentionNames";
 import type { VideoReviewContext } from "@/shared/ui/VideoPlayer";
 import { VideoReviewCommentMarkdown } from "@/shared/ui/VideoReviewCommentMarkdown";
-import { speakListenText } from "@/features/messages/lib/listenPlayback";
+import {
+  pauseListenPlayback,
+  speakListenText,
+  stopListenPlayback,
+} from "@/features/messages/lib/listenPlayback";
+import { useListenPlayback } from "@/features/messages/lib/useListenPlayback";
 import { readListenSummaryAgentPreference } from "@/features/messages/lib/listenSummaryAgentPreference";
 import {
   isFollowAlongMessage,
@@ -257,6 +262,7 @@ export const MessageRow = React.memo(
     // O(1) checks — no per-row rescan of `profiles` (that duplicated parent
     // work in every mounted row and re-ran on each profile-lookup change).
     const knownAgentPubkeys = useKnownAgentPubkeys();
+    const listenPlayback = useListenPlayback();
     const isKnownAgentPubkey = React.useCallback(
       (pubkey: string) => {
         const normalized = normalizePubkey(pubkey);
@@ -487,16 +493,46 @@ export const MessageRow = React.memo(
           };
           return (
             <div className="flex flex-col gap-2">
-              <Button
-                className="h-8 w-fit rounded-full px-3"
-                data-testid={`follow-along-${message.id}`}
-                onClick={playFollowAlong}
-                size="sm"
-                type="button"
-                variant="secondary"
-              >
-                Follow along
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  className="h-8 w-fit rounded-full px-3"
+                  data-testid={`follow-along-${message.id}`}
+                  onClick={playFollowAlong}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  Follow along
+                </Button>
+                {listenPlayback === "playing" ? (
+                  <>
+                    <Button
+                      className="h-8 w-fit rounded-full px-3"
+                      data-testid={`listen-pause-${message.id}`}
+                      onClick={() => {
+                        void pauseListenPlayback();
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Pause
+                    </Button>
+                    <Button
+                      className="h-8 w-fit rounded-full px-3"
+                      data-testid={`listen-stop-${message.id}`}
+                      onClick={() => {
+                        void stopListenPlayback();
+                      }}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Stop
+                    </Button>
+                  </>
+                ) : null}
+              </div>
               {markdown}
             </div>
           );

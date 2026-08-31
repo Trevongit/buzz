@@ -11613,6 +11613,8 @@ export function maybeInstallE2eTauriMocks() {
         return;
       case "speak_listen_text":
         return;
+      case "stop_listen_text":
+        return;
       case "summarize_listen_text": {
         const text = (payload as { text?: string })?.text ?? "";
         return text ? `Summary of: ${text.slice(0, 80)}` : "Empty summary";

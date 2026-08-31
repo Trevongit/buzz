@@ -1,19 +1,26 @@
-import { Volume2 } from "lucide-react";
+import { Pause, Square, Volume2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { speakListenText } from "@/features/messages/lib/listenPlayback";
+import {
+  pauseListenPlayback,
+  resumeListenPlayback,
+  speakListenText,
+  stopListenPlayback,
+} from "@/features/messages/lib/listenPlayback";
 import {
   resolveReaderAgent,
   summarizeWithReader,
 } from "@/features/messages/lib/listenReader";
 import { listenPlainText } from "@/features/messages/lib/listenSpeech";
+import { useListenPlayback } from "@/features/messages/lib/useListenPlayback";
 import type { TimelineMessage } from "@/features/messages/types";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
@@ -27,6 +34,10 @@ function formatElapsed(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function isStopError(error: unknown): boolean {
+  return error instanceof Error && error.message === "Stopped listening.";
+}
+
 export function MessageListenButton({
   channelId,
   message,
@@ -37,6 +48,7 @@ export function MessageListenButton({
   onOpenChange: (open: boolean) => void;
 }) {
   const [busy, setBusy] = React.useState(false);
+  const playback = useListenPlayback();
   const plain = listenPlainText(message.body);
   if (!plain) return null;
 
@@ -45,7 +57,6 @@ export function MessageListenButton({
     setBusy(true);
     try {
       if (mode === "play") {
-        toast.message("Listening…");
         await speakListenText(plain);
         return;
       }
@@ -71,7 +82,7 @@ export function MessageListenButton({
           messageId: message.id,
           text: plain,
         });
-        toast.success("Listening to summary…", { id: waitToast });
+        toast.dismiss(waitToast);
         await speakListenText(summary);
       } catch (error) {
         toast.dismiss(waitToast);
@@ -80,6 +91,7 @@ export function MessageListenButton({
         window.clearInterval(tick);
       }
     } catch (error) {
+      if (isStopError(error)) return;
       toast.error("Could not listen", {
         description:
           error instanceof Error
@@ -100,7 +112,6 @@ export function MessageListenButton({
               aria-label="Listen to message"
               className={ACTION_BUTTON_CLASS}
               data-testid={`listen-message-${message.id}`}
-              disabled={busy}
               size="sm"
               type="button"
               variant="ghost"
@@ -113,7 +124,7 @@ export function MessageListenButton({
       </Tooltip>
       <DropdownMenuContent align="end" side="top" sideOffset={8}>
         <DropdownMenuItem
-          disabled={busy}
+          disabled={busy && playback === "idle"}
           onSelect={() => {
             void run("play");
           }}
@@ -121,13 +132,63 @@ export function MessageListenButton({
           Listen
         </DropdownMenuItem>
         <DropdownMenuItem
-          disabled={busy}
+          disabled={busy && playback === "idle"}
           onSelect={() => {
             void run("summary");
           }}
         >
           Listen (summary)
         </DropdownMenuItem>
+        {playback === "playing" || busy ? (
+          <>
+            <DropdownMenuSeparator />
+            {playback === "playing" ? (
+              <DropdownMenuItem
+                onSelect={() => {
+                  void pauseListenPlayback();
+                }}
+              >
+                <Pause className={ACTION_ICON_CLASS} />
+                Pause
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              onSelect={() => {
+                void stopListenPlayback();
+              }}
+            >
+              <Square className={ACTION_ICON_CLASS} />
+              Stop
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {playback === "paused" ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                void resumeListenPlayback().catch((error) => {
+                  toast.error("Could not listen", {
+                    description:
+                      error instanceof Error
+                        ? error.message
+                        : "Check Voice settings.",
+                  });
+                });
+              }}
+            >
+              Resume
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                void stopListenPlayback();
+              }}
+            >
+              <Square className={ACTION_ICON_CLASS} />
+              Stop
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
