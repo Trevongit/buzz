@@ -19,11 +19,11 @@ import { useInboxEditMessage } from "@/features/home/useInboxEditMessage";
 import { useOwnedAgentPubkeys } from "@/features/home/useOwnedAgentPubkeys";
 import {
   filterInboxItems,
-  matchesInboxFilter,
+  filterVisibleInboxItems,
 } from "@/features/home/lib/inboxViewHelpers";
-import { resolveInboxFilterSelection } from "@/features/home/lib/inboxSelection";
 import { useHomeInboxReadState } from "@/features/home/useHomeInboxReadState";
 import { useHomeInboxAutoSelection } from "@/features/home/useHomeInboxAutoSelection";
+import { useHomeInboxFilterChange } from "@/features/home/useHomeInboxFilterChange";
 import { useHomeInboxContextMessages } from "@/features/home/useHomeInboxContextMessages";
 import { useHomePersonalInbox } from "@/features/home/useHomePersonalInbox";
 import { useInboxThreadContext } from "@/features/home/useInboxThreadContext";
@@ -244,6 +244,7 @@ export function HomeView({
     markThreadRead,
     recordThreadInteraction,
     readStateVersion,
+    isReadStateReady,
   } = useAppShell();
   const { doneSet, markDone, markUnread, undoDone, undoUnread, unreadSet } =
     feedItemState;
@@ -387,6 +388,7 @@ export function HomeView({
       getThreadReadAt,
       getMessageReadAt,
       readStateVersion,
+      isReadStateReady,
       localDoneSet: doneSet,
       localUnreadSet: unreadSet,
       clearChannelUnreadSource,
@@ -418,25 +420,28 @@ export function HomeView({
   const selectedConversationId =
     selectedItemFromAll?.conversationId ?? latchedConversationId;
 
-  const filteredItems = React.useMemo(() => {
-    return inboxItems.filter(
-      (item) =>
-        matchesInboxFilter(item, filter, ownedAgentPubkeys) &&
-        (!unreadOnly ||
-          !effectiveDoneSet.has(item.id) ||
-          item.conversationId === selectedConversationId),
-    );
-  }, [
-    effectiveDoneSet,
-    filter,
-    inboxItems,
-    ownedAgentPubkeys,
-    selectedConversationId,
-    unreadOnly,
-  ]);
+  const filteredItems = React.useMemo(
+    () =>
+      filterVisibleInboxItems(inboxItems, {
+        doneSet: effectiveDoneSet,
+        filter,
+        ownedAgentPubkeys,
+        selectedConversationId,
+        unreadOnly,
+        urlSelectedItemId,
+      }),
+    [
+      effectiveDoneSet,
+      filter,
+      inboxItems,
+      ownedAgentPubkeys,
+      selectedConversationId,
+      unreadOnly,
+      urlSelectedItemId,
+    ],
+  );
   // A filter change may only retain detail for a conversation that remains
-  // visible. The filter handler selects the next valid row in the same update,
-  // so the detail pane never renders a stale conversation between states.
+  // visible, selecting the next valid row in the same update.
   const selectedItem = React.useMemo(() => {
     if (!selectedEventId) return null;
     const fromFiltered = findInboxItemByEventId(filteredItems, selectedEventId);
@@ -532,53 +537,21 @@ export function HomeView({
     setIsSendingReply(false);
   }, [selectedConversationId]);
 
-  const handleFilterChange = React.useCallback(
-    (nextFilter: InboxFilter) => {
-      const nextItems = inboxItems.filter(
-        (item) =>
-          matchesInboxFilter(item, nextFilter, ownedAgentPubkeys) &&
-          (!unreadOnly ||
-            !effectiveDoneSet.has(item.id) ||
-            item.conversationId === selectedConversationId),
-      );
-      const selection = resolveInboxFilterSelection({
-        isNarrow: isNarrowHomeViewport,
-        items: nextItems,
-        selectedConversationId,
-      });
-
-      setUnreadBoundary(null);
-      setSelectedDraftKey(null);
-      setSelectedReminderId(null);
-      setFilter(nextFilter);
-
-      if (
-        nextFilter === "reminders" ||
-        nextFilter === "drafts" ||
-        selection.preserveSelection
-      ) {
-        if (nextFilter === "reminders" || nextFilter === "drafts") {
-          setAutoSelectedEventId(null);
-          applyInboxSearchPatch({ item: null });
-        }
-        return;
-      }
-
-      applyInboxSearchPatch({ item: null });
-      setAutoSelectedEventId(selection.autoSelectedEventId);
-    },
-    [
-      applyInboxSearchPatch,
-      effectiveDoneSet,
-      inboxItems,
-      isNarrowHomeViewport,
-      ownedAgentPubkeys,
-      selectedConversationId,
-      setSelectedDraftKey,
-      setSelectedReminderId,
-      unreadOnly,
-    ],
-  );
+  const handleFilterChange = useHomeInboxFilterChange({
+    applyInboxSearchPatch,
+    effectiveDoneSet,
+    inboxItems,
+    isNarrowHomeViewport,
+    ownedAgentPubkeys,
+    selectedConversationId,
+    setAutoSelectedEventId,
+    setFilter,
+    setSelectedDraftKey,
+    setSelectedReminderId,
+    setUnreadBoundary,
+    unreadOnly,
+    urlSelectedItemId,
+  });
 
   if (isLoading && !feed) {
     return <HomeLoadingState />;
