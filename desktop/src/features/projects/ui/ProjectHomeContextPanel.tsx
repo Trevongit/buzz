@@ -406,6 +406,7 @@ export function ProjectHomeContextPanel({
                 {canUnlist ? (
                   <UnlistProjectRepositoryIconButton
                     disabled={unlistDisabled}
+                    lastMember={project.repositoryAddresses.length <= 1}
                     onUnlist={() => onUnlistRepository?.(project, repository)}
                     repository={repository}
                   />

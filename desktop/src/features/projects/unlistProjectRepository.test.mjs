@@ -84,6 +84,8 @@ test("unlist confirm copy never claims GitHub or disk deletion", () => {
   assert.match(copy.description, /not deleted/);
   assert.match(copy.description, /folders on this computer are not deleted/);
   assert.doesNotMatch(copy.description, /permanently delete GitHub/i);
+  const last = unlistConfirmCopy("kokoro-talker-test", { lastMember: true });
+  assert.match(last.description, /last codebase/);
 });
 
 test("buildUnlistProjectPatchFromHead drops only the target member and keeps extension tags", () => {

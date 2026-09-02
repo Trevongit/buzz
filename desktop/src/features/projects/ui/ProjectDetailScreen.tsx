@@ -705,6 +705,18 @@ export function ProjectDetailScreen(props: ProjectDetailScreenProps) {
     );
   }
   if (!repository) {
+    // Last-member unlist leaves a valid 30621 with no live 30617. Do not treat
+    // that as a dead end: the project still owns its home channel and must be
+    // able to attach GitHub (or another repo) again.
+    if (project.projectChannelId) {
+      return (
+        <ProjectChannelHome
+          allowRepositoryHealing={isProjectRelayValidated(project)}
+          project={project}
+          projects={projectsQuery.data ?? [project]}
+        />
+      );
+    }
     return (
       <ProjectDetailUnavailableState
         kind="repositories-unavailable"

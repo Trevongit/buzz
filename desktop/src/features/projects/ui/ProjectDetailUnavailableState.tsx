@@ -62,7 +62,8 @@ export function ProjectDetailUnavailableState(
         {props.project.name}
       </p>
       <p className="text-sm text-muted-foreground">
-        This project does not have any available repositories yet.
+        This project does not have any available repositories yet. Attach a
+        GitHub URL or create a repository — the project and its channel stay.
       </p>
       <UnavailableProjectRepositories project={props.project} />
     </div>

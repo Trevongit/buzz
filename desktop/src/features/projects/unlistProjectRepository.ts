@@ -72,13 +72,19 @@ export function shouldUnannounceMemberRepository(
   return normalizePubkey(project.owner) === normalizePubkey(repository.owner);
 }
 
-export function unlistConfirmCopy(repositoryName: string): {
+export function unlistConfirmCopy(
+  repositoryName: string,
+  options?: { lastMember?: boolean },
+): {
   description: string;
   title: string;
 } {
+  const last = options?.lastMember
+    ? " This is the last codebase; the project and its channel stay so you can attach another remote."
+    : "";
   return {
     title: "Unlist from Buzz?",
-    description: `Removes "${repositoryName}" from this project and from Buzz listings so it cannot linger as a ghost. GitHub and folders on this computer are not deleted. You can attach a GitHub URL again later.`,
+    description: `Removes "${repositoryName}" from this project and from Buzz listings so it cannot linger as a ghost. GitHub and folders on this computer are not deleted. You can attach a GitHub URL again later.${last}`,
   };
 }
 

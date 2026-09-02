@@ -20,6 +20,7 @@ import { DropdownMenuItem } from "@/shared/ui/dropdown-menu";
 export function UnlistProjectRepositoryMenuItem({
   disabled,
   onUnlist,
+  project,
   repository,
 }: {
   disabled?: boolean;
@@ -28,7 +29,9 @@ export function UnlistProjectRepositoryMenuItem({
   repository: Repository;
 }) {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const copy = unlistConfirmCopy(repository.name);
+  const copy = unlistConfirmCopy(repository.name, {
+    lastMember: project.repositoryAddresses.length <= 1,
+  });
   return (
     <AlertDialog onOpenChange={setConfirmOpen} open={confirmOpen}>
       <DropdownMenuItem
@@ -81,15 +84,17 @@ export function UnlistProjectRepositoryMenuItem({
 
 export function UnlistProjectRepositoryIconButton({
   disabled,
+  lastMember,
   onUnlist,
   repository,
 }: {
   disabled?: boolean;
+  lastMember?: boolean;
   onUnlist: () => Promise<void> | void;
   repository: Repository;
 }) {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const copy = unlistConfirmCopy(repository.name);
+  const copy = unlistConfirmCopy(repository.name, { lastMember });
   return (
     <AlertDialog onOpenChange={setConfirmOpen} open={confirmOpen}>
       <AlertDialogTrigger asChild>
