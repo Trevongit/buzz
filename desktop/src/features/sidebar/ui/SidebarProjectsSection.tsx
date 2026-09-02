@@ -631,21 +631,6 @@ function SidebarProjectRow({
               />
             </SidebarMenuAction>
           ) : null}
-          {canDelete && !hasChildren ? (
-            <SidebarMenuAction
-              aria-label={`Delete ${project.name}`}
-              data-testid={`sidebar-project-delete-${project.dtag}`}
-              disabled={deleteDisabled}
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete();
-              }}
-              showOnHover
-              type="button"
-            >
-              <Trash2 />
-            </SidebarMenuAction>
-          ) : null}
         </SidebarMenuItem>
       </ContextMenuTrigger>
       <ContextMenuContent>
