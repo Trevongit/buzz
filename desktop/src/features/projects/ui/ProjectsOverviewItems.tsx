@@ -2,6 +2,7 @@ import * as React from "react";
 
 import type { UserProfileLookup } from "@/features/profile/lib/identity";
 import { canDeleteProject } from "@/features/projects/projectDeletion";
+import { canUnlistProjectRepository } from "@/features/projects/unlistProjectRepository";
 import { FolderGit2, Folders } from "lucide-react";
 import type {
   Project,
@@ -307,8 +308,10 @@ export function ProjectsOverviewRepositoryItems({
   localRepoNames,
   onOpen,
   onOpenTerminal,
+  onUnlist,
   profiles,
   summaries,
+  unlistDisabled,
   viewMode,
   visibleRepositories,
 }: {
@@ -316,8 +319,10 @@ export function ProjectsOverviewRepositoryItems({
   localRepoNames: Set<string>;
   onOpen: (project: Project, repository: Repository) => void;
   onOpenTerminal: (repository: Repository) => void;
+  onUnlist?: (project: Project, repository: Repository) => Promise<void> | void;
   profiles?: UserProfileLookup;
   summaries?: Record<string, ProjectActivitySummary>;
+  unlistDisabled?: boolean;
   viewMode: ProjectsViewMode;
   visibleRepositories: Array<{ project: Project; repository: Repository }>;
 }) {
@@ -393,16 +398,24 @@ export function ProjectsOverviewRepositoryItems({
                     key={repository.repoAddress}
                   >
                     <RepositoryGridCard
+                      canUnlist={canUnlistProjectRepository(
+                        project,
+                        repository,
+                        currentPubkey,
+                        profiles,
+                      )}
                       hasLocal={hasLocalRepositoryCheckout(
                         repository,
                         localRepoNames,
                       )}
                       onOpen={onOpen}
                       onOpenTerminal={onOpenTerminal}
+                      onUnlist={onUnlist}
                       profiles={profiles}
                       project={project}
                       repository={repository}
                       summary={summaries?.[repository.repoAddress]}
+                      unlistDisabled={unlistDisabled}
                     />
                   </div>
                 ))}
@@ -428,17 +441,25 @@ export function ProjectsOverviewRepositoryItems({
                 key={repository.repoAddress}
               >
                 <RepositoryListRow
+                  canUnlist={canUnlistProjectRepository(
+                    project,
+                    repository,
+                    currentPubkey,
+                    profiles,
+                  )}
                   hasLocal={hasLocalRepositoryCheckout(
                     repository,
                     localRepoNames,
                   )}
                   onOpen={onOpen}
                   onOpenTerminal={onOpenTerminal}
+                  onUnlist={onUnlist}
                   profiles={profiles}
                   project={project}
                   repository={repository}
                   selectionRangeItems={selectionRangeItems}
                   summary={summaries?.[repository.repoAddress]}
+                  unlistDisabled={unlistDisabled}
                 />
               </div>
             ))}

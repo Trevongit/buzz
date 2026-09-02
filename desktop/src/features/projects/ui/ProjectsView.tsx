@@ -18,6 +18,7 @@ import {
 } from "@/features/projects/hooks";
 import { useRepositoryActivitySummariesQuery } from "@/features/projects/repositoryActivityHooks";
 import { useCreateProjectMutation } from "@/features/projects/useCreateProject";
+import { useUnlistProjectRepositoryMutation } from "@/features/projects/useUnlistProjectRepository";
 import { isExplicitProject } from "@/features/projects/projectModels";
 import { projectsWithWorkItemRepositories } from "@/features/projects/projectWorkItems";
 import { useProjectsRepoSnapshotsQuery } from "@/features/projects/useProjectsRepoSnapshots";
@@ -105,6 +106,7 @@ import {
   useContextWorkItems,
   useDeleteProjectHandler,
   useOpenProjectTerminalHandler,
+  useUnlistProjectRepositoryHandler,
 } from "./projectsViewWorkItems";
 
 const MANY_PROJECTS_THRESHOLD = 12;
@@ -243,6 +245,7 @@ export function ProjectsView() {
     ],
   );
   const deleteProjectMutation = useDeleteProjectMutation();
+  const unlistRepositoryMutation = useUnlistProjectRepositoryMutation();
   const currentPubkey = identityQuery.data?.pubkey;
   const managedAgentPubkeys = React.useMemo(
     () =>
@@ -541,6 +544,10 @@ export function ProjectsView() {
   const handleDeleteProject = useDeleteProjectHandler(
     deleteProjectMutation.mutateAsync,
   );
+  const handleUnlistRepository = useUnlistProjectRepositoryHandler(
+    unlistRepositoryMutation.mutateAsync,
+    ownerControlAgentPubkeyFor,
+  );
 
   const { contextIssues, contextPullRequests } = useContextWorkItems(
     projectsWorkItemsQuery.data,
@@ -591,8 +598,10 @@ export function ProjectsView() {
       localRepoNames={localRepoNames}
       onOpen={handleOpenRepository}
       onOpenTerminal={handleOpenRepositoryTerminal}
+      onUnlist={handleUnlistRepository}
       profiles={profiles}
       summaries={repositoryActivitySummariesQuery.data}
+      unlistDisabled={unlistRepositoryMutation.isPending}
       viewMode={viewMode}
       visibleRepositories={visibleRepositories}
     />

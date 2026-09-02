@@ -585,6 +585,35 @@ export function addRepositoryToProject(
   };
 }
 
+/** Returns the optimistic read model after dropping a member repository. */
+export function removeRepositoryFromProject(
+  project: Project,
+  repositoryAddress: string,
+  createdAt: number,
+): Project {
+  const repositoryAddresses = project.repositoryAddresses.filter(
+    (address) => address !== repositoryAddress,
+  );
+  const repositories = project.repositories.filter(
+    (candidate) => candidate.repoAddress !== repositoryAddress,
+  );
+  return {
+    ...project,
+    createdAt,
+    primaryRepositoryAddress:
+      repositories.find((candidate) => candidate.dtag === project.dtag)
+        ?.repoAddress ??
+      repositories[0]?.repoAddress ??
+      null,
+    repositoryAddresses,
+    repositories,
+    unavailableRepositoryAddresses:
+      project.unavailableRepositoryAddresses?.filter(
+        (address) => address !== repositoryAddress,
+      ) ?? [],
+  };
+}
+
 /** Returns the optimistic read model after linking an extra project stream. */
 export function addRelatedChannelToProject(
   project: Project,

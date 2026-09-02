@@ -2,7 +2,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import type { ProjectsWorkItemsResult } from "@/features/projects/projectWorkItems";
-import type { Project } from "@/features/projects/hooks";
+import type { Project, Repository } from "@/features/projects/hooks";
 import { hasLocalRepositoryCheckout } from "@/features/projects/lib/projectLocalRepos";
 import { selectProjectRepository } from "@/features/projects/projectModels";
 import type { useOpenProjectTerminal } from "@/features/projects/ui/useOpenProjectTerminal";
@@ -57,6 +57,36 @@ export function useDeleteProjectHandler(
       }
     },
     [mutateAsync],
+  );
+}
+
+/** Unlist-from-Buzz handler with toast feedback. */
+export function useUnlistProjectRepositoryHandler(
+  mutateAsync: (input: {
+    ownerControlAgentPubkey?: string;
+    project: Project;
+    repository: Repository;
+  }) => Promise<unknown>,
+  ownerControlAgentPubkeyFor: (project: Project) => string | undefined,
+) {
+  return React.useCallback(
+    async (project: Project, repository: Repository) => {
+      try {
+        await mutateAsync({
+          ownerControlAgentPubkey: ownerControlAgentPubkeyFor(project),
+          project,
+          repository,
+        });
+        toast.success(`Unlisted "${repository.name}" from Buzz`);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Failed to unlist the repository",
+        );
+      }
+    },
+    [mutateAsync, ownerControlAgentPubkeyFor],
   );
 }
 

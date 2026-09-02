@@ -15,6 +15,7 @@ import {
 } from "@/features/projects/lib/projectHomeWorkspaceSheet";
 import { ProjectSelectionProvider } from "@/features/projects/lib/useProjectSelection";
 import { useHealProjectHomeRepositories } from "@/features/projects/useHealProjectHomeRepositories";
+import { useUnlistProjectRepositoryMutation } from "@/features/projects/useUnlistProjectRepository";
 import { useIdentityQuery } from "@/shared/api/hooks";
 import type { RelayEvent } from "@/shared/api/types";
 import type { EntityLinkTab } from "@/shared/lib/entityLink";
@@ -36,6 +37,7 @@ import {
   type ProjectHomeWorkspaceDetail,
 } from "./ProjectHomeWorkspaceSheet";
 import { ProjectRepositoryManagement } from "./ProjectRepositoryManagement";
+import { useUnlistProjectRepositoryHandler } from "./projectsViewWorkItems";
 
 const EMPTY_TARGET_MESSAGE_EVENTS: RelayEvent[] = [];
 const PROJECT_HOME_SUMMARY_WIDTH_KEY =
@@ -102,6 +104,11 @@ export function ProjectChannelHome({
   const { goChannel, goProject, goProjects } = useAppNavigation();
   const sidebar = useOptionalSidebar();
   const identityQuery = useIdentityQuery();
+  const unlistRepositoryMutation = useUnlistProjectRepositoryMutation();
+  const handleUnlistRepository = useUnlistProjectRepositoryHandler(
+    unlistRepositoryMutation.mutateAsync,
+    React.useCallback(() => undefined, []),
+  );
   const profileQuery = useProfileQuery();
   const channelsQuery = useChannelsQuery();
   const search = useSearch({ strict: false }) as {
@@ -431,8 +438,10 @@ export function ProjectChannelHome({
                 onOpenRepository={handleOpenRepository}
                 onOpenWorkspace={handleOpenWorkspace}
                 onRepositoryChange={handleRepositoryChange}
+                onUnlistRepository={handleUnlistRepository}
                 project={project}
                 projects={projects}
+                unlistDisabled={unlistRepositoryMutation.isPending}
               />
             </ProjectHomeColumn>
           ) : null}

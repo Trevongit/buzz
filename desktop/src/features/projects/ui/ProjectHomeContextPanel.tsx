@@ -25,8 +25,10 @@ import type { Channel } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import type { EntityLinkTab } from "@/shared/lib/entityLink";
 import { Button } from "@/shared/ui/button";
+import { canUnlistProjectRepository } from "@/features/projects/unlistProjectRepository";
 import { ProjectChannelManagement } from "./ProjectChannelManagement";
 import { ProjectRepositoryManagement } from "./ProjectRepositoryManagement";
+import { UnlistProjectRepositoryIconButton } from "./UnlistProjectRepositoryControl";
 import { SECTION_ACTION_VISIBILITY_CLASS } from "@/features/sidebar/ui/sidebarSectionStyles";
 
 const PROJECT_HOME_SIDEBAR_ROW_CLASS =
@@ -188,8 +190,10 @@ export function ProjectHomeContextPanel({
   onOpenRepository,
   onOpenWorkspace,
   onRepositoryChange,
+  onUnlistRepository,
   project,
   projects,
+  unlistDisabled,
 }: {
   activeWorkspaceTab?: ProjectHomeWorkspaceSheetTab | null;
   channel: Channel | null;
@@ -200,8 +204,13 @@ export function ProjectHomeContextPanel({
   onOpenRepository: (repositoryId: string) => void;
   onOpenWorkspace: (repositoryId: string, tab?: EntityLinkTab) => void;
   onRepositoryChange: (repositoryId: string) => void;
+  onUnlistRepository?: (
+    project: Project,
+    repository: Project["repositories"][number],
+  ) => Promise<void> | void;
   project: Project;
   projects: Project[];
+  unlistDisabled?: boolean;
 }) {
   const firstRepository = project.repositories[0] ?? null;
   const addRepositoryTitle = firstRepository
@@ -376,16 +385,34 @@ export function ProjectHomeContextPanel({
         title="Codebase"
       >
         {project.repositories.length > 0 ? (
-          project.repositories.map((repository) => (
-            <ContextNavButton
-              icon={<FolderGit2 />}
-              key={repository.id}
-              onClick={() => onOpenRepository(repository.id)}
-              testId={`project-home-context-repo-${repository.dtag}`}
-            >
-              {repository.name}
-            </ContextNavButton>
-          ))
+          project.repositories.map((repository) => {
+            const canUnlist =
+              Boolean(onUnlistRepository) &&
+              canUnlistProjectRepository(project, repository, identityPubkey);
+            return (
+              <div
+                className="flex min-w-0 items-center gap-0.5"
+                key={repository.id}
+              >
+                <div className="min-w-0 flex-1">
+                  <ContextNavButton
+                    icon={<FolderGit2 />}
+                    onClick={() => onOpenRepository(repository.id)}
+                    testId={`project-home-context-repo-${repository.dtag}`}
+                  >
+                    {repository.name}
+                  </ContextNavButton>
+                </div>
+                {canUnlist ? (
+                  <UnlistProjectRepositoryIconButton
+                    disabled={unlistDisabled}
+                    onUnlist={() => onUnlistRepository?.(project, repository)}
+                    repository={repository}
+                  />
+                ) : null}
+              </div>
+            );
+          })
         ) : (
           <p className="px-2 py-1 text-sm text-sidebar-foreground/60">
             None yet

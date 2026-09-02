@@ -40,6 +40,7 @@ import {
 import { CopyShareLinkMenuItem } from "./CopyShareLinkMenuItem";
 import { GitHubMark } from "./GitHubMark";
 import { ProjectListRowMenu } from "./ProjectListRowMenu";
+import { UnlistProjectRepositoryMenuItem } from "./UnlistProjectRepositoryControl";
 import { PROJECT_GRID_CARD_BODY_CLASS } from "./projectGridCardStyles";
 import { projectTerminalLabel } from "./useOpenProjectTerminal";
 
@@ -49,12 +50,15 @@ export type RepositoryListItem = {
 };
 
 type RepositoryItemProps = RepositoryListItem & {
+  canUnlist?: boolean;
   hasLocal: boolean;
   onOpen: (project: Project, repository: Repository) => void;
   onOpenTerminal: (repository: Repository) => void;
+  onUnlist?: (project: Project, repository: Repository) => Promise<void> | void;
   profiles?: UserProfileLookup;
   selectionRangeItems?: ProjectSelectionItem[];
   summary?: ProjectActivitySummary;
+  unlistDisabled?: boolean;
 };
 
 function RepositoryHostIcon({
@@ -169,10 +173,24 @@ function repositoryPeople(
 }
 
 function RepositoryActionsMenu({
+  canUnlist,
   hasLocal,
   onOpenTerminal,
+  onUnlist,
+  project,
   repository,
-}: Pick<RepositoryItemProps, "hasLocal" | "onOpenTerminal" | "repository">) {
+  unlistDisabled,
+}: Pick<
+  RepositoryItemProps,
+  | "hasLocal"
+  | "onOpenTerminal"
+  | "onUnlist"
+  | "project"
+  | "repository"
+  | "unlistDisabled"
+> & {
+  canUnlist: boolean;
+}) {
   return (
     <ProjectListRowMenu label={`More options for ${repository.name}`}>
       <CopyShareLinkMenuItem
@@ -189,6 +207,14 @@ function RepositoryActionsMenu({
         <SquareTerminal className="h-4 w-4" />
         {projectTerminalLabel(hasLocal)}
       </DropdownMenuItem>
+      {canUnlist && onUnlist ? (
+        <UnlistProjectRepositoryMenuItem
+          disabled={unlistDisabled}
+          onUnlist={() => onUnlist(project, repository)}
+          project={project}
+          repository={repository}
+        />
+      ) : null}
     </ProjectListRowMenu>
   );
 }
@@ -199,13 +225,16 @@ export const RepositoryGridCard = React.memo(function RepositoryGridCard(
   props: RepositoryItemProps,
 ) {
   const {
+    canUnlist = false,
     hasLocal,
     onOpen,
     onOpenTerminal,
+    onUnlist,
     profiles,
     project,
     repository,
     summary,
+    unlistDisabled,
   } = props;
   return (
     <Card
@@ -227,9 +256,13 @@ export const RepositoryGridCard = React.memo(function RepositoryGridCard(
           />
           <div className="pointer-events-auto ml-auto">
             <RepositoryActionsMenu
+              canUnlist={canUnlist}
               hasLocal={hasLocal}
               onOpenTerminal={onOpenTerminal}
+              onUnlist={onUnlist}
+              project={project}
               repository={repository}
+              unlistDisabled={unlistDisabled}
             />
           </div>
         </div>
@@ -264,14 +297,17 @@ export const RepositoryListRow = React.memo(function RepositoryListRow(
   props: RepositoryItemProps,
 ) {
   const {
+    canUnlist = false,
     hasLocal,
     onOpen,
     onOpenTerminal,
+    onUnlist,
     profiles,
     project,
     repository,
     selectionRangeItems,
     summary,
+    unlistDisabled,
   } = props;
   const updatedAt = summary?.updatedAt || repository.createdAt;
   const selectionItem = selectionItemFromRepository({
@@ -307,9 +343,13 @@ export const RepositoryListRow = React.memo(function RepositoryListRow(
       titleSecondaryTestId="repositories-row-description"
       trailing={
         <RepositoryActionsMenu
+          canUnlist={canUnlist}
           hasLocal={hasLocal}
           onOpenTerminal={onOpenTerminal}
+          onUnlist={onUnlist}
+          project={project}
           repository={repository}
+          unlistDisabled={unlistDisabled}
         />
       }
     />
