@@ -219,6 +219,39 @@ const KNOWN_ACP_RUNTIMES: &[KnownAcpRuntime] = &[
         login_hint: None,
         auth_probe_args: None,
     },
+    KnownAcpRuntime {
+        id: "antigravity",
+        label: "Antigravity",
+        commands: &["agy-acp"],
+        aliases: &["agy"],
+        avatar_url: "",
+        mcp_command: None,
+        mcp_hooks: false,
+        underlying_cli: Some("agy"),
+        cli_install_commands: &[],
+        cli_install_commands_windows: &[],
+        adapter_install_commands: &[],
+        cli_install_instructions_url: "https://github.com/Trevongit/agy-uni-adapt",
+        adapter_install_instructions_url: "https://github.com/Trevongit/agy-uni-adapt",
+        cli_install_hint: "Buzz talks to Antigravity through the agy CLI.",
+        adapter_install_hint: "Install the extras ACP shim: copy desktop/scripts/agy-acp to ~/.local/bin/agy-acp (chmod +x). Do not put raw agy in Custom harness — agy does not speak ACP.",
+        skill_dir: None,
+        supports_acp_model_switching: false,
+        model_env_var: None,
+        provider_env_var: None,
+        provider_locked: true,
+        default_env: &[],
+        config_file_path: None,
+        config_file_format: None,
+        supports_acp_native_config: false,
+        thinking_env_var: None,
+        max_tokens_env_var: None,
+        context_limit_env_var: None,
+        max_rounds_env_var: None,
+        required_normalized_fields: &[],
+        login_hint: Some("Run the Antigravity CLI (agy) once so Google auth is cached."),
+        auth_probe_args: None,
+    },
 ];
 
 /// Skill discovery directories declared by known runtimes.
@@ -452,7 +485,7 @@ fn default_agent_args(command: &str) -> Option<Vec<String>> {
     match normalize_command_identity(command).as_str() {
         "goose" => Some(vec!["acp".to_string()]),
         "codex" | "codex-acp" | "claude-agent-acp" | "claude-code-acp" | "claude-code"
-        | "claudecode" | "buzz-agent" => Some(Vec::new()),
+        | "claudecode" | "buzz-agent" | "agy-acp" | "agy" => Some(Vec::new()),
         _ => None,
     }
 }

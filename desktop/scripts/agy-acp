@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""ACP stdio shim for the Antigravity CLI (`agy`).
+
+Buzz Desktop hosts agents over newline-delimited JSON-RPC (ACP). `agy` is a
+print-mode CLI and does not speak ACP. This adapter is the socket:
+
+  Buzz ACP  <->  this process  <->  agy --print
+
+Never pass --dangerously-skip-permissions unless AGY_ACP_SKIP_PERMISSIONS=1.
+Never print nsec / BUZZ_PRIVATE_KEY.
+
+Env:
+  AGY_ACP_BIN       Override the agy binary (tests).
+  AGY_ACP_TIMEOUT   Seconds for one --print turn (default 300).
+  AGY_ACP_SKIP_PERMISSIONS  If 1, add --dangerously-skip-permissions.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import threading
+import uuid
+from typing import Any, Dict, List, Optional
+
+PROTOCOL_VERSION = 1
+
+
+def log(msg: str) -> None:
+    sys.stderr.write(f"agy-acp: {msg}\n")
+    sys.stderr.flush()
+
+
+def write(msg: Dict[str, Any]) -> None:
+    sys.stdout.write(json.dumps(msg, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+def ok(req_id: Any, result: Any) -> None:
+    write({"jsonrpc": "2.0", "id": req_id, "result": result})
+
+
+def err(req_id: Any, code: int, message: str) -> None:
+    write({"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}})
+
+
+def notify_update(session_id: str, text: str) -> None:
+    write(
+        {
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": session_id,
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": text},
+                },
+            },
+        }
+    )
+
+
+def prompt_text(prompt: Any) -> str:
+    if not isinstance(prompt, list):
+        return str(prompt or "")
+    parts: List[str] = []
+    for block in prompt:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and isinstance(block.get("text"), str):
+            parts.append(block["text"])
+    return "\n".join(parts).strip()
+
+
+def agy_bin() -> str:
+    override = os.environ.get("AGY_ACP_BIN", "").strip()
+    if override:
+        return override
+    found = shutil.which("agy")
+    if found:
+        return found
+    home = os.path.expanduser("~/.local/bin/agy")
+    if os.path.isfile(home) and os.access(home, os.X_OK):
+        return home
+    return "agy"
+
+
+def run_agy(prompt: str, cwd: str) -> str:
+    timeout = int(os.environ.get("AGY_ACP_TIMEOUT", "300"))
+    cmd = [agy_bin(), "--print", "--output-format", "text", prompt]
+    if os.environ.get("AGY_ACP_SKIP_PERMISSIONS") == "1":
+        cmd.insert(1, "--dangerously-skip-permissions")
+    env = os.environ.copy()
+    proc = subprocess.run(
+        cmd,
+        cwd=cwd or None,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env=env,
+    )
+    if proc.stderr:
+        log(proc.stderr.strip()[:2000])
+    out = (proc.stdout or "").strip()
+    if proc.returncode != 0 and not out:
+        return f"agy --print failed (exit {proc.returncode})"
+    return out or "(agy produced no text)"
+
+
+class Adapter:
+    def __init__(self) -> None:
+        self.sessions: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.Lock()
+        self._cancel: Dict[str, bool] = {}
+
+    def handle(self, msg: Dict[str, Any]) -> None:
+        if "method" not in msg:
+            return
+        method = msg["method"]
+        req_id = msg.get("id")
+        params = msg.get("params") or {}
+        if method == "initialize":
+            client_ver = params.get("protocolVersion") or PROTOCOL_VERSION
+            try:
+                negotiated = min(int(client_ver), PROTOCOL_VERSION)
+            except (TypeError, ValueError):
+                negotiated = PROTOCOL_VERSION
+            ok(
+                req_id,
+                {
+                    "protocolVersion": negotiated,
+                    "agentCapabilities": {
+                        "loadSession": False,
+                        "promptCapabilities": {
+                            "image": False,
+                            "audio": False,
+                            "embeddedContext": False,
+                        },
+                        "mcpCapabilities": {"http": False, "sse": False},
+                    },
+                    "agentInfo": {"name": "agy-acp", "version": "0.1.0-extras"},
+                },
+            )
+            return
+        if method == "session/new":
+            cwd = params.get("cwd") or ""
+            if not cwd or not os.path.isabs(cwd):
+                err(req_id, -32602, "session/new: cwd must be an absolute path")
+                return
+            sid = f"ses_{uuid.uuid4().hex[:16]}"
+            with self._lock:
+                self.sessions[sid] = {
+                    "cwd": cwd,
+                    "system_prompt": params.get("systemPrompt") or "",
+                }
+                self._cancel[sid] = False
+            ok(req_id, {"sessionId": sid})
+            return
+        if method == "session/prompt":
+            sid = params.get("sessionId") or ""
+            with self._lock:
+                session = self.sessions.get(sid)
+            if not session:
+                err(req_id, -32602, "session/prompt: unknown session")
+                return
+            text = prompt_text(params.get("prompt"))
+            system = (session.get("system_prompt") or "").strip()
+            if system:
+                text = f"{system}\n\n{text}".strip()
+            try:
+                reply = run_agy(text, session["cwd"])
+            except subprocess.TimeoutExpired:
+                err(req_id, -32000, "agy --print timed out")
+                return
+            except FileNotFoundError:
+                err(req_id, -32000, "agy not found on PATH (set AGY_ACP_BIN)")
+                return
+            except Exception as exc:
+                err(req_id, -32000, str(exc))
+                return
+            notify_update(sid, reply)
+            ok(req_id, {"stopReason": "end_turn"})
+            return
+        if method == "session/cancel":
+            return
+        if req_id is not None:
+            err(req_id, -32601, f"method not found: {method}")
+
+
+def main() -> None:
+    adapter = Adapter()
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            log("invalid json")
+            continue
+        if not isinstance(msg, dict):
+            continue
+        adapter.handle(msg)
+
+
+if __name__ == "__main__":
+    main()
