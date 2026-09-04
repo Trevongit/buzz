@@ -72,6 +72,8 @@ Origin Plus extras is the dogfood lane that:
 
 The point of the fork is **speed and honesty**. The point of origin is **small, reviewable PRs**. Both stay true, or the fork stops being useful.
 
+Upstream already named this gap. [block/buzz#2393](https://github.com/block/buzz/issues/2393) asked for Antigravity as a first-class harness. Maintainers closed it on [PR #2773](https://github.com/block/buzz/pull/2773) (BYOH / any ACP-over-stdio binary): `agy` is not ACP-native, so the remaining work is an **adapter package** (same shape as `codex-acp`), not a Buzz core change. Track B (`agy-acp`) is that adapter on extras. It is **not** `agy-uni-adapt` (Track A, visitor/UATP). Do not drop the translator repo on #2393 as if it were the ACP shim.
+
 ---
 
 ## Dual-door: Antigravity
