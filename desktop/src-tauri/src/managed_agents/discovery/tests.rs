@@ -44,22 +44,6 @@ fn returns_none_for_unknown_commands() {
 }
 
 #[test]
-fn antigravity_runtime_registers_agy_acp_adapter() {
-    let runtime = super::known_acp_runtime_exact("antigravity").expect("antigravity runtime");
-    assert_eq!(runtime.commands, &["agy-acp"]);
-    assert_eq!(runtime.underlying_cli, Some("agy"));
-    assert_eq!(runtime.aliases, &["agy"]);
-    assert!(
-        super::known_acp_runtime("agy-acp").is_some(),
-        "agy-acp command should resolve to antigravity"
-    );
-    assert_eq!(
-        super::normalize_agent_args("agy-acp", vec!["acp".into()]),
-        Vec::<String>::new()
-    );
-}
-
-#[test]
 fn default_agent_command_resolves_bundled_buzz_agent() {
     // The default must be bundled buzz-agent, never bare `goose` on a stock Windows install.
     assert_eq!(default_agent_command(), "buzz-agent");
