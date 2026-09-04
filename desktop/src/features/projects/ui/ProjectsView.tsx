@@ -1,5 +1,4 @@
 import * as React from "react";
-import { toast } from "sonner";
 
 import { useAppNavigation } from "@/app/navigation/useAppNavigation";
 import { useManagedAgentsQuery } from "@/features/agents/hooks";
@@ -17,7 +16,6 @@ import {
   useProjectsWorkItemsQuery,
 } from "@/features/projects/hooks";
 import { useRepositoryActivitySummariesQuery } from "@/features/projects/repositoryActivityHooks";
-import { useCreateProjectMutation } from "@/features/projects/useCreateProject";
 import { useUnlistProjectRepositoryMutation } from "@/features/projects/useUnlistProjectRepository";
 import { isExplicitProject } from "@/features/projects/projectModels";
 import { projectsWithWorkItemRepositories } from "@/features/projects/projectWorkItems";
@@ -53,7 +51,7 @@ import {
   ProjectsOverviewProjectItems,
   ProjectsOverviewRepositoryItems,
 } from "@/features/projects/ui/ProjectsOverviewItems";
-import { CreateProjectDialog } from "@/features/projects/ui/CreateProjectDialog";
+import { ProjectCreationDialog } from "@/features/projects/ui/ProjectCreationDialog";
 import { CreateProjectIssueDialog } from "@/features/projects/ui/CreateProjectIssueDialog";
 import { CreatePullRequestDialog } from "@/features/projects/ui/CreatePullRequestDialog";
 import { ProjectAgentChatPanel } from "@/features/projects/ui/ProjectAgentChatPanel";
@@ -185,7 +183,6 @@ export function ProjectsView() {
   const [createIssueOpen, setCreateIssueOpen] = React.useState(false);
   const [createPullRequestOpen, setCreatePullRequestOpen] =
     React.useState(false);
-  const createProjectMutation = useCreateProjectMutation();
   const [storedViewMode, setStoredViewMode] =
     React.useState<ProjectsViewMode | null>(() => readStoredViewMode());
   const [sort, setSort] = React.useState<ProjectsSort>(() => readStoredSort());
@@ -573,7 +570,15 @@ export function ProjectsView() {
   }
 
   if (projectReadModels.length === 0) {
-    return <EmptyState />;
+    return (
+      <>
+        <ProjectCreationDialog
+          onOpenChange={setCreateProjectOpen}
+          open={createProjectOpen}
+        />
+        <EmptyState onCreateProject={() => setCreateProjectOpen(true)} />
+      </>
+    );
   }
 
   const projectItems = (
@@ -749,19 +754,7 @@ export function ProjectsView() {
             overviewDetached ? "projects-overview-content-pod" : undefined
           }
         >
-          <CreateProjectDialog
-            isCreating={createProjectMutation.isPending}
-            onCreate={async (input) => {
-              const result = await createProjectMutation.mutateAsync(input);
-              if (result.compatibilityWarning) {
-                toast.warning("Created as a standalone project", {
-                  description: result.compatibilityWarning,
-                });
-              } else {
-                toast.success(`Project "${result.project.name}" created.`);
-              }
-              await goProject(result.project.id);
-            }}
+          <ProjectCreationDialog
             onOpenChange={setCreateProjectOpen}
             open={createProjectOpen}
           />

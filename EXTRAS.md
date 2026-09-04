@@ -25,6 +25,7 @@ agent-index:
 
 **Dogfood fork of [block/buzz](https://github.com/block/buzz).**  
 Branch: [`feat/origin-plus-enhancements`](https://github.com/Trevongit/buzz/tree/feat/origin-plus-enhancements)  
+**Sits on Desktop 0.5.21** (`block/buzz` `main` `b1f6b7ef7` merged into extras — extras commits kept).  
 This file is the **public handoff** — for humans who like a story, and for agents who like a map.
 
 Private operator notes stay out of git. If you are an agent: **read this file, then the Agent index, then do not invent a mega-PR to upstream.**
