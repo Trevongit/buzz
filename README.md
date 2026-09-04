@@ -11,8 +11,11 @@
   <a href="VISION_AGENT.md">Agents</a> ·
   <a href="ARCHITECTURE.md">Architecture</a> ·
   <a href="RELEASING.md">Releasing</a> ·
+  <a href="EXTRAS.md">Origin Plus extras</a> ·
   <a href="LICENSE">Apache 2.0</a>
 </p>
+
+> **This branch is Origin Plus extras** (`feat/origin-plus-enhancements` on [Trevongit/buzz](https://github.com/Trevongit/buzz)). Dogfood on top of [block/buzz](https://github.com/block/buzz): Antigravity inside Desktop (`agy-acp`), Pocket Listen, public GitHub reads, unlist, and small origin PRs — never this branch as one upstream review. Start at **[EXTRAS.md](EXTRAS.md)** (human story + agent index).
 
 <p align="center">
   <img src="docs/assets/screenshots/channel-thread.png" alt="A Buzz project channel where people and an agent coordinate on a release plan" width="100%">
