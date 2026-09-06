@@ -12,6 +12,7 @@ export VISITOR_REQUIRE_MENTION=1
 bash "$ROOT/install-profile.sh" --brain "$VISITOR_ROLE" --dry-run
 bash "$ROOT/start-collab.sh" --seats codex-buzz,agy-buzz   # fail-closed on mixed relays
 bash "$ROOT/read.sh" --room <name-or-uuid>
+bash "$ROOT/collab.sh" open --from "$VISITOR_ROLE" --to <peer> --task "…" --dry-run
 bash "$ROOT/collab.sh" open --room <id> --from "$VISITOR_ROLE" --to <peer> --task "…"
 bash "$ROOT/collab.sh" done --room <id> --from "$VISITOR_ROLE" --to <peer> --task "…"
 # BLOCKED to Prime only when stuck (once per task):

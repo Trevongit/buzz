@@ -14,6 +14,9 @@ TO_ROLE=""
 TASK=""
 STATUS="OPEN"
 NEED_PRIME="false"
+DRY=0
+HOME_AGENTS="${VISITOR_AGENTS_HOME:-$HOME/.buzz-dev/agents}"
+ROLE_SEATS="${VISITOR_ROLE_SEATS:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,14 +30,48 @@ while [[ $# -gt 0 ]]; do
     --task) TASK="$2"; shift 2 ;;
     --status) STATUS="$2"; shift 2 ;;
     --need-prime) NEED_PRIME="$2"; shift 2 ;;
+    --home) HOME_AGENTS="$2"; shift 2 ;;
+    --role-seats) ROLE_SEATS="$2"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
     -h|--help)
       echo "Usage: post.sh --room <id|name> (--content TEXT | --file PATH | --envelope via --to --task)"
       echo "  COLLAB: --from grok|codex|agy --to grok|codex|agy|all --task '…' [--status OPEN|DONE|BLOCKED] [--need-prime false]"
+      echo "  --dry-run prints the body and does not load keys or send."
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;
   esac
 done
+
+if [[ -n "$TO_ROLE" && -n "$TASK" ]]; then
+  if [[ -z "$FROM_ROLE" ]]; then
+    echo "error: --from required with --to/--task" >&2
+    exit 1
+  fi
+  bus=(same-bus --from "$FROM_ROLE" --to "$TO_ROLE" --home "$HOME_AGENTS")
+  if [[ -n "$ROLE_SEATS" ]]; then
+    bus+=(--role-seats "$ROLE_SEATS")
+  fi
+  if ! python3 "${VISITOR_ROOT}/gate.py" "${bus[@]}" >/dev/null; then
+    echo "error: COLLAB to=$TO_ROLE is not on the same relay bus as from=$FROM_ROLE" >&2
+    exit 3
+  fi
+  CONTENT="$(python3 "${VISITOR_ROOT}/gate.py" render --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status "$STATUS" --need-prime "$NEED_PRIME")"
+fi
+if [[ -n "$FILE" ]]; then
+  CONTENT="$(cat "$FILE")"
+fi
+if [[ -z "$CONTENT" ]]; then
+  echo "error: --content, --file, or --to/--task required" >&2
+  exit 1
+fi
+
+if [[ "$DRY" == "1" ]]; then
+  printf '%s' "$CONTENT"
+  echo
+  echo "DRY-RUN not posted"
+  exit 0
+fi
 
 visitor_load_seat_env "$SEAT"
 DIR="$(visitor_seat_dir "$SEAT")"
@@ -46,21 +83,6 @@ if [[ -z "$ROOM" ]]; then
   exit 1
 fi
 CID="$(visitor_resolve_room "$ROOM")"
-
-if [[ -n "$TO_ROLE" && -n "$TASK" ]]; then
-  if [[ -z "$FROM_ROLE" ]]; then
-    echo "error: --from required with --to/--task" >&2
-    exit 1
-  fi
-  CONTENT="$(python3 "${VISITOR_ROOT}/gate.py" render --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status "$STATUS" --need-prime "$NEED_PRIME")"
-fi
-if [[ -n "$FILE" ]]; then
-  CONTENT="$(cat "$FILE")"
-fi
-if [[ -z "$CONTENT" ]]; then
-  echo "error: --content, --file, or --to/--task required" >&2
-  exit 1
-fi
 
 args=(messages send --channel "$CID" --content "$CONTENT")
 if [[ -n "$REPLY_TO" ]]; then

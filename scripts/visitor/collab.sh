@@ -12,6 +12,9 @@ FROM_ROLE="${VISITOR_ROLE:-}"
 TO_ROLE=""
 TASK=""
 NEED_PRIME="false"
+DRY=0
+HOME_AGENTS="${VISITOR_AGENTS_HOME:-$HOME/.buzz-dev/agents}"
+ROLE_SEATS="${VISITOR_ROLE_SEATS:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,8 +25,11 @@ while [[ $# -gt 0 ]]; do
     --to) TO_ROLE="$2"; shift 2 ;;
     --task) TASK="$2"; shift 2 ;;
     --need-prime) NEED_PRIME="$2"; shift 2 ;;
+    --home) HOME_AGENTS="$2"; shift 2 ;;
+    --role-seats) ROLE_SEATS="$2"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
     -h|--help)
-      echo "Usage: collab.sh open|done|blocked --from ROLE --to ROLE --task TEXT [--room ID]"
+      echo "Usage: collab.sh open|done|blocked --from ROLE --to ROLE --task TEXT [--room ID] [--dry-run]"
       echo "  BLOCKED with --need-prime true goes through escalate.sh (once-then-stop)."
       exit 0
       ;;
@@ -49,11 +55,20 @@ if [[ "$STATUS" == "BLOCKED" && "$need" =~ ^(1|true|yes)$ ]]; then
   if [[ -n "$ROOM" ]]; then
     esc+=(--room "$ROOM")
   fi
+  if [[ "$DRY" == "1" ]]; then
+    esc+=(--dry-run)
+  fi
   exec bash "${ROOT}/escalate.sh" "${esc[@]}"
 fi
 
-args=(--seat "$SEAT" --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status "$STATUS" --need-prime false)
+args=(--seat "$SEAT" --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status "$STATUS" --need-prime false --home "$HOME_AGENTS")
 if [[ -n "$ROOM" ]]; then
   args+=(--room "$ROOM")
+fi
+if [[ -n "$ROLE_SEATS" ]]; then
+  args+=(--role-seats "$ROLE_SEATS")
+fi
+if [[ "$DRY" == "1" ]]; then
+  args+=(--dry-run)
 fi
 exec bash "${ROOT}/post.sh" "${args[@]}"

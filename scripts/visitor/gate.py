@@ -14,6 +14,12 @@ STATUS_OPEN = "OPEN"
 STATUS_DONE = "DONE"
 STATUS_BLOCKED = "BLOCKED"
 ROLES = ("grok", "codex", "agy", "hermes")
+DEFAULT_ROLE_SEATS = {
+    "grok": "buzz",
+    "codex": "codex-buzz",
+    "agy": "agy-buzz",
+    "hermes": "hermes-buzz",
+}
 DEFAULT_COOLDOWN_SECS = 30
 DEFAULT_MAX_EVENTS = 3
 DEFAULT_MAX_BYTES = 2048
@@ -301,6 +307,61 @@ def relay_from_seat_dir(seat_dir: str) -> str:
     return public_card_from_dir(seat_dir).get("relay") or ""
 
 
+def parse_role_seats(raw: str) -> dict[str, str]:
+    out = dict(DEFAULT_ROLE_SEATS)
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if ":" not in part:
+            continue
+        k, _, v = part.partition(":")
+        k, v = _norm(k), v.strip()
+        if k and v:
+            out[k] = v
+    return out
+
+
+def same_bus_for_roles(
+    *,
+    from_role: str,
+    to_role: str,
+    agents_home: str,
+    role_seats: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Fail-closed: COLLAB `to:` must share the sender's PUBLIC.txt host."""
+    mapping = dict(DEFAULT_ROLE_SEATS)
+    if role_seats:
+        mapping.update(role_seats)
+    home = Path(agents_home)
+    dest = _norm(to_role)
+    if dest in ("all", "*"):
+        dirs = {s: str(home / s) for s in mapping.values()}
+        report = roster_report(dirs)
+        ok = bool(report.get("ready"))
+        return {
+            "ok": ok,
+            "reason": "all-ready" if ok else "to-all-not-ready",
+            "from_seat": mapping.get(_norm(from_role), ""),
+            "to_seat": "all",
+            "report": report,
+        }
+    fr = mapping.get(_norm(from_role), "")
+    to = mapping.get(dest, dest)
+    dirs: dict[str, str] = {}
+    if fr:
+        dirs[fr] = str(home / fr)
+    if to:
+        dirs[to] = str(home / to)
+    report = roster_report(dirs)
+    ok = bool(report.get("ready"))
+    return {
+        "ok": ok,
+        "reason": "same-bus" if ok else "mixed-or-missing",
+        "from_seat": fr,
+        "to_seat": to,
+        "report": report,
+    }
+
+
 def should_post_prime_escalation(
     journal: dict[str, Any],
     task: str,
@@ -453,6 +514,19 @@ if __name__ == "__main__":
             end="",
         )
         raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "same-bus":
+        kw = _parse_kw(sys.argv[2:])
+        home = kw.get("home") or str(Path.home() / ".buzz-dev" / "agents")
+        report = same_bus_for_roles(
+            from_role=kw.get("from", ""),
+            to_role=kw.get("to", ""),
+            agents_home=home,
+            role_seats=parse_role_seats(kw.get("role_seats") or ""),
+        )
+        json.dump({k: report[k] for k in ("ok", "reason", "from_seat", "to_seat")}, sys.stdout)
+        sys.stdout.write("\n")
+        raise SystemExit(0 if report["ok"] else 3)
 
     if len(sys.argv) > 1 and sys.argv[1] in ("relay-align", "roster", "mention-names"):
         kw = _parse_kw(sys.argv[2:])

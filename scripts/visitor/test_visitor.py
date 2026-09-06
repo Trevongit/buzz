@@ -26,6 +26,7 @@ from gate import (  # noqa: E402
     relay_from_seat_dir,
     render_envelope,
     roster_report,
+    same_bus_for_roles,
     should_escalate_to_prime,
     should_post_prime_escalation,
     should_wake,
@@ -459,6 +460,112 @@ class RosterTests(unittest.TestCase):
             self.assertIn("DRY-RUN", dry.stdout)
             self.assertIn("need_prime: false", dry.stdout)
             self.assertNotIn("deadbeef", dry.stdout)
+
+
+class SameBusSendTests(unittest.TestCase):
+    def _two_seats(self, tmp: str, same: bool) -> None:
+        a = Path(tmp) / "codex-buzz"
+        b = Path(tmp) / "agy-buzz"
+        a.mkdir(exist_ok=True)
+        b.mkdir(exist_ok=True)
+        a.joinpath("PUBLIC.txt").write_text(
+            "seat: codex-buzz\ndisplay_name: Buzz-codex\nrelay: wss://tail.example\n",
+            encoding="utf-8",
+        )
+        relay = "https://tail.example" if same else "https://ground.example"
+        b.joinpath("PUBLIC.txt").write_text(
+            f"seat: agy-buzz\ndisplay_name: agy-buzz\nrelay: {relay}\n",
+            encoding="utf-8",
+        )
+
+    def test_same_bus_ok_mixed_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            ok = same_bus_for_roles(
+                from_role="codex", to_role="agy", agents_home=tmp
+            )
+            self.assertTrue(ok["ok"])
+            self._two_seats(tmp, False)
+            bad = same_bus_for_roles(
+                from_role="codex", to_role="agy", agents_home=tmp
+            )
+            self.assertFalse(bad["ok"])
+            all_bus = same_bus_for_roles(
+                from_role="codex", to_role="all", agents_home=tmp
+            )
+            self.assertFalse(all_bus["ok"])
+
+    def test_collab_dry_run_never_loads_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "collab.sh"),
+                    "open",
+                    "--from",
+                    "codex",
+                    "--to",
+                    "agy",
+                    "--task",
+                    "scout the tree",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("COLLAB v0", proc.stdout)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+    def test_collab_dry_run_mixed_exits_3(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, False)
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "collab.sh"),
+                    "open",
+                    "--from",
+                    "codex",
+                    "--to",
+                    "agy",
+                    "--task",
+                    "cross bus",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+
+    def test_escalate_dry_run_does_not_ping(self):
+        proc = subprocess.run(
+            [
+                "bash",
+                str(ROOT / "escalate.sh"),
+                "--from",
+                "codex",
+                "--to",
+                "grok",
+                "--task",
+                "need origin access",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("need_prime: true", proc.stdout)
+        self.assertIn("DRY-RUN not posted", proc.stdout)
 
 
 class HermesExampleTests(unittest.TestCase):

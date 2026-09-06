@@ -82,7 +82,9 @@ need_prime: false
 | BLOCKED + `need_prime: true` | Prime (owner DM or allow-list) | **once per task fingerprint**, then stop |
 | hello / emoji / unaddressed | nobody | nobody |
 
-`collab.sh open|done|blocked` writes that block. `escalate.sh` is the only Prime path;
+`collab.sh open|done|blocked` writes that block. `--dry-run` prints it and never
+loads keys. `to:` must share the sender's PUBLIC.txt host (`to: all` only when
+every mapped seat is on that bus). `escalate.sh` is the only Prime path;
 it journals `prime-escalation.json` in the seat dir after a successful post so the
 same task cannot spam. `gate.py` parses envelopes.
 

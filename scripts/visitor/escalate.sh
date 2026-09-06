@@ -10,6 +10,7 @@ SEAT="$(visitor_resolve_seat)"
 FROM_ROLE="${VISITOR_ROLE:-}"
 TO_ROLE="grok"
 TASK=""
+DRY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -18,8 +19,9 @@ while [[ $# -gt 0 ]]; do
     --from) FROM_ROLE="$2"; shift 2 ;;
     --to) TO_ROLE="$2"; shift 2 ;;
     --task) TASK="$2"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
     -h|--help)
-      echo "Usage: escalate.sh --from ROLE --task TEXT [--to grok] [--room ID] [--seat ID]"
+      echo "Usage: escalate.sh --from ROLE --task TEXT [--to grok] [--room ID] [--seat ID] [--dry-run]"
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;
@@ -29,6 +31,12 @@ done
 if [[ -z "$FROM_ROLE" || -z "$TASK" ]]; then
   echo "error: --from and --task required" >&2
   exit 1
+fi
+
+if [[ "$DRY" == "1" ]]; then
+  python3 "${ROOT}/gate.py" render --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status BLOCKED --need-prime true
+  echo "DRY-RUN not posted (Prime not pinged)"
+  exit 0
 fi
 
 visitor_load_seat_env "$SEAT"
