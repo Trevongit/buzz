@@ -118,6 +118,7 @@ Defaults below are extras Desktop **Experiments** (`previewFeatureEnabled`). Run
 | Feature | Kind | Default | Notes |
 |---------|------|---------|--------|
 | **Antigravity runtime** | Agent runtime | device PATH | Track B. Not a toggle. |
+| **Grok managed turbo** | Agent spawn | on extras | Any Grok-harnessed internal agent: `--no-leader` + `GROK_CONFIG` so grokShell keeps `BUZZ_PRIVATE_KEY`. Does not Edit/Save existing JSON. Laptop disk `~/.grok/config.toml` policy is extras turbo (this TUI too). Small origin PR offered separately. |
 | **Pocket Listen** | Experiment `pocketListen` | **on** | Speak, pause/resume, wait for a named Reader summary, Follow along. Off hides Listen controls. |
 | **Public GitHub reads** | Experiment `publicGithubRead` | **on** | Overview / Files / Fetch compare for public `github.com` remotes without cloning. |
 | **GitHub machine git** | Experiment `githubMachineGit` | **off** | Clone/fetch/pull/push with this computer’s `gh`/`git` login. Buzz never puts the Nostr key in that git process. |
@@ -151,6 +152,7 @@ Settings to glance after launch:
 
 - **Experiments** — Pocket Listen and Public GitHub reads on unless you turned them off. GitHub machine git stays off unless you opt in.
 - **Agents** — Antigravity **Ready** or **Adapter missing**. Listen (summary) is a managed-agent picker, not a new runtime.
+- **Ember (extras)** — Buzz Agent on local llama.cpp does not copy Activity text into the room. Arm only Ember with `BUZZ_ACP_PUBLISH_FINAL_IF_UNSENT=true` so ACP posts the turn text if `buzz messages send` never ran. Helix / PATCH / Prism stay off (they already self-publish). Origin: #2698 / #5579.
 
 ---
 
