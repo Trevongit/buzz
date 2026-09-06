@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
     --secs) TICK="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: wake.sh [--room name|uuid] [--seat ID] [--once] [--secs N]"
-      echo "  VISITOR_REQUIRE_MENTION=1 (default)  VISITOR_ROLE=grok|codex|agy"
+      echo "  VISITOR_REQUIRE_MENTION=1 (default)  VISITOR_ROLE=grok|codex|agy|hermes"
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;
@@ -41,6 +41,7 @@ SELF="${BUZZ_PUBLIC_KEY:-}"
 ROLE="${VISITOR_ROLE:-grok}"
 NAMES="${VISITOR_NAMES:-$SEAT}"
 REQUIRE="${VISITOR_REQUIRE_MENTION:-1}"
+COOLDOWN="${VISITOR_COOLDOWN_SECS:-30}"
 IS_DM=0
 if [[ "${ROOM}" == DM-* ]] || [[ "${VISITOR_IS_DM:-0}" == "1" ]]; then
   IS_DM=1
@@ -54,12 +55,12 @@ poll_once() {
   if [[ -z "$json" ]] || [[ "${json:0:1}" != '[' && "${json:0:1}" != '{' ]]; then
     json='[]'
   fi
-  python3 - "$json" "$STATE" "$SELF" "$SEAT" "$CID" "$ROOM" "$ROLE" "$NAMES" "$REQUIRE" "$IS_DM" "$VISITOR_ROOT" <<'PY'
-import json, sys
+  python3 - "$json" "$STATE" "$SELF" "$SEAT" "$CID" "$ROOM" "$ROLE" "$NAMES" "$REQUIRE" "$IS_DM" "$VISITOR_ROOT" "$COOLDOWN" <<'PY'
+import json, sys, time
 from pathlib import Path
 
 sys.path.insert(0, sys.argv[11])
-from gate import admit_budget, should_wake
+from gate import filter_wakes
 
 raw = sys.argv[1]
 try:
@@ -76,60 +77,32 @@ self_pk, seat, cid, room, role = sys.argv[3:8]
 names = [n.strip() for n in sys.argv[8].split(",") if n.strip()]
 require = sys.argv[9] != "0"
 is_dm = sys.argv[10] == "1"
-pubkeys = [self_pk] if self_pk else []
-
+cooldown = int(sys.argv[12] or "30")
 try:
     st = json.loads(state_path.read_text()) if state_path.exists() else {"seen_ids": [], "since": 0}
 except json.JSONDecodeError:
     st = {"seen_ids": [], "since": 0}
-seen = set(st.get("seen_ids") or [])
-since = int(st.get("since") or 0)
-new_max = since
-candidates = []
-for m in data:
-    if not isinstance(m, dict):
-        continue
-    mid = m.get("id") or ""
-    ts = int(m.get("created_at") or 0)
-    pk = m.get("pubkey") or ""
-    if mid and mid in seen:
-        if ts > new_max:
-            new_max = ts
-        continue
-    if mid:
-        seen.add(mid)
-    if ts > new_max:
-        new_max = ts
-    content = (m.get("content") or "").replace("\n", " ").strip()
-    wake, reason = should_wake(
-        content=m.get("content") or "",
-        from_pubkey=pk,
-        self_pubkey=self_pk,
-        is_dm=is_dm,
-        require_mention=require,
-        names=names,
-        pubkeys=pubkeys,
-        seat_role=role,
-    )
-    if not wake:
-        continue
-    preview = content[:80].replace('"', "'")
-    candidates.append({
-        "id": mid,
-        "ts": ts,
-        "from": pk,
-        "preview": preview,
-        "content": m.get("content") or "",
-        "reason": reason,
-    })
-kept, overflow = admit_budget(candidates)
-st["seen_ids"] = list(seen)[-80:]
-st["since"] = new_max
+if not isinstance(st, dict):
+    st = {"seen_ids": [], "since": 0}
 st["channel_id"] = cid
-state_path.write_text(json.dumps(st, indent=2) + "\n")
-if overflow:
-    print(f"VISITOR_ADMIT overflow seat={seat} channel={cid} pending={len(candidates)}", file=sys.stderr)
-for w in kept:
+out = filter_wakes(
+    data,
+    state=st,
+    self_pk=self_pk,
+    names=names,
+    pubkeys=[self_pk] if self_pk else [],
+    seat_role=role,
+    require_mention=require,
+    is_dm=is_dm,
+    now_unix=int(time.time()),
+    cooldown_secs=cooldown,
+)
+state_path.write_text(json.dumps(out["state"], indent=2) + "\n")
+if out.get("cooldown"):
+    print(f"VISITOR_COOLDOWN seat={seat} channel={cid} pending={out.get('pending')}", file=sys.stderr)
+if out.get("overflow"):
+    print(f"VISITOR_ADMIT overflow seat={seat} channel={cid} pending={out.get('pending')}", file=sys.stderr)
+for w in out.get("wakes") or []:
     print(
         f"VISITOR_WAKE match seat={seat} room={room} channel={cid} "
         f"reason={w.get('reason')} from={(w.get('from') or '')[:12]} "
@@ -151,7 +124,7 @@ if not isinstance(data, list):
     data=[]
 ids=[m.get("id") for m in data if isinstance(m, dict) and m.get("id")]
 max_ts=max([int(m.get("created_at") or 0) for m in data if isinstance(m, dict)] or [int(time.time())])
-Path(sys.argv[2]).write_text(json.dumps({"since": max_ts, "seen_ids": ids[-50:], "channel_id": sys.argv[3]}, indent=2)+"\n")
+Path(sys.argv[2]).write_text(json.dumps({"since": max_ts, "seen_ids": ids[-50:], "channel_id": sys.argv[3], "last_wake": 0}, indent=2)+"\n")
 PY
   echo "VISITOR_OK seeded seat=$SEAT channel=$CID" >>"$LOG"
 fi

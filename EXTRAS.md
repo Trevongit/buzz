@@ -43,7 +43,7 @@ Private operator notes stay out of git. If you are an agent: **read this file, t
 | **Visitor collab kit** | External Codex / Antigravity / Grok / Hermes ③ — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Not ACP. |
 | **Do not** | Custom harness `agy`. Origin-PR this whole branch. Treat UATP as ACP. Register Hermes gateway as a Desktop runtime. |
 | **Install adapter** | `bash desktop/scripts/install-agy-acp.sh` → `~/.local/bin/agy-acp` |
-| **Tests** | `python3 desktop/scripts/test_agy_acp.py` · `python3 scripts/visitor/test_visitor.py` · `bash scripts/visitor/check.sh` |
+| **Tests** | `python3 desktop/scripts/test_agy_acp.py` · `python3 scripts/visitor/test_visitor.py` · `bash scripts/visitor/check.sh` · `bash scripts/visitor/hermes-setup.sh --check` |
 | **Experiments** | `pocketListen` default **on** · `publicGithubRead` default **on** · `githubMachineGit` default **off** |
 | **Search terms** | `agy-acp`, `Antigravity`, `visitor-collab`, `Hermes gateway`, `Pocket Listen`, `public GitHub reads`, `unlist`, Origin Plus |
 
@@ -126,7 +126,7 @@ Defaults below are extras Desktop **Experiments** (`previewFeatureEnabled`). Run
 | **Codex managed turbo** | Agent spawn | on extras | Cap Codex/Grok `BUZZ_ACP_AGENTS` to 1 at spawn (stored PATCH parallelism 10 is unchanged). `CODEX_CONFIG` is `approval_policy=never` + `sandbox_mode=danger-full-access` so the first `buzz messages send` is the real send. Do not Edit/Save PATCH. |
 | **Ember send unwrap** | ACP fallback | Ember-only flag | If 9B prints `buzz messages send --content "…"` instead of calling the tool, publish-final posts the quoted body, not the argv. Helix/PATCH/Prism stay off the flag. |
 | **Metabolic spawn caps** | Agent spawn | on extras | Effective `BUZZ_ACP_AGENTS=1` for grok, Codex, agy-acp, buzz-agent. Stored Parallelism 10 is unchanged — **Cancel** the Edit form; blank Save writes 10. Prism `--print` truncates fat system prompt; timeout 90s. |
-| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity, Grok, Hermes gateway ③. Mention-gated. `COLLAB v0` envelopes; Prime only on `BLOCKED`+`need_prime`. Idle = 0 tokens. Not a Desktop runtime. |
+| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity, Grok, Hermes gateway ③. Shared `install-profile.sh`. Mention-gated with whole-token names + 30s cooldown. `COLLAB v0`; Prime only on `BLOCKED`+`need_prime` once per task. Hermes binary missing → offline poll runner, not `hermes-acp`. Idle = 0 tokens. |
 | **Pocket Listen** | Experiment `pocketListen` | **on** | Speak, pause/resume, wait for a named Reader summary, Follow along. Off hides Listen controls. |
 | **Public GitHub reads** | Experiment `publicGithubRead` | **on** | Overview / Files / Fetch compare for public `github.com` remotes without cloning. |
 | **GitHub machine git** | Experiment `githubMachineGit` | **off** | Clone/fetch/pull/push with this computer’s `gh`/`git` login. Buzz never puts the Nostr key in that git process. |

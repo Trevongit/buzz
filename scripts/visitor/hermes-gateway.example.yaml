@@ -1,6 +1,7 @@
 # Hermes gateway ③ — Buzz as a messaging platform (visitor).
 # Copy keys from seat agent.env at runtime. Never commit nsec.
 # hermes gateway setup / hermes gateway start
+# If hermes is not installed, hermes-setup.sh writes offline-gateway.sh instead.
 #
 # This is NOT Desktop runtime hermes-acp. Do not add it to managed-agents.json.
 

@@ -5,17 +5,33 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any, Optional
 
 COLLAB_HEADER = "COLLAB v0"
 STATUS_OPEN = "OPEN"
 STATUS_DONE = "DONE"
 STATUS_BLOCKED = "BLOCKED"
-ROLES = ("grok", "codex", "agy")
+ROLES = ("grok", "codex", "agy", "hermes")
+DEFAULT_COOLDOWN_SECS = 30
+DEFAULT_MAX_EVENTS = 3
+DEFAULT_MAX_BYTES = 2048
+PUBKEY_MIN = 8
 
 
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
+
+
+def _word_hit(content: str, needle: str) -> bool:
+    """True when needle is @mentioned or a whole token (not a substring)."""
+    n = _norm(needle).lstrip("@#")
+    if not n:
+        return False
+    c = _norm(content)
+    if f"@{n}" in c:
+        return True
+    return re.search(rf"(?<![a-z0-9_-]){re.escape(n)}(?![a-z0-9_-])", c) is not None
 
 
 def addressed_to(content: str, names: list[str], pubkeys: list[str]) -> bool:
@@ -24,14 +40,11 @@ def addressed_to(content: str, names: list[str], pubkeys: list[str]) -> bool:
     if not c:
         return False
     for name in names:
-        n = _norm(name).lstrip("@#")
-        if not n:
-            continue
-        if n in c or f"@{n}" in c:
+        if _word_hit(content, name):
             return True
     for pk in pubkeys:
         p = _norm(pk)
-        if len(p) < 8:
+        if len(p) < PUBKEY_MIN:
             continue
         if p in c or p[:12] in c or p[:16] in c:
             return True
@@ -42,7 +55,6 @@ def parse_collab_envelope(content: str) -> Optional[dict[str, str]]:
     """Parse a COLLAB v0 block. Unknown keys ignored. None if not an envelope."""
     text = (content or "").strip()
     if not text.upper().startswith(COLLAB_HEADER.upper()):
-        # Allow a leading fence
         stripped = re.sub(r"^```[a-zA-Z0-9]*\n", "", text)
         if not stripped.upper().startswith(COLLAB_HEADER.upper()):
             return None
@@ -135,9 +147,6 @@ def render_envelope(
     task_line = (task or "").strip().replace("\n", " ")
     if not task_line:
         raise ValueError("task required")
-    if st == STATUS_BLOCKED and not need_prime:
-        # BLOCKED without need_prime stays in the agent loop.
-        need_prime = False
     return (
         f"{COLLAB_HEADER}\n"
         f"from: {fr}\n"
@@ -151,8 +160,8 @@ def render_envelope(
 def admit_budget(
     events: list[dict[str, Any]],
     *,
-    max_events: int = 3,
-    max_bytes: int = 2048,
+    max_events: int = DEFAULT_MAX_EVENTS,
+    max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Keep the first events that fit the turn budget. overflow=True if truncated."""
     kept: list[dict[str, Any]] = []
@@ -161,7 +170,7 @@ def admit_budget(
     for ev in events:
         body = str(ev.get("preview") or ev.get("content") or "")
         n = len(body.encode("utf-8"))
-        if len(kept) >= max_events or used + n > max_bytes * max(1, max_events):
+        if len(kept) >= max_events or used + n > max_bytes:
             overflow = True
             break
         kept.append(ev)
@@ -169,20 +178,161 @@ def admit_budget(
     return kept, overflow
 
 
+def cooldown_blocks(
+    last_wake_unix: int,
+    now_unix: int,
+    cooldown_secs: int = DEFAULT_COOLDOWN_SECS,
+) -> bool:
+    if cooldown_secs <= 0 or last_wake_unix <= 0:
+        return False
+    return (now_unix - last_wake_unix) < cooldown_secs
+
+
+def task_fingerprint(task: str) -> str:
+    return _norm(task)[:200]
+
+
+def should_post_prime_escalation(
+    journal: dict[str, Any],
+    task: str,
+) -> tuple[bool, str]:
+    """Once-then-stop. Same task fingerprint never pings Prime twice."""
+    fp = task_fingerprint(task)
+    if not fp:
+        return False, "empty-task"
+    posted = journal.get("posted") or {}
+    if not isinstance(posted, dict):
+        posted = {}
+    if fp in posted:
+        return False, "already-escalated"
+    return True, "ok"
+
+
+def record_prime_escalation(
+    journal: dict[str, Any],
+    task: str,
+    now_unix: int,
+) -> dict[str, Any]:
+    posted = dict(journal.get("posted") or {})
+    posted[task_fingerprint(task)] = now_unix
+    out = dict(journal)
+    out["posted"] = posted
+    out["last_task"] = task_fingerprint(task)
+    out["last_unix"] = now_unix
+    return out
+
+
+def filter_wakes(
+    messages: list[Any],
+    *,
+    state: dict[str, Any],
+    self_pk: str,
+    names: list[str],
+    pubkeys: list[str],
+    seat_role: str,
+    require_mention: bool,
+    is_dm: bool,
+    now_unix: int,
+    cooldown_secs: int = DEFAULT_COOLDOWN_SECS,
+    max_events: int = DEFAULT_MAX_EVENTS,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+) -> dict[str, Any]:
+    """Production wake seam used by wake.sh. Seen-set is updated only for
+    consumed events; cooldown/overflow leaves candidates for the next tick."""
+    seen = set(state.get("seen_ids") or [])
+    since = int(state.get("since") or 0)
+    last_wake = int(state.get("last_wake") or 0)
+    new_max = since
+    new_seen = set(seen)
+    candidates: list[dict[str, Any]] = []
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        mid = m.get("id") or ""
+        ts = int(m.get("created_at") or 0)
+        if ts > new_max:
+            new_max = ts
+        if mid and mid in seen:
+            continue
+        pk = m.get("pubkey") or ""
+        content = m.get("content") or ""
+        wake, reason = should_wake(
+            content=content,
+            from_pubkey=pk,
+            self_pubkey=self_pk,
+            is_dm=is_dm,
+            require_mention=require_mention,
+            names=names,
+            pubkeys=pubkeys,
+            seat_role=seat_role,
+        )
+        if not wake:
+            if mid:
+                new_seen.add(mid)
+            continue
+        preview = content.replace("\n", " ").strip()[:80].replace('"', "'")
+        candidates.append(
+            {
+                "id": mid,
+                "ts": ts,
+                "from": pk,
+                "preview": preview,
+                "content": content,
+                "reason": reason,
+            }
+        )
+    cooling = cooldown_blocks(last_wake, now_unix, cooldown_secs)
+    if cooling:
+        return {
+            "wakes": [],
+            "overflow": False,
+            "cooldown": True,
+            "pending": len(candidates),
+            "state": {
+                "seen_ids": list(new_seen)[-80:],
+                "since": new_max,
+                "last_wake": last_wake,
+                "channel_id": state.get("channel_id") or "",
+            },
+        }
+    kept, overflow = admit_budget(
+        candidates, max_events=max_events, max_bytes=max_bytes
+    )
+    for w in kept:
+        mid = w.get("id") or ""
+        if mid:
+            new_seen.add(mid)
+    return {
+        "wakes": kept,
+        "overflow": overflow,
+        "cooldown": False,
+        "pending": len(candidates),
+        "state": {
+            "seen_ids": list(new_seen)[-80:],
+            "since": new_max,
+            "last_wake": now_unix if kept else last_wake,
+            "channel_id": state.get("channel_id") or "",
+        },
+    }
+
+
+def _parse_kw(args: list[str]) -> dict[str, str]:
+    kw: dict[str, str] = {}
+    i = 0
+    while i < len(args):
+        if args[i].startswith("--") and i + 1 < len(args):
+            kw[args[i][2:].replace("-", "_")] = args[i + 1]
+            i += 2
+        else:
+            i += 1
+    return kw
+
+
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == "render":
-        # visitor-post helper: --from --to --task --status --need-prime
-        args = sys.argv[2:]
-        kw: dict[str, str] = {}
-        i = 0
-        while i < len(args):
-            if args[i].startswith("--") and i + 1 < len(args):
-                kw[args[i][2:].replace("-", "_")] = args[i + 1]
-                i += 2
-            else:
-                i += 1
+        kw = _parse_kw(sys.argv[2:])
         print(
             render_envelope(
                 from_role=kw.get("from", "grok"),
@@ -194,6 +344,34 @@ if __name__ == "__main__":
             end="",
         )
         raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("escalate-check", "escalate-record"):
+        kw = _parse_kw(sys.argv[2:])
+        path = kw.get("journal") or ""
+        task = kw.get("task") or ""
+        now = int(kw.get("now") or time.time())
+        journal: dict[str, Any] = {}
+        if path:
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    loaded = json.load(fh)
+                if isinstance(loaded, dict):
+                    journal = loaded
+            except (OSError, json.JSONDecodeError):
+                journal = {}
+        allow, reason = should_post_prime_escalation(journal, task)
+        if sys.argv[1] == "escalate-record":
+            if allow:
+                journal = record_prime_escalation(journal, task, now)
+                if path:
+                    with open(path, "w", encoding="utf-8") as fh:
+                        json.dump(journal, fh, indent=2)
+                        fh.write("\n")
+            json.dump({"allow": allow, "reason": reason, "journal": journal}, sys.stdout)
+        else:
+            json.dump({"allow": allow, "reason": reason}, sys.stdout)
+        sys.stdout.write("\n")
+        raise SystemExit(0 if allow else 3)
 
     payload = json.loads(sys.stdin.read() or "{}")
     wake, reason = should_wake(

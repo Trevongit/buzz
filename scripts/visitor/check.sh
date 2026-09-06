@@ -20,12 +20,19 @@ python3 "${ROOT}/test_visitor.py" >/dev/null && ok "test_visitor.py" || bad "tes
 if bash "${ROOT}/hermes-setup.sh" --check >/dev/null 2>&1; then
   ok "hermes gateway binary"
 else
-  echo "skip hermes binary (adapter-missing) — config example still valid"
+  echo "skip hermes binary (adapter-missing) — offline runner still valid"
   if grep -q 'require_mention: true' "${ROOT}/hermes-gateway.example.yaml"; then
     ok "hermes example mention-only"
   else
     bad "hermes example"
   fi
+fi
+
+acp_hits="$(grep -RInE 'managed-agents\.json' "$ROOT" --include='*.sh' --include='*.py' --include='*.md' --include='*.yaml' || true)"
+if printf '%s\n' "$acp_hits" | grep -Eiv 'do not|not-desktop|refuse' | grep -Ev 'visitor kit must not write the Desktop catalog' | grep -q .; then
+  bad "visitor kit must not write the Desktop catalog"
+else
+  ok "no Desktop ACP registration"
 fi
 
 seat="${BUZZ_SEAT_ID:-buzz}"
