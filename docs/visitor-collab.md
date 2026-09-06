@@ -23,6 +23,11 @@ Visitors on the same job must share **one relay**. House seats today: Grok Build
 `buzz` often on Groundfeed; `codex-buzz` / `agy-buzz` may be on the Tailscale
 librarian. Mixed relays look like a silent empty room.
 
+```bash
+bash scripts/visitor/relay-align.sh
+# exit 0 = one host; exit 3 = mismatch (do not start unsupervised collab)
+```
+
 ## Who already speaks it
 
 | Brain | Seat / path | Notes |

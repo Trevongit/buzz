@@ -15,10 +15,13 @@ sys.path.insert(0, str(ROOT))
 from gate import (  # noqa: E402
     admit_budget,
     addressed_to,
+    align_relays,
     cooldown_blocks,
     filter_wakes,
+    normalize_relay,
     parse_collab_envelope,
     record_prime_escalation,
+    relay_from_seat_dir,
     render_envelope,
     should_escalate_to_prime,
     should_post_prime_escalation,
@@ -308,6 +311,37 @@ class EscalationJournalTests(unittest.TestCase):
             )
             self.assertEqual(second.returncode, 3)
             self.assertEqual(json.loads(second.stdout)["reason"], "already-escalated")
+
+
+class RelayAlignTests(unittest.TestCase):
+    def test_wss_and_https_same_host(self):
+        self.assertEqual(
+            normalize_relay("wss://groundfeed.communities.buzz.xyz"),
+            normalize_relay("https://groundfeed.communities.buzz.xyz/"),
+        )
+
+    def test_mixed_hosts_not_aligned(self):
+        report = align_relays(
+            {
+                "buzz": "https://groundfeed.communities.buzz.xyz",
+                "codex-buzz": "wss://asus-g501vw.tailb74de6.ts.net",
+            }
+        )
+        self.assertFalse(report["aligned"])
+        self.assertEqual(len(report["unique"]), 2)
+
+    def test_reads_public_txt_not_nsec(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "PUBLIC.txt").write_text(
+                "seat: x\nrelay: wss://example.relay\n", encoding="utf-8"
+            )
+            Path(tmp, "agent.env").write_text(
+                "BUZZ_PRIVATE_KEY=deadbeefdeadbeef\nBUZZ_RELAY_URL=https://ignored.example\n",
+                encoding="utf-8",
+            )
+            url = relay_from_seat_dir(tmp)
+            self.assertEqual(url, "wss://example.relay")
+            self.assertNotIn("nsec", url)
 
 
 class HermesExampleTests(unittest.TestCase):

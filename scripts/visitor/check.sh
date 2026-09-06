@@ -49,6 +49,14 @@ else
   ok "no nsec in visitor kit"
 fi
 
+align_out="$(python3 "${ROOT}/gate.py" relay-align --seats "${VISITOR_SEATS:-buzz,codex-buzz,agy-buzz}" || true)"
+if python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).get("aligned") else 1)' "$align_out"; then
+  ok "visitor seats share one relay host"
+else
+  echo "warn mixed relays (silent empty room) — align before unsupervised collab"
+  python3 -c 'import json,sys; r=json.loads(sys.argv[1]); print("hosts=" + str(r.get("hosts")))' "$align_out"
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   exit 1
 fi

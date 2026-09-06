@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 COLLAB_HEADER = "COLLAB v0"
@@ -192,6 +193,50 @@ def task_fingerprint(task: str) -> str:
     return _norm(task)[:200]
 
 
+def normalize_relay(url: str) -> str:
+    """Host of a Buzz relay. wss://x and https://x/ count as the same bus."""
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    no_scheme = re.sub(r"^[a-z][a-z0-9+.-]*://", "", raw, flags=re.I)
+    host = no_scheme.split("/")[0].split("@")[-1].strip().lower()
+    if host.endswith(":443") or host.endswith(":80"):
+        host = host.rsplit(":", 1)[0]
+    return host
+
+
+def align_relays(seats: dict[str, str]) -> dict[str, Any]:
+    """seats: name -> relay URL. aligned if every non-empty host matches."""
+    hosts: dict[str, str] = {}
+    for name, url in seats.items():
+        host = normalize_relay(url)
+        if host:
+            hosts[name] = host
+    unique = sorted(set(hosts.values()))
+    return {
+        "aligned": len(unique) <= 1,
+        "hosts": hosts,
+        "unique": unique,
+        "missing": sorted(n for n, u in seats.items() if not normalize_relay(u)),
+    }
+
+
+def relay_from_seat_dir(seat_dir: str) -> str:
+    """Read only the relay line. Never returns nsec."""
+    d = Path(seat_dir)
+    pub = d / "PUBLIC.txt"
+    if pub.is_file():
+        for line in pub.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.lower().startswith("relay:"):
+                return line.split(":", 1)[1].strip()
+    envf = d / "agent.env"
+    if envf.is_file():
+        for line in envf.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("BUZZ_RELAY_URL="):
+                return line.split("=", 1)[1].strip().strip("'\"")
+    return ""
+
+
 def should_post_prime_escalation(
     journal: dict[str, Any],
     task: str,
@@ -344,6 +389,18 @@ if __name__ == "__main__":
             end="",
         )
         raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "relay-align":
+        kw = _parse_kw(sys.argv[2:])
+        seats_raw = kw.get("seats") or "buzz,codex-buzz,agy-buzz"
+        home = Path.home() / ".buzz-dev" / "agents"
+        mapping: dict[str, str] = {}
+        for name in [s.strip() for s in seats_raw.split(",") if s.strip()]:
+            mapping[name] = relay_from_seat_dir(str(home / name))
+        report = align_relays(mapping)
+        json.dump(report, sys.stdout)
+        sys.stdout.write("\n")
+        raise SystemExit(0 if report["aligned"] else 3)
 
     if len(sys.argv) > 1 and sys.argv[1] in ("escalate-check", "escalate-record"):
         kw = _parse_kw(sys.argv[2:])
