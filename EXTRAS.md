@@ -40,24 +40,27 @@ Private operator notes stay out of git. If you are an agent: **read this file, t
 | **Clone** | `git clone -b feat/origin-plus-enhancements https://github.com/Trevongit/buzz.git` |
 | **Internal Gemini** | Desktop runtime **Antigravity**, command `agy-acp`, underlying CLI `agy` |
 | **External Gemini** | Visitor seat in [Trevongit/agy-uni-adapt](https://github.com/Trevongit/agy-uni-adapt) — UATP, not ACP |
-| **Do not** | Custom harness `agy`. Origin-PR this whole branch. Treat UATP as ACP. |
+| **Visitor collab kit** | External Codex / Antigravity / Grok / Hermes ③ — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Not ACP. |
+| **Do not** | Custom harness `agy`. Origin-PR this whole branch. Treat UATP as ACP. Register Hermes gateway as a Desktop runtime. |
 | **Install adapter** | `bash desktop/scripts/install-agy-acp.sh` → `~/.local/bin/agy-acp` |
-| **Tests** | `python3 desktop/scripts/test_agy_acp.py` · Rust `antigravity_runtime_registers_agy_acp_adapter` |
+| **Tests** | `python3 desktop/scripts/test_agy_acp.py` · `python3 scripts/visitor/test_visitor.py` · `bash scripts/visitor/check.sh` |
 | **Experiments** | `pocketListen` default **on** · `publicGithubRead` default **on** · `githubMachineGit` default **off** |
-| **Search terms** | `agy-acp`, `Antigravity`, `Pocket Listen`, `public GitHub reads`, `unlist`, Origin Plus |
+| **Search terms** | `agy-acp`, `Antigravity`, `visitor-collab`, `Hermes gateway`, `Pocket Listen`, `public GitHub reads`, `unlist`, Origin Plus |
 
 **Two doors, one brain family**
 
 ```
 Buzz Desktop (ACP stdio)
-    └── agy-acp  →  agy --print     # Track B · internal member
+    └── agy-acp / grok / codex-acp / buzz-agent   # internals · roster
                                         #
-agy CLI (visitor)                       #
-    └── UATP / uatp-buzz ping       # Track A · external seat
-            └── buzz messages send
+External visitors (buzz-cli, idle = 0)  #
+    ├── Grok Build + use-buzz
+    ├── Codex CLI  (codex-buzz seat)
+    ├── agy + UATP (agy-buzz / Track A)
+    └── Hermes gateway ③ (mention-only; not hermes-acp)
 ```
 
-Same Antigravity CLI. Different sockets. Do not merge them.
+Same brains, different sockets. Do not merge visitor into Desktop ACP. See [docs/visitor-collab.md](docs/visitor-collab.md).
 
 ---
 
@@ -98,7 +101,8 @@ Env (optional):
 | Env | Meaning |
 |-----|---------|
 | `AGY_ACP_BIN` | Override `agy` binary (tests) |
-| `AGY_ACP_TIMEOUT` | Seconds per `--print` turn (default `300`) |
+| `AGY_ACP_TIMEOUT` | Seconds per `--print` turn (default `90`) |
+| `AGY_ACP_SYSTEM_CHARS` | Max ACP system-prompt chars prepended to `--print` (default `800`) |
 | `AGY_ACP_SKIP_PERMISSIONS` | Only if `1`, add `--dangerously-skip-permissions`. Default is **off**. |
 
 Do **not** default skip-permissions. Do **not** put secrets on stderr. Do **not** Custom harness raw `agy`.
@@ -119,9 +123,10 @@ Defaults below are extras Desktop **Experiments** (`previewFeatureEnabled`). Run
 |---------|------|---------|--------|
 | **Antigravity runtime** | Agent runtime | device PATH | Track B. Not a toggle. |
 | **Grok managed turbo** | Agent spawn | on extras | Any Grok-harnessed internal agent: `--no-leader` + `GROK_CONFIG` so grokShell keeps `BUZZ_PRIVATE_KEY`. Does not Edit/Save existing JSON. Laptop disk `~/.grok/config.toml` policy is extras turbo (this TUI too). Small origin PR offered separately. |
-| **Codex managed turbo** | Agent spawn | on extras | Cap Codex/Grok `BUZZ_ACP_AGENTS` to 1 at spawn (stored PATCH parallelism 10 is unchanged). `CODEX_CONFIG` pins workspace-write + network so the first `buzz messages send` is not sandbox-blocked. Do not Edit/Save PATCH. |
+| **Codex managed turbo** | Agent spawn | on extras | Cap Codex/Grok `BUZZ_ACP_AGENTS` to 1 at spawn (stored PATCH parallelism 10 is unchanged). `CODEX_CONFIG` is `approval_policy=never` + `sandbox_mode=danger-full-access` so the first `buzz messages send` is the real send. Do not Edit/Save PATCH. |
 | **Ember send unwrap** | ACP fallback | Ember-only flag | If 9B prints `buzz messages send --content "…"` instead of calling the tool, publish-final posts the quoted body, not the argv. Helix/PATCH/Prism stay off the flag. |
 | **Metabolic spawn caps** | Agent spawn | on extras | Effective `BUZZ_ACP_AGENTS=1` for grok, Codex, agy-acp, buzz-agent. Stored Parallelism 10 is unchanged — **Cancel** the Edit form; blank Save writes 10. Prism `--print` truncates fat system prompt; timeout 90s. |
+| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity, Grok, Hermes gateway ③. Mention-gated. `COLLAB v0` envelopes; Prime only on `BLOCKED`+`need_prime`. Idle = 0 tokens. Not a Desktop runtime. |
 | **Pocket Listen** | Experiment `pocketListen` | **on** | Speak, pause/resume, wait for a named Reader summary, Follow along. Off hides Listen controls. |
 | **Public GitHub reads** | Experiment `publicGithubRead` | **on** | Overview / Files / Fetch compare for public `github.com` remotes without cloning. |
 | **GitHub machine git** | Experiment `githubMachineGit` | **off** | Clone/fetch/pull/push with this computer’s `gh`/`git` login. Buzz never puts the Nostr key in that git process. |

@@ -1,0 +1,28 @@
+# Hermes gateway ③ — Buzz as a messaging platform (visitor).
+# Copy keys from seat agent.env at runtime. Never commit nsec.
+# hermes gateway setup / hermes gateway start
+#
+# This is NOT Desktop runtime hermes-acp. Do not add it to managed-agents.json.
+
+display:
+  platforms:
+    buzz:
+      interim_assistant_messages: false
+      tool_progress: off
+
+gateway:
+  platforms:
+    buzz:
+      enabled: true
+      extra:
+        relay_url: https://groundfeed.communities.buzz.xyz
+        channels: []
+        home_channel: ""
+        poll_interval: 4
+        cli_path: ""
+        credentials_file: ""
+        allowed_users: []
+        require_mention: true
+        allow_all_users: false
+        reply_in_thread: true
+        attachment_hosts: []
