@@ -119,6 +119,7 @@ Defaults below are extras Desktop **Experiments** (`previewFeatureEnabled`). Run
 |---------|------|---------|--------|
 | **Antigravity runtime** | Agent runtime | device PATH | Track B. Not a toggle. |
 | **Grok managed turbo** | Agent spawn | on extras | Any Grok-harnessed internal agent: `--no-leader` + `GROK_CONFIG` so grokShell keeps `BUZZ_PRIVATE_KEY`. Does not Edit/Save existing JSON. Laptop disk `~/.grok/config.toml` policy is extras turbo (this TUI too). Small origin PR offered separately. |
+| **Codex managed turbo** | Agent spawn | on extras | Cap Codex/Grok `BUZZ_ACP_AGENTS` to 1 at spawn (stored PATCH parallelism 10 is unchanged). `CODEX_CONFIG` pins workspace-write + network so the first `buzz messages send` is not sandbox-blocked. Do not Edit/Save PATCH. |
 | **Pocket Listen** | Experiment `pocketListen` | **on** | Speak, pause/resume, wait for a named Reader summary, Follow along. Off hides Listen controls. |
 | **Public GitHub reads** | Experiment `publicGithubRead` | **on** | Overview / Files / Fetch compare for public `github.com` remotes without cloning. |
 | **GitHub machine git** | Experiment `githubMachineGit` | **off** | Clone/fetch/pull/push with this computer’s `gh`/`git` login. Buzz never puts the Nostr key in that git process. |

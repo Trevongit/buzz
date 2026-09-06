@@ -22,6 +22,15 @@
 /// design. Tyler's ruling: "try 5 and lower if needed."
 pub const OPENCLAW_MAX_PARALLELISM: u32 = 5;
 
+/// Managed Codex ACP `initialize`/`session/new` are 60s RPCs. A stored
+/// parallelism of 10 (Desktop form default) starts ten workers and surfaces
+/// `Request timeout — agent did not respond within 60s` before any room reply.
+pub const CODEX_MAX_PARALLELISM: u32 = 1;
+
+/// Managed Grok Build should not share this machine's TUI leader or run a
+/// ten-wide ACP pool. Same spawn-time cap as Codex; stored JSON is unchanged.
+pub const GROK_MAX_PARALLELISM: u32 = 1;
+
 /// Return the maximum allowed parallelism for the given harness command, or
 /// `None` when the harness has no cap.
 ///
@@ -30,6 +39,8 @@ pub const OPENCLAW_MAX_PARALLELISM: u32 = 5;
 pub fn harness_max_parallelism(command: &str) -> Option<u32> {
     match super::discovery::normalize_command_identity(command).as_str() {
         "openclaw" => Some(OPENCLAW_MAX_PARALLELISM),
+        "codex" | "codex-acp" => Some(CODEX_MAX_PARALLELISM),
+        "grok" => Some(GROK_MAX_PARALLELISM),
         _ => None,
     }
 }
@@ -175,6 +186,18 @@ mod tests {
         assert_eq!(super::harness_max_parallelism("goose"), None);
         assert_eq!(super::harness_max_parallelism("buzz-agent"), None);
         assert_eq!(super::harness_max_parallelism(""), None);
+        assert_eq!(
+            super::harness_max_parallelism("codex-acp"),
+            Some(super::CODEX_MAX_PARALLELISM)
+        );
+        assert_eq!(
+            super::harness_max_parallelism("/usr/local/bin/codex"),
+            Some(super::CODEX_MAX_PARALLELISM)
+        );
+        assert_eq!(
+            super::harness_max_parallelism("grok"),
+            Some(super::GROK_MAX_PARALLELISM)
+        );
 
         // effective_parallelism: openclaw clamps above cap, honors at/below; goose passes through.
         assert_eq!(super::effective_parallelism("openclaw", cap + 5), cap);
@@ -182,6 +205,8 @@ mod tests {
         assert_eq!(super::effective_parallelism("openclaw", cap - 2), cap - 2);
         assert_eq!(super::effective_parallelism("goose", 99), 99);
         assert_eq!(super::effective_parallelism("buzz-agent", 32), 32);
+        assert_eq!(super::effective_parallelism("codex-acp", 10), 1);
+        assert_eq!(super::effective_parallelism("grok", 10), 1);
     }
 
     // ── acp_agents_value: spawn-env seam ──────────────────────────────────────
@@ -198,6 +223,12 @@ mod tests {
             "BUZZ_ACP_AGENTS for openclaw with parallelism 10 must be \"5\""
         );
         assert_eq!(super::acp_agents_value("goose", 10), "10");
+        assert_eq!(
+            super::acp_agents_value("codex-acp", 10),
+            "1",
+            "stored PATCH-style parallelism 10 must spawn one Codex worker"
+        );
+        assert_eq!(super::acp_agents_value("grok", 10), "1");
     }
 
     // ── Override-direction: summary seam agreement ────────────────────────────
