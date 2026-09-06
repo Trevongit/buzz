@@ -42,6 +42,7 @@ if [[ -z "$FROM_ROLE" || -z "$TASK" ]]; then
   echo "error: --task required (and --from, or a mapped --seat)" >&2
   exit 1
 fi
+visitor_assert_from_role "$SEAT" "$FROM_ROLE" || exit 1
 
 render_blocked() {
   python3 "${ROOT}/gate.py" render --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status BLOCKED --need-prime true

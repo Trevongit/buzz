@@ -62,6 +62,19 @@ visitor_find_cli() {
   return 1
 }
 
+visitor_assert_from_role() {
+  local seat="${1:-}"
+  local from_role="${2:-}"
+  local derived
+  derived="$(python3 "${VISITOR_ROOT}/gate.py" role-from-seat --seat "$seat" | tr -d '\n')"
+  if [[ -n "$derived" && -n "$from_role" && "$derived" != "$from_role" ]]; then
+    echo "error: from=$from_role does not match seat $seat (maps to $derived)" >&2
+    echo "VISITOR_COLLAB skip reason=from-role-mismatch" >&2
+    return 1
+  fi
+  return 0
+}
+
 visitor_assert_public_relay() {
   local seat="${1:-}"
   local dir out reason
@@ -141,6 +154,26 @@ visitor_bound_limit() {
   else
     echo "$n"
   fi
+}
+
+visitor_same_bus() {
+  local from_role="$1"
+  local to_role="$2"
+  local home="$3"
+  local role_seats="${4:-}"
+  local bus_json reason
+  local bus=(same-bus --from "$from_role" --to "$to_role" --home "$home")
+  if [[ -n "$role_seats" ]]; then
+    bus+=(--role-seats "$role_seats")
+  fi
+  bus_json="$(python3 "${VISITOR_ROOT}/gate.py" "${bus[@]}" || true)"
+  if python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1] or "{}").get("ok") else 3)' "$bus_json"; then
+    return 0
+  fi
+  reason="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("reason") or "mixed-or-missing")' "$bus_json" 2>/dev/null || echo mixed-or-missing)"
+  echo "error: COLLAB to=$to_role is not on the same relay bus as from=$from_role" >&2
+  echo "VISITOR_COLLAB skip reason=${reason}" >&2
+  return 3
 }
 
 visitor_resolve_room() {

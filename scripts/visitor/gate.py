@@ -109,6 +109,30 @@ def should_escalate_to_prime(fields: Optional[dict[str, str]]) -> bool:
     return status == _norm(STATUS_BLOCKED) and need in ("true", "1", "yes")
 
 
+def collab_send_gate(content: str) -> dict[str, Any]:
+    """Classify a post body. Raw --content/--file COLLAB is the same seam as --to/--task."""
+    env = parse_collab_envelope(content)
+    if not env:
+        return {
+            "envelope": False,
+            "escalate": False,
+            "from": "",
+            "to": "",
+            "task": "",
+            "status": "",
+            "need_prime": "false",
+        }
+    return {
+        "envelope": True,
+        "escalate": should_escalate_to_prime(env),
+        "from": _norm(env.get("from") or ""),
+        "to": _norm(env.get("to") or ""),
+        "task": (env.get("task") or "").strip(),
+        "status": (env.get("status") or STATUS_OPEN).upper(),
+        "need_prime": _norm(env.get("need_prime") or "false"),
+    }
+
+
 def should_wake(
     *,
     content: str,
@@ -604,6 +628,12 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "role-from-seat":
         kw = _parse_kw(sys.argv[2:])
         print(role_from_seat(kw.get("seat") or ""))
+        raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "send-gate":
+        report = collab_send_gate(sys.stdin.read())
+        json.dump(report, sys.stdout)
+        sys.stdout.write("\n")
         raise SystemExit(0)
 
     if len(sys.argv) > 1 and sys.argv[1] in ("public-env", "relay-from-dir"):

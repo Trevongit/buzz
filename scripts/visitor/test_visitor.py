@@ -17,6 +17,7 @@ from gate import (  # noqa: E402
     admit_budget,
     addressed_to,
     align_relays,
+    collab_send_gate,
     cooldown_blocks,
     filter_wakes,
     mention_names_from_card,
@@ -197,6 +198,29 @@ class EnvelopeTests(unittest.TestCase):
 
     def test_hello_is_not_envelope(self):
         self.assertIsNone(parse_collab_envelope("hello"))
+
+    def test_send_gate_classifies_content(self):
+        open_text = render_envelope(from_role="codex", to_role="agy", task="scout")
+        blocked = render_envelope(
+            from_role="codex",
+            to_role="grok",
+            task="need origin access",
+            status="BLOCKED",
+            need_prime=True,
+        )
+        self.assertFalse(collab_send_gate("hello")["envelope"])
+        self.assertFalse(collab_send_gate(open_text)["escalate"])
+        self.assertTrue(collab_send_gate(blocked)["escalate"])
+        self.assertEqual(collab_send_gate(blocked)["from"], "codex")
+        proc = subprocess.run(
+            ["python3", str(ROOT / "gate.py"), "send-gate"],
+            input=blocked,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(json.loads(proc.stdout)["escalate"])
 
     def test_render_rejects_bad_role(self):
         with self.assertRaises(ValueError):
@@ -870,6 +894,118 @@ class SameBusSendTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
             self.assertIn("prime-other-bus", proc.stderr)
             self.assertNotIn("error: no identity", proc.stderr)
+
+    def test_content_blocked_need_prime_routes_escalate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            grok = Path(tmp) / "buzz"
+            grok.mkdir(exist_ok=True)
+            grok.joinpath("PUBLIC.txt").write_text(
+                "seat: buzz\nrelay: https://ground.example\n",
+                encoding="utf-8",
+            )
+            body = render_envelope(
+                from_role="codex",
+                to_role="grok",
+                task="need origin access",
+                status="BLOCKED",
+                need_prime=True,
+            )
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "post.sh"),
+                    "--content",
+                    body,
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertIn("prime-other-bus", proc.stderr)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+    def test_content_open_mixed_bus_exit_3(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, False)
+            body = render_envelope(from_role="codex", to_role="agy", task="cross bus")
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "post.sh"),
+                    "--content",
+                    body,
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertIn("VISITOR_COLLAB skip reason=", proc.stderr)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+    def test_from_role_mismatch_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "collab.sh"),
+                    "open",
+                    "--seat",
+                    "codex-buzz",
+                    "--from",
+                    "grok",
+                    "--to",
+                    "agy",
+                    "--task",
+                    "wrong from",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("from-role-mismatch", proc.stderr)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+    def test_file_cannot_combine_with_collab_flags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "body.txt"
+            path.write_text("hello\n", encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "post.sh"),
+                    "--file",
+                    str(path),
+                    "--from",
+                    "codex",
+                    "--to",
+                    "agy",
+                    "--task",
+                    "nope",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("--file cannot combine", proc.stderr)
 
 
 class SeatDirTests(unittest.TestCase):

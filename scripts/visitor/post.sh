@@ -47,16 +47,15 @@ done
 
 export VISITOR_AGENTS_HOME="$HOME_AGENTS"
 
+if [[ -n "$FILE" && -n "$TO_ROLE" && -n "$TASK" ]]; then
+  echo "error: --file cannot combine with COLLAB --to/--task" >&2
+  exit 1
+fi
+
 need="$(printf '%s' "$NEED_PRIME" | tr '[:upper:]' '[:lower:]')"
 st="$(printf '%s' "$STATUS" | tr '[:upper:]' '[:lower:]')"
-# BLOCKED+need_prime must journal via escalate.sh (once-then-stop). Do not
-# let a raw post.sh call ping Prime without that fence. escalate.sh re-enters
-# with --from-escalate so this cannot recurse.
-if [[ "$FROM_ESCALATE" != "1" && -n "$TO_ROLE" && -n "$TASK" && "$st" == "blocked" && "$need" =~ ^(1|true|yes)$ ]]; then
-  if [[ -z "$FROM_ROLE" ]]; then
-    FROM_ROLE="$(visitor_default_role "$SEAT")"
-  fi
-  esc=(--from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --seat "$SEAT" --home "$HOME_AGENTS")
+route_escalate() {
+  local esc=(--from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --seat "$SEAT" --home "$HOME_AGENTS")
   if [[ -n "$ROOM" ]]; then
     esc+=(--room "$ROOM")
   fi
@@ -67,6 +66,17 @@ if [[ "$FROM_ESCALATE" != "1" && -n "$TO_ROLE" && -n "$TASK" && "$st" == "blocke
     esc+=(--dry-run)
   fi
   exec bash "${VISITOR_ROOT}/escalate.sh" "${esc[@]}"
+}
+
+# BLOCKED+need_prime must journal via escalate.sh (once-then-stop). Do not
+# let a raw post.sh call ping Prime without that fence. escalate.sh re-enters
+# with --from-escalate so this cannot recurse.
+if [[ "$FROM_ESCALATE" != "1" && -n "$TO_ROLE" && -n "$TASK" && "$st" == "blocked" && "$need" =~ ^(1|true|yes)$ ]]; then
+  if [[ -z "$FROM_ROLE" ]]; then
+    FROM_ROLE="$(visitor_default_role "$SEAT")"
+  fi
+  visitor_assert_from_role "$SEAT" "$FROM_ROLE" || exit 1
+  route_escalate
 fi
 
 if [[ -n "$TO_ROLE" && -n "$TASK" ]]; then
@@ -77,15 +87,8 @@ if [[ -n "$TO_ROLE" && -n "$TASK" ]]; then
     echo "error: --from required with --to/--task (or a mapped --seat)" >&2
     exit 1
   fi
-  bus=(same-bus --from "$FROM_ROLE" --to "$TO_ROLE" --home "$HOME_AGENTS")
-  if [[ -n "$ROLE_SEATS" ]]; then
-    bus+=(--role-seats "$ROLE_SEATS")
-  fi
-  bus_json="$(python3 "${VISITOR_ROOT}/gate.py" "${bus[@]}" || true)"
-  if ! python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1] or "{}").get("ok") else 3)' "$bus_json"; then
-    reason="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("reason") or "mixed-or-missing")' "$bus_json" 2>/dev/null || echo mixed-or-missing)"
-    echo "error: COLLAB to=$TO_ROLE is not on the same relay bus as from=$FROM_ROLE" >&2
-    echo "VISITOR_COLLAB skip reason=${reason}" >&2
+  visitor_assert_from_role "$SEAT" "$FROM_ROLE" || exit 1
+  if ! visitor_same_bus "$FROM_ROLE" "$TO_ROLE" "$HOME_AGENTS" "$ROLE_SEATS"; then
     if [[ "$DRY" == "1" ]]; then
       python3 "${VISITOR_ROOT}/gate.py" render --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status "$STATUS" --need-prime "$NEED_PRIME" || true
       echo "DRY-RUN not posted"
@@ -100,6 +103,36 @@ fi
 if [[ -z "$CONTENT" ]]; then
   echo "error: --content, --file, or --to/--task required" >&2
   exit 1
+fi
+
+# --content/--file COLLAB is the same seam: journal + same-bus, no back door.
+if [[ "$FROM_ESCALATE" != "1" ]]; then
+  gate_json="$(printf '%s' "$CONTENT" | python3 "${VISITOR_ROOT}/gate.py" send-gate || true)"
+  mapfile -t _gate < <(python3 -c 'import json,sys
+r=json.loads(sys.argv[1] or "{}")
+print("1" if r.get("envelope") else "0")
+print("1" if r.get("escalate") else "0")
+print(r.get("from") or "")
+print(r.get("to") or "")
+print(r.get("task") or "")
+' "$gate_json")
+  if [[ "${_gate[0]:-0}" == "1" ]]; then
+    FROM_ROLE="${FROM_ROLE:-${_gate[2]:-}}"
+    TO_ROLE="${TO_ROLE:-${_gate[3]:-}}"
+    TASK="${TASK:-${_gate[4]:-}}"
+    visitor_assert_from_role "$SEAT" "$FROM_ROLE" || exit 1
+    if [[ "${_gate[1]:-0}" == "1" ]]; then
+      route_escalate
+    fi
+    if ! visitor_same_bus "$FROM_ROLE" "$TO_ROLE" "$HOME_AGENTS" "$ROLE_SEATS"; then
+      if [[ "$DRY" == "1" ]]; then
+        printf '%s' "$CONTENT"
+        echo
+        echo "DRY-RUN not posted"
+      fi
+      exit 3
+    fi
+  fi
 fi
 
 if [[ "$DRY" == "1" ]]; then

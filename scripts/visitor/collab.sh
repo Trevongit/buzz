@@ -45,6 +45,7 @@ if [[ -z "$ACTION" || -z "$FROM_ROLE" || -z "$TO_ROLE" || -z "$TASK" ]]; then
   echo "error: open|done|blocked and --from --to --task required" >&2
   exit 1
 fi
+visitor_assert_from_role "$SEAT" "$FROM_ROLE" || exit 1
 
 STATUS="OPEN"
 case "$ACTION" in
