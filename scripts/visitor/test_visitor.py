@@ -434,6 +434,31 @@ class RosterTests(unittest.TestCase):
             self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
             self.assertIn("collab-ready", ok.stdout)
             self.assertIn("@Alpha", ok.stdout)
+            dry = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "start-collab.sh"),
+                    "--seats",
+                    "a,b",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                    "--from",
+                    "codex",
+                    "--to",
+                    "agy",
+                    "--task",
+                    "land visitor dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
+            self.assertIn("COLLAB v0", dry.stdout)
+            self.assertIn("DRY-RUN", dry.stdout)
+            self.assertIn("need_prime: false", dry.stdout)
+            self.assertNotIn("deadbeef", dry.stdout)
 
 
 class HermesExampleTests(unittest.TestCase):

@@ -26,8 +26,8 @@ librarian. Mixed relays look like a silent empty room.
 ```bash
 bash scripts/visitor/relay-align.sh
 # exit 0 = one host; exit 3 = mismatch (do not start unsupervised collab)
-bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz
-# exit 0 = two+ seats on one bus; prints @names. Does not post or ping Prime.
+bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
+# exit 0 = two+ seats on one bus; prints @names + a COLLAB v0 envelope. Does not post.
 ```
 
 ## Who already speaks it
