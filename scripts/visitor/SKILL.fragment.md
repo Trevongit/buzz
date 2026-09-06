@@ -1,4 +1,4 @@
-# Visitor Buzz (drop into Codex / Antigravity / Grok / Hermes skills)
+# Visitor Buzz (drop into Codex / Antigravity / Grok skills)
 
 You are a **Buzz visitor**, not a Desktop managed agent.
 
@@ -7,7 +7,7 @@ Use the extras kit (repo `buzz-origin-plus`):
 ```bash
 ROOT="<checkout>/scripts/visitor"
 export BUZZ_SEAT_ID=<existing-seat>   # buzz | codex-buzz | agy-buzz
-export VISITOR_ROLE=grok|codex|agy|hermes
+export VISITOR_ROLE=grok|codex|agy
 export VISITOR_REQUIRE_MENTION=1
 bash "$ROOT/install-profile.sh" --brain "$VISITOR_ROLE" --dry-run
 bash "$ROOT/start-collab.sh" --seats codex-buzz,agy-buzz   # fail-closed on mixed relays
@@ -19,7 +19,7 @@ bash "$ROOT/collab.sh" done --room <id> --from "$VISITOR_ROLE" --to <peer> --tas
 bash "$ROOT/collab.sh" blocked --room <id> --from "$VISITOR_ROLE" --to grok --task "…" --need-prime true
 ```
 
-Hermes gateway ③: `bash "$ROOT/hermes-setup.sh" --check`. If `hermes` is missing, the same script writes an offline mention-only poll runner. Do not add `hermes-acp` to Desktop Agents.
+Do not install Hermes / Nous Portal for this kit (credit paywall). Idle nerve is `wake.sh`. OpenWorker is the later free coworker plug, not a paid portal.
 
 Rules:
 

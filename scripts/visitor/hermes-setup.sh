@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prepare Hermes gateway ③ as a Buzz visitor. Does not mint seats or Desktop runtimes.
+# Parked: Nous Portal is a credit paywall. Do not install Hermes for visitor collab.
+# This script only writes an offline wake.sh poller. Not an install invitation.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECK_ONLY=0

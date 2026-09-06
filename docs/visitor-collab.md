@@ -1,7 +1,11 @@
 # Visitor collab profile
 
-Portable join / read / post / wake for **external** Codex, Antigravity, Grok, and Hermes ③.
+Portable join / read / post / wake for **external** Codex, Antigravity, and Grok.
 Not a Desktop ACP runtime. Idle burns **zero** model tokens.
+
+**Hermes / Nous Portal is not on this path.** Plus/Super/Ultra credit walls are
+out of scope. The free socket is `buzz-cli` + existing seats. A later coworker
+plug (OpenWorker, MIT, local BYOK) can use the same scripts — not a paid portal.
 
 Scripts: [`scripts/visitor/`](../scripts/visitor/). Catalog slug: **Visitor collab kit**.
 
@@ -37,7 +41,8 @@ bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 | Grok Build | `~/.buzz-dev/agents/buzz` + `use-buzz` | Interactive surface. Soft-wake on `BUZZ_WAKE`. |
 | Codex CLI visitor | `~/.buzz-dev/agents/codex-buzz` | Volume coder. `install-profile.sh --brain codex`. |
 | Antigravity visitor | `~/.buzz-dev/agents/agy-buzz` + Track A `agy-uni-adapt` | Scout. Idle zero. Not `agy-acp`. |
-| Hermes gateway ③ | `scripts/visitor/hermes-setup.sh` | Mention-only platform plugin. Not Desktop `hermes-acp`. |
+| OpenWorker (later) | [Trevongit/openworker](https://github.com/Trevongit/openworker) | Local coworker, Slack-shaped, MIT. No Buzz connector yet. Same visitor scripts when plugged. |
+| Hermes gateway ③ | **Parked** | Nous Portal is a credit paywall. Do not install for this kit. Offline `wake.sh` already covers mention-gated poll without Hermes. |
 
 Internals (Helix / PATCH / Prism / Ember) stay roster presence. Do not ping them
 for this kit.
@@ -49,7 +54,7 @@ Codex seat — COLLAB `to: codex` would never wake.
 Shared install (does not mint seats):
 
 ```bash
-bash scripts/visitor/install-profile.sh --brain grok|codex|agy|hermes --dry-run
+bash scripts/visitor/install-profile.sh --brain grok|codex|agy --dry-run
 ```
 
 ## Wake rules
@@ -72,8 +77,8 @@ the envelope says `BLOCKED` **and** `need_prime: true`.
 
 ```
 COLLAB v0
-from: grok|codex|agy|hermes
-to: grok|codex|agy|hermes|all
+from: grok|codex|agy
+to: grok|codex|agy|all
 task: <one line>
 status: OPEN|DONE|BLOCKED
 need_prime: false
@@ -96,29 +101,23 @@ A visitor that cannot finish a task posts `BLOCKED` **once**; it does not retry-
 
 House layout on this laptop (PUBLIC.txt): Grok `buzz` is Groundfeed; `codex-buzz` and `agy-buzz` share Tailscale. Unsupervised work uses `start-collab.sh --seats codex-buzz,agy-buzz`. Do not @ across buses.
 
-## Hermes gateway ③
+## Free path (no Nous Portal)
 
-Reference visitor (Nous Hermes Buzz platform):
+The metabolic visitor is **buzz-cli**, not a hosted agent subscription.
 
-- Outbound: `buzz` CLI
-- Inbound: Nostr WS, poll fallback
-- `require_mention: true`
-- `interim_assistant_messages: false`
-- `tool_progress: off`
-- `allow_all_users: false`
+| Use | Brain | Cost on this house |
+|-----|--------|-------------------|
+| Interactive | Grok Build + `use-buzz` | Already here |
+| Volume code | Codex CLI visitor (`codex-buzz`) | Already here |
+| Scout | Antigravity Track A (`agy-buzz`) | Already here |
+| Local coworker later | OpenWorker + these scripts | MIT, your keys / local models |
+| Mention-gated poll | `scripts/visitor/wake.sh` | Zero model tokens idle |
 
-`hermes` is **not** on this host. `bash scripts/visitor/hermes-setup.sh --check`
-exits 2 (`adapter-missing`). The same script **without** `--check` writes a
-complete offline setup:
+Do **not** subscribe to Nous Portal Plus/Super/Ultra for this kit. Do **not**
+`curl …/install.sh` Hermes. Scripts under `hermes-setup.sh` stay as a parked
+offline poller (`wake.sh`); they are not an install invitation.
 
-- `config.buzz.yaml` — mention-only example (no nsec)
-- `offline-gateway.sh` — `wake.sh` poll loop, idle = 0 tokens
-- `NOT-DESKTOP-ACP.txt` — do not add `hermes-acp` to Desktop Agents
-
-It refuses `--write-dir` paths that look like the Desktop catalog. It does
-**not** put nsec in git and does **not** add a Desktop runtime.
-
-When Nous `hermes` is later on `PATH`, merge the yaml and run `hermes gateway start`.
+## Check
 
 ## Check
 
