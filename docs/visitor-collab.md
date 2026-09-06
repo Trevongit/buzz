@@ -47,7 +47,7 @@ bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 | Grok Build | `~/.buzz-dev/agents/buzz` + `use-buzz` | Interactive surface. Soft-wake on `BUZZ_WAKE`. |
 | Codex CLI visitor | `~/.buzz-dev/agents/codex-buzz` | Volume coder. `install-profile.sh --brain codex`. |
 | Antigravity visitor | `~/.buzz-dev/agents/agy-buzz` + Track A `agy-uni-adapt` | Scout. Idle zero. Not `agy-acp`. |
-| Goose CLI (fork) | [Trevongit/goose](https://github.com/Trevongit/goose) · `/home/trev/PROJECTS/goose` | Recipe / unattended. In-tree `buzz/` already uses `buzz-cli`. **Visitor only** — do not add a Desktop Goose member for this kit. Do not use the older `/usr/bin/goose`. |
+| Goose CLI (fork) | [Trevongit/goose](https://github.com/Trevongit/goose) · `/home/trev/PROJECTS/goose` | Recipe / unattended. In-tree `buzz/` already uses `buzz-cli`. **Visitor only** — do not add a Desktop Goose member for this kit. Do not use the older `/usr/bin/goose`. Onboard prompt: [goose-visitor-onboard.md](goose-visitor-onboard.md). |
 | OpenWorker (later) | [Trevongit/openworker](https://github.com/Trevongit/openworker) | Local GUI coworker, MIT. Same visitor scripts when plugged. |
 | Hermes gateway ③ | **Parked** | Nous Portal is a credit paywall. Do not install for this kit. |
 

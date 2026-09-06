@@ -40,7 +40,7 @@ Private operator notes stay out of git. If you are an agent: **read this file, t
 | **Clone** | `git clone -b feat/origin-plus-enhancements https://github.com/Trevongit/buzz.git` |
 | **Internal Gemini** | Desktop runtime **Antigravity**, command `agy-acp`, underlying CLI `agy` |
 | **External Gemini** | Visitor seat in [Trevongit/agy-uni-adapt](https://github.com/Trevongit/agy-uni-adapt) — UATP, not ACP |
-| **Visitor collab kit** | External Codex / Antigravity / Grok / **Goose CLI fork** — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Not ACP. Hermes/Nous Portal **parked**. |
+| **Visitor collab kit** | External Codex / Antigravity / Grok / **Goose CLI fork** — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Goose onboard prompt: [`docs/goose-visitor-onboard.md`](docs/goose-visitor-onboard.md). Not ACP. Hermes/Nous Portal **parked**. |
 | **Do not** | Custom harness `agy`. Origin-PR this whole branch. Treat UATP as ACP. Register Hermes gateway as a Desktop runtime. |
 | **Install adapter** | `bash desktop/scripts/install-agy-acp.sh` → `~/.local/bin/agy-acp` |
 | **Tests** | `python3 desktop/scripts/test_agy_acp.py` · `python3 scripts/visitor/test_visitor.py` · `bash scripts/visitor/check.sh` · `bash scripts/visitor/hermes-setup.sh --check` |
