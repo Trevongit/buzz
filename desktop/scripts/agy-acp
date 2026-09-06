@@ -11,8 +11,9 @@ Never print nsec / BUZZ_PRIVATE_KEY.
 
 Env:
   AGY_ACP_BIN       Override the agy binary (tests).
-  AGY_ACP_TIMEOUT   Seconds for one --print turn (default 300).
+  AGY_ACP_TIMEOUT   Seconds for one --print turn (default 90).
   AGY_ACP_SKIP_PERMISSIONS  If 1, add --dangerously-skip-permissions.
+  AGY_ACP_SYSTEM_CHARS  Max system-prompt chars prepended to --print (default 800).
 """
 
 from __future__ import annotations
@@ -88,11 +89,52 @@ def agy_bin() -> str:
     return "agy"
 
 
-def run_agy(prompt: str, cwd: str) -> str:
-    timeout = int(os.environ.get("AGY_ACP_TIMEOUT", "300"))
-    cmd = [agy_bin(), "--print", "--output-format", "text", prompt]
+def agy_argv(prompt: str) -> List[str]:
+    """Build `agy --print` argv.
+
+    Current `agy` treats the token after `--print` as the prompt. A bare
+    `--print` followed by `--output-format` made `--output-format` the prompt
+    and exited 2 (`agy-acp: Error: --print took "--output-format" as its
+    prompt`). Attach the prompt with `--print=…` and put output-format first.
+    """
+    cmd = [agy_bin(), "--output-format", "text", f"--print={prompt}"]
+    model = os.environ.get("BUZZ_ACP_MODEL", "").strip() or os.environ.get(
+        "AGY_ACP_MODEL", ""
+    ).strip()
+    if model:
+        cmd.insert(1, f"--model={model}")
     if os.environ.get("AGY_ACP_SKIP_PERMISSIONS") == "1":
         cmd.insert(1, "--dangerously-skip-permissions")
+    return cmd
+
+
+# ACP session/new carries Buzz's full Base+Workspace+System+Memory. Dumping
+# that into every `agy --print=` turns a hello into a multi-minute Gemini
+# bill. Keep a short prefix so persona still lands; the user text is the job.
+DEFAULT_PRINT_TIMEOUT_SECS = 90
+DEFAULT_SYSTEM_CHARS = 800
+
+
+def compose_print_prompt(system: str, user: str) -> str:
+    user = (user or "").strip()
+    system = (system or "").strip()
+    if not system:
+        return user
+    cap = int(os.environ.get("AGY_ACP_SYSTEM_CHARS", str(DEFAULT_SYSTEM_CHARS)))
+    if cap < 0:
+        cap = 0
+    if cap == 0:
+        return user
+    if len(system) > cap:
+        system = system[:cap].rstrip() + "\n[system truncated for --print]"
+    if not user:
+        return system
+    return f"{system}\n\n{user}"
+
+
+def run_agy(prompt: str, cwd: str) -> str:
+    timeout = int(os.environ.get("AGY_ACP_TIMEOUT", str(DEFAULT_PRINT_TIMEOUT_SECS)))
+    cmd = agy_argv(prompt)
     env = os.environ.copy()
     proc = subprocess.run(
         cmd,
@@ -104,10 +146,24 @@ def run_agy(prompt: str, cwd: str) -> str:
     )
     if proc.stderr:
         log(proc.stderr.strip()[:2000])
-    out = (proc.stdout or "").strip()
-    if proc.returncode != 0 and not out:
-        return f"agy --print failed (exit {proc.returncode})"
-    return out or "(agy produced no text)"
+    return format_agy_result(proc.returncode, proc.stdout, proc.stderr)
+
+
+def format_agy_result(
+    returncode: int, stdout: Optional[str], stderr: Optional[str]
+) -> str:
+    out = (stdout or "").strip()
+    err = (stderr or "").strip()
+    if out:
+        return out
+    err_line = err.split("\n")[0].strip()[:500] if err else ""
+    if returncode != 0:
+        if err_line:
+            return f"agy --print failed (exit {returncode}): {err_line}"
+        return f"agy --print failed (exit {returncode})"
+    if err_line:
+        return err_line
+    return "(agy produced no text)"
 
 
 class Adapter:
@@ -166,10 +222,10 @@ class Adapter:
             if not session:
                 err(req_id, -32602, "session/prompt: unknown session")
                 return
-            text = prompt_text(params.get("prompt"))
-            system = (session.get("system_prompt") or "").strip()
-            if system:
-                text = f"{system}\n\n{text}".strip()
+            text = compose_print_prompt(
+                session.get("system_prompt") or "",
+                prompt_text(params.get("prompt")),
+            )
             try:
                 reply = run_agy(text, session["cwd"])
             except subprocess.TimeoutExpired:

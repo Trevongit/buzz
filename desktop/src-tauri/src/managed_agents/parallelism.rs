@@ -31,6 +31,14 @@ pub const CODEX_MAX_PARALLELISM: u32 = 1;
 /// ten-wide ACP pool. Same spawn-time cap as Codex; stored JSON is unchanged.
 pub const GROK_MAX_PARALLELISM: u32 = 1;
 
+/// Antigravity Track B (`agy-acp`) is one-shot `agy --print` per turn.
+/// Ten workers × 300s print + a keyring prompt is a five-minute hello.
+pub const AGY_MAX_PARALLELISM: u32 = 1;
+
+/// Local Buzz Agent (Ember) is a single SYCL slot (`-np 1`). A 10-wide
+/// pool just queues HTTP timeouts on one llama.cpp.
+pub const BUZZ_AGENT_MAX_PARALLELISM: u32 = 1;
+
 /// Return the maximum allowed parallelism for the given harness command, or
 /// `None` when the harness has no cap.
 ///
@@ -41,6 +49,8 @@ pub fn harness_max_parallelism(command: &str) -> Option<u32> {
         "openclaw" => Some(OPENCLAW_MAX_PARALLELISM),
         "codex" | "codex-acp" => Some(CODEX_MAX_PARALLELISM),
         "grok" => Some(GROK_MAX_PARALLELISM),
+        "agy-acp" | "agy" => Some(AGY_MAX_PARALLELISM),
+        "buzz-agent" => Some(BUZZ_AGENT_MAX_PARALLELISM),
         _ => None,
     }
 }
@@ -207,6 +217,9 @@ mod tests {
         assert_eq!(super::effective_parallelism("buzz-agent", 32), 32);
         assert_eq!(super::effective_parallelism("codex-acp", 10), 1);
         assert_eq!(super::effective_parallelism("grok", 10), 1);
+        assert_eq!(super::effective_parallelism("agy-acp", 10), 1);
+        assert_eq!(super::effective_parallelism("agy", 10), 1);
+        assert_eq!(super::effective_parallelism("buzz-agent", 10), 1);
     }
 
     // ── acp_agents_value: spawn-env seam ──────────────────────────────────────
@@ -229,6 +242,8 @@ mod tests {
             "stored PATCH-style parallelism 10 must spawn one Codex worker"
         );
         assert_eq!(super::acp_agents_value("grok", 10), "1");
+        assert_eq!(super::acp_agents_value("agy-acp", 10), "1");
+        assert_eq!(super::acp_agents_value("buzz-agent", 10), "1");
     }
 
     // ── Override-direction: summary seam agreement ────────────────────────────

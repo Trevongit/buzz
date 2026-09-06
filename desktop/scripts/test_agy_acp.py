@@ -16,13 +16,21 @@ ADAPTER = ROOT / "agy-acp"
 
 
 class FakeAgy:
-    """Minimal agy --print stand-in."""
+    """Minimal agy --print stand-in.
+
+    Mirrors current agy: a bare `--print` consumes the next argv as the prompt.
+    `--print --output-format` is the production failure (exit 2).
+    """
 
     def __init__(self, path: Path) -> None:
         path.write_text(
             "#!/bin/sh\n"
+            'if [ "$1" = "--print" ] || [ "$2" = "--print" ]; then\n'
+            '  echo "Error: --print took the next token as its prompt" >&2\n'
+            "  exit 2\n"
+            "fi\n"
             "echo fake-agy\n"
-            "echo args:\"$@\"\n",
+            'echo args:"$@"\n',
             encoding="utf-8",
         )
         path.chmod(0o755)
@@ -133,6 +141,52 @@ class TestAgyAcp(unittest.TestCase):
             },
         )
         self.assertIn("error", bad[-1])
+
+    def test_print_flag_attaches_prompt(self) -> None:
+        from importlib.machinery import SourceFileLoader
+
+        mod = SourceFileLoader("agy_acp_mod", str(ADAPTER)).load_module()
+        cmd = mod.agy_argv("who are you and which model?")
+        self.assertNotIn(
+            "--print",
+            cmd,
+            "bare --print consumes the next argv (was --output-format, exit 2)",
+        )
+        self.assertIn("--print=who are you and which model?", cmd)
+        fmt_at = cmd.index("--output-format")
+        self.assertEqual(cmd[fmt_at + 1], "text")
+
+    def test_empty_stdout_surfaces_headless_permission_stderr(self) -> None:
+        from importlib.machinery import SourceFileLoader
+
+        mod = SourceFileLoader("agy_acp_mod2", str(ADAPTER)).load_module()
+        msg = mod.format_agy_result(
+            0,
+            "",
+            'jetski: no output produced — a tool required the "command" permission',
+        )
+        self.assertIn("command", msg)
+        self.assertNotEqual(msg, "(agy produced no text)")
+        skip = mod.agy_argv("hi")
+        os.environ["AGY_ACP_SKIP_PERMISSIONS"] = "1"
+        try:
+            armed = mod.agy_argv("hi")
+        finally:
+            os.environ.pop("AGY_ACP_SKIP_PERMISSIONS", None)
+        self.assertNotIn("--dangerously-skip-permissions", skip)
+        self.assertIn("--dangerously-skip-permissions", armed)
+
+    def test_compose_print_prompt_truncates_fat_system(self) -> None:
+        from importlib.machinery import SourceFileLoader
+
+        mod = SourceFileLoader("agy_acp_mod3", str(ADAPTER)).load_module()
+        fat = "BASE " * 400
+        out = mod.compose_print_prompt(fat, "hello")
+        self.assertIn("hello", out)
+        self.assertIn("[system truncated for --print]", out)
+        self.assertLess(len(out), len(fat) + 80)
+        short = mod.compose_print_prompt("You are Prism.", "hello")
+        self.assertEqual(short, "You are Prism.\n\nhello")
 
 
 if __name__ == "__main__":
