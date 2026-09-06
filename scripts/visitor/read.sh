@@ -20,9 +20,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 visitor_load_seat_env "$SEAT"
+LIMIT="$(visitor_bound_limit "$LIMIT" 100)"
 DIR="$(visitor_seat_dir "$SEAT")"
-if [[ -z "$ROOM" && -f "${DIR}/last-room.json" ]]; then
-  ROOM="$(python3 -c 'import json; print(json.load(open("'"$DIR"'/last-room.json")).get("channel_id") or "")')"
+if [[ -z "$ROOM" ]]; then
+  ROOM="$(visitor_last_room "$DIR" || true)"
 fi
 if [[ -z "$ROOM" ]]; then
   echo "error: --room required" >&2

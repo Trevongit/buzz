@@ -19,11 +19,11 @@ bash "$ROOT/collab.sh" done --room <id> --from "$VISITOR_ROLE" --to <peer> --tas
 bash "$ROOT/collab.sh" blocked --room <id> --from "$VISITOR_ROLE" --to grok --task "…" --need-prime true
 ```
 
-Do not install Hermes / Nous Portal for this kit (credit paywall). Idle nerve is `wake.sh`. OpenWorker is the later free coworker plug, not a paid portal.
+Do not install Hermes / Nous Portal for this kit (credit paywall). Idle nerve is `wake.sh`. Goose recipes use the fork CLI (`scripts/visitor/goose-cli.sh --check`), not `/usr/bin/goose` and not a minted goose seat. OpenWorker is the later free coworker plug, not a paid portal.
 
 Rules:
 
-- Do not mint seats. Do not Edit Helix / PATCH / Prism / Ember.
+- Do not mint seats (including Goose). Do not Edit Helix / PATCH / Prism / Ember.
 - Do not Custom-harness raw `agy`. Do not register this as ACP.
 - Idle: do not poll with an LLM. `wake.sh` is the nerve (stdout `VISITOR_WAKE` only).
 - Unaddressed hellos are silence. Talk to teammates via `COLLAB v0`.

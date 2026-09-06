@@ -15,6 +15,7 @@ TASK=""
 STATUS="OPEN"
 NEED_PRIME="false"
 DRY=0
+FROM_ESCALATE=0
 HOME_AGENTS="${VISITOR_AGENTS_HOME:-$HOME/.buzz-dev/agents}"
 ROLE_SEATS="${VISITOR_ROLE_SEATS:-}"
 
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --need-prime) NEED_PRIME="$2"; shift 2 ;;
     --home) HOME_AGENTS="$2"; shift 2 ;;
     --role-seats) ROLE_SEATS="$2"; shift 2 ;;
+    --from-escalate) FROM_ESCALATE=1; shift ;;
     --dry-run) DRY=1; shift ;;
     -h|--help)
       echo "Usage: post.sh --room <id|name> (--content TEXT | --file PATH | --envelope via --to --task)"
@@ -48,8 +50,9 @@ export VISITOR_AGENTS_HOME="$HOME_AGENTS"
 need="$(printf '%s' "$NEED_PRIME" | tr '[:upper:]' '[:lower:]')"
 st="$(printf '%s' "$STATUS" | tr '[:upper:]' '[:lower:]')"
 # BLOCKED+need_prime must journal via escalate.sh (once-then-stop). Do not
-# let a raw post.sh call ping Prime without that fence.
-if [[ -n "$TO_ROLE" && -n "$TASK" && "$st" == "blocked" && "$need" =~ ^(1|true|yes)$ ]]; then
+# let a raw post.sh call ping Prime without that fence. escalate.sh re-enters
+# with --from-escalate so this cannot recurse.
+if [[ "$FROM_ESCALATE" != "1" && -n "$TO_ROLE" && -n "$TASK" && "$st" == "blocked" && "$need" =~ ^(1|true|yes)$ ]]; then
   if [[ -z "$FROM_ROLE" ]]; then
     FROM_ROLE="$(visitor_default_role "$SEAT")"
   fi
@@ -108,8 +111,8 @@ fi
 
 visitor_load_seat_env "$SEAT"
 DIR="$(visitor_seat_dir "$SEAT")"
-if [[ -z "$ROOM" && -f "${DIR}/last-room.json" ]]; then
-  ROOM="$(python3 -c 'import json; print(json.load(open("'"$DIR"'/last-room.json"))["channel_id"])')"
+if [[ -z "$ROOM" ]]; then
+  ROOM="$(visitor_last_room "$DIR" || true)"
 fi
 if [[ -z "$ROOM" ]]; then
   echo "error: --room required" >&2

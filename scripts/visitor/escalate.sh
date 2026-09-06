@@ -80,8 +80,8 @@ if [[ "$allow" != "True" ]]; then
   exit 0
 fi
 
-if [[ -z "$ROOM" && -f "${DIR}/last-room.json" ]]; then
-  ROOM="$(python3 -c 'import json; print(json.load(open("'"$DIR"'/last-room.json"))["channel_id"])')"
+if [[ -z "$ROOM" ]]; then
+  ROOM="$(visitor_last_room "$DIR" || true)"
 fi
 if [[ -z "$ROOM" ]]; then
   echo "error: --room required" >&2
@@ -90,7 +90,8 @@ fi
 
 # Post first; record only after success so a failed send can retry once.
 # A second successful post of the same fingerprint is refused.
-post=(--seat "$SEAT" --room "$ROOM" --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status BLOCKED --need-prime true --home "$HOME_AGENTS")
+# --from-escalate stops post.sh from exec'ing this script again.
+post=(--seat "$SEAT" --room "$ROOM" --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status BLOCKED --need-prime true --from-escalate --home "$HOME_AGENTS")
 if [[ -n "$ROLE_SEATS" ]]; then
   post+=(--role-seats "$ROLE_SEATS")
 fi

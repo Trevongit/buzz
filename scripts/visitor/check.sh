@@ -74,6 +74,22 @@ if bash "${ROOT}/install-profile.sh" --brain hermes --dry-run >/dev/null 2>&1; t
 else
   ok "install-profile refuses hermes"
 fi
+if bash "${ROOT}/install-profile.sh" --brain goose --dry-run >/dev/null 2>&1; then
+  bad "install-profile must refuse minting a goose seat"
+else
+  ok "install-profile refuses goose mint"
+fi
+goose_check="$(bash "${ROOT}/goose-cli.sh" --check 2>&1 || true)"
+if printf '%s\n' "$goose_check" | grep -Eiq 'curl[[:space:]].+\|[[:space:]]*bash|https?://.+\|[[:space:]]*bash'; then
+  bad "goose-cli --check must not curl|bash install"
+else
+  ok "goose-cli no curl|bash"
+fi
+if printf '%s\n' "$goose_check" | grep -Eq '^(/usr/bin/goose|/bin/goose)$'; then
+  bad "goose-cli must not select /usr/bin/goose"
+else
+  ok "goose-cli not system goose"
+fi
 role="$(python3 "${ROOT}/gate.py" role-from-seat --seat codex-buzz)"
 if [[ "$role" == "codex" ]]; then
   ok "seat-to-role codex-buzz=codex"

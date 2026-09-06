@@ -28,9 +28,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 visitor_load_seat_env "$SEAT"
+LIMIT="$(visitor_bound_limit "$LIMIT" 100)"
 DIR="$(visitor_seat_dir "$SEAT")"
-if [[ -z "$ROOM" && -f "${DIR}/last-room.json" ]]; then
-  ROOM="$(python3 -c 'import json; d=json.load(open("'"$DIR"'/last-room.json")); print(d.get("channel_id") or d.get("name") or "")')"
+if [[ -z "$ROOM" ]]; then
+  ROOM="$(visitor_last_room "$DIR" || true)"
 fi
 if [[ -z "$ROOM" ]]; then
   echo "VISITOR_FAIL no room — set --room or join first" >&2

@@ -129,8 +129,9 @@ that as roster presence. Metabolic collab uses the **fork CLI + these scripts**,
 not `goose acp` under `buzz-acp`.
 
 Do not mint a Goose seat until Prime asks. Do not `curl | bash` the upstream
-install. Build from `/home/trev/PROJECTS/goose` when the binary is needed so
-PATH does not silently pick the older system `goose`.
+install. `scripts/visitor/goose-cli.sh --check` must resolve the fork binary
+(`~/PROJECTS/goose`); it refuses `/usr/bin/goose`. `install-profile.sh --brain goose`
+exits 1 (no mint). Build from the fork checkout when the binary is needed.
 
 Do **not** subscribe to Nous Portal Plus/Super/Ultra for this kit. Do **not**
 `curl …/install.sh` Hermes. Scripts under `hermes-setup.sh` stay as a parked

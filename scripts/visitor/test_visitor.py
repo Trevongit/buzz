@@ -1024,6 +1024,144 @@ class InstallProfileTests(unittest.TestCase):
             self.assertNotIn("nsec1", skill)
             self.assertIn("do not mint", proc.stdout.lower())
 
+    def test_refuse_goose_mint(self):
+        proc = subprocess.run(
+            ["bash", str(ROOT / "install-profile.sh"), "--brain", "goose", "--dry-run"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("do not mint a Goose seat", proc.stderr)
+        self.assertNotIn("status=dry-run", proc.stdout)
+        self.assertNotIn("curl|bash", proc.stdout)
+
+
+class LastRoomAndLimitTests(unittest.TestCase):
+    def test_last_room_and_bound_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seat = Path(tmp) / "codex-buzz"
+            seat.mkdir()
+            (seat / "last-room.json").write_text(
+                '{"channel_id": "11111111-2222-3333-4444-555555555555", "name": "lab"}\n',
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'source "$1"; visitor_last_room "$2"; visitor_bound_limit 500 100; visitor_bound_limit no 100',
+                    "_",
+                    str(ROOT / "lib.sh"),
+                    str(seat),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+            self.assertEqual(
+                lines,
+                ["11111111-2222-3333-4444-555555555555", "100", "20"],
+            )
+
+
+class EscalateNoRecurseTests(unittest.TestCase):
+    def test_escalate_script_passes_from_escalate(self):
+        text = (ROOT / "escalate.sh").read_text(encoding="utf-8")
+        self.assertIn("--from-escalate", text)
+
+    def test_from_escalate_dry_run_does_not_reenter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = Path(tmp) / "codex-buzz"
+            b = Path(tmp) / "agy-buzz"
+            g = Path(tmp) / "buzz"
+            a.mkdir()
+            b.mkdir()
+            g.mkdir()
+            a.joinpath("PUBLIC.txt").write_text(
+                "seat: codex-buzz\nrelay: wss://tail.example\n", encoding="utf-8"
+            )
+            b.joinpath("PUBLIC.txt").write_text(
+                "seat: agy-buzz\nrelay: https://tail.example\n", encoding="utf-8"
+            )
+            g.joinpath("PUBLIC.txt").write_text(
+                "seat: buzz\nrelay: wss://tail.example\n", encoding="utf-8"
+            )
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "post.sh"),
+                    "--from",
+                    "codex",
+                    "--to",
+                    "grok",
+                    "--task",
+                    "need origin access",
+                    "--status",
+                    "BLOCKED",
+                    "--need-prime",
+                    "true",
+                    "--from-escalate",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("need_prime: true", proc.stdout)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+            self.assertNotIn("Prime not pinged", proc.stdout)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+
+class GooseCliTests(unittest.TestCase):
+    def test_refuses_usr_bin_goose(self):
+        env = os.environ.copy()
+        env["GOOSE_BIN"] = "/usr/bin/goose"
+        proc = subprocess.run(
+            ["bash", str(ROOT / "goose-cli.sh"), "--check"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("system-goose-refused", proc.stdout)
+        self.assertNotRegex(proc.stdout.lower(), r"curl\s+\S+\s*\|\s*bash")
+        self.assertNotIn("nsec", proc.stdout.lower())
+
+    def test_refuses_desktop_acp_fork_path(self):
+        proc = subprocess.run(
+            ["bash", str(ROOT / "goose-cli.sh"), "--check", "--fork", "/tmp/managed-agents-nope"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("refuse Desktop ACP", proc.stderr)
+
+    def test_missing_fork_binary_is_offline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = os.environ.copy()
+            env.pop("GOOSE_BIN", None)
+            proc = subprocess.run(
+                ["bash", str(ROOT / "goose-cli.sh"), "--check", "--fork", tmp],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            self.assertIn(proc.returncode, (2, 1), proc.stdout + proc.stderr)
+            combined = proc.stdout + proc.stderr
+            self.assertNotRegex(combined.lower(), r"curl\s+\S+\s*\|\s*bash")
+            self.assertIn("do not", combined.lower())
+            self.assertNotIn("/usr/bin/goose", proc.stdout.splitlines()[-1] if proc.stdout else "")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

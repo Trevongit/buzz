@@ -110,6 +110,39 @@ visitor_run() {
   "$cli" --relay "${BUZZ_RELAY_URL}" "$@"
 }
 
+visitor_last_room() {
+  local dir="${1:-}"
+  local f="${dir}/last-room.json"
+  if [[ ! -f "$f" ]]; then
+    return 1
+  fi
+  python3 -c 'import json,sys
+from pathlib import Path
+p=Path(sys.argv[1])
+try:
+    d=json.loads(p.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(1)
+if not isinstance(d, dict):
+    raise SystemExit(1)
+print((d.get("channel_id") or d.get("name") or "").strip())
+' "$f"
+}
+
+visitor_bound_limit() {
+  local n="${1:-20}"
+  local max="${2:-100}"
+  if ! [[ "$n" =~ ^[1-9][0-9]*$ ]]; then
+    echo "20"
+    return
+  fi
+  if (( n > max )); then
+    echo "$max"
+  else
+    echo "$n"
+  fi
+}
+
 visitor_resolve_room() {
   local room="$1"
   if [[ "$room" =~ ^[0-9a-fA-F]{8}- ]]; then

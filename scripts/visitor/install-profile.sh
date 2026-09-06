@@ -15,6 +15,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: install-profile.sh --brain grok|codex|agy [--dest DIR] [--dry-run]"
       echo "  Hermes/Nous Portal is parked (paywall). Free path: grok|codex|agy + wake.sh"
+      echo "  Goose is the fork CLI recipe engine — do not mint a goose seat."
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;
@@ -25,6 +26,12 @@ case "$BRAIN" in
   hermes)
     echo "error: Hermes/Nous Portal is parked (paywall). Use --brain grok|codex|agy" >&2
     echo "free path: scripts/visitor/wake.sh (do not curl|bash install)" >&2
+    exit 1
+    ;;
+  goose)
+    echo "error: do not mint a Goose seat. Goose is the fork CLI, not Desktop ACP." >&2
+    echo "free path: bash scripts/visitor/goose-cli.sh --check (not /usr/bin/goose)" >&2
+    echo "recipes: ~/PROJECTS/goose (in-tree buzz/, workflow_recipes). Do not curl|bash." >&2
     exit 1
     ;;
   grok|codex|agy) ;;
