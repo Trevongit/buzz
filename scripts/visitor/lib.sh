@@ -29,7 +29,8 @@ visitor_resolve_seat() {
 
 visitor_seat_dir() {
   local seat="${1:-$(visitor_resolve_seat)}"
-  echo "${HOME}/.buzz-dev/agents/${seat}"
+  local home="${VISITOR_AGENTS_HOME:-$HOME/.buzz-dev/agents}"
+  echo "${home}/${seat}"
 }
 
 visitor_default_role() {

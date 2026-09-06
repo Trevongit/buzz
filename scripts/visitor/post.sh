@@ -43,9 +43,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+export VISITOR_AGENTS_HOME="$HOME_AGENTS"
+
 if [[ -n "$TO_ROLE" && -n "$TASK" ]]; then
   if [[ -z "$FROM_ROLE" ]]; then
-    echo "error: --from required with --to/--task" >&2
+    FROM_ROLE="$(visitor_default_role "$SEAT")"
+  fi
+  if [[ -z "$FROM_ROLE" ]]; then
+    echo "error: --from required with --to/--task (or a mapped --seat)" >&2
     exit 1
   fi
   bus=(same-bus --from "$FROM_ROLE" --to "$TO_ROLE" --home "$HOME_AGENTS")

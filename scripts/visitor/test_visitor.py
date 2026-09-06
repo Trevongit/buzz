@@ -597,25 +597,120 @@ class SameBusSendTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
 
     def test_escalate_dry_run_does_not_ping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            grok = Path(tmp) / "buzz"
+            grok.mkdir(exist_ok=True)
+            grok.joinpath("PUBLIC.txt").write_text(
+                "seat: buzz\ndisplay_name: grok-build\nrelay: wss://tail.example\n",
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "escalate.sh"),
+                    "--from",
+                    "codex",
+                    "--to",
+                    "grok",
+                    "--task",
+                    "need origin access",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("need_prime: true", proc.stdout)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+    def test_escalate_dry_run_mixed_exits_3(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            grok = Path(tmp) / "buzz"
+            grok.mkdir(exist_ok=True)
+            grok.joinpath("PUBLIC.txt").write_text(
+                "seat: buzz\ndisplay_name: grok-build\nrelay: https://ground.example\n",
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "escalate.sh"),
+                    "--from",
+                    "codex",
+                    "--to",
+                    "grok",
+                    "--task",
+                    "need origin access",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertIn("prime-other-bus", proc.stderr)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+            self.assertNotIn("deadbeef", proc.stdout)
+
+    def test_collab_blocked_need_prime_mixed_does_not_load_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, False)
+            grok = Path(tmp) / "buzz"
+            grok.mkdir(exist_ok=True)
+            grok.joinpath("PUBLIC.txt").write_text(
+                "seat: buzz\nrelay: https://ground.example\n",
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "collab.sh"),
+                    "blocked",
+                    "--from",
+                    "codex",
+                    "--to",
+                    "grok",
+                    "--task",
+                    "need origin access",
+                    "--home",
+                    tmp,
+                    "--need-prime",
+                    "true",
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertIn("prime-other-bus", proc.stderr)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+
+class SeatDirTests(unittest.TestCase):
+    def test_honors_visitor_agents_home(self):
         proc = subprocess.run(
             [
                 "bash",
-                str(ROOT / "escalate.sh"),
-                "--from",
-                "codex",
-                "--to",
-                "grok",
-                "--task",
-                "need origin access",
-                "--dry-run",
+                "-c",
+                'source "$1"; VISITOR_AGENTS_HOME=/tmp/visitor-home visitor_seat_dir codex-buzz',
+                "_",
+                str(ROOT / "lib.sh"),
             ],
             capture_output=True,
             text=True,
             check=False,
         )
-        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("need_prime: true", proc.stdout)
-        self.assertIn("DRY-RUN not posted", proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "/tmp/visitor-home/codex-buzz")
 
 
 class HermesExampleTests(unittest.TestCase):
@@ -641,6 +736,9 @@ class SetupScriptTests(unittest.TestCase):
         self.assertNotIn("nsec", proc.stdout.lower())
         if proc.returncode == 2:
             self.assertIn("offline", proc.stdout)
+            self.assertIn("do_not: curl|bash", proc.stdout)
+            self.assertNotRegex(proc.stdout.lower(), r"curl\s+\S+\s*\|\s*bash")
+            self.assertNotIn("install:", proc.stdout.lower())
 
     def test_write_dir_is_complete_offline(self):
         with tempfile.TemporaryDirectory() as tmp:

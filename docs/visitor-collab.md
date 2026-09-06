@@ -95,7 +95,9 @@ need_prime: false
 loads keys. `to:` must share the sender's PUBLIC.txt host (`to: all` only when
 every mapped seat is on that bus). `escalate.sh` is the only Prime path;
 it journals `prime-escalation.json` in the seat dir after a successful post so the
-same task cannot spam. `gate.py` parses envelopes.
+same task cannot spam. If Grok/Prime is on another host (house: Groundfeed vs
+Tailscale), escalate fail-closes with `prime-other-bus` and does not post —
+mixed relays are a silent empty room. `gate.py` parses envelopes.
 
 A visitor that cannot finish a task posts `BLOCKED` **once**; it does not retry-spam Prime.
 

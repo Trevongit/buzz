@@ -17,7 +17,8 @@ fi
 
 python3 "${ROOT}/test_visitor.py" >/dev/null && ok "test_visitor.py" || bad "test_visitor.py"
 
-if bash "${ROOT}/hermes-setup.sh" --check >/dev/null 2>&1; then
+hermes_check="$(bash "${ROOT}/hermes-setup.sh" --check 2>&1 || true)"
+if printf '%s\n' "$hermes_check" | grep -q '^status=ready$'; then
   ok "hermes gateway binary"
 else
   echo "skip hermes binary (adapter-missing) — offline runner still valid"
@@ -26,6 +27,11 @@ else
   else
     bad "hermes example"
   fi
+fi
+if printf '%s\n' "$hermes_check" | grep -Eiq 'curl[[:space:]].+\|[[:space:]]*bash|https?://.+\|[[:space:]]*bash'; then
+  bad "hermes-setup --check must not curl|bash install"
+else
+  ok "hermes-setup no curl|bash"
 fi
 
 acp_hits="$(grep -RInE 'managed-agents\.json' "$ROOT" --include='*.sh' --include='*.py' --include='*.md' --include='*.yaml' || true)"

@@ -16,6 +16,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown: $1" >&2; exit 1 ;;
   esac
 done
+export VISITOR_AGENTS_HOME="$HOME_AGENTS"
 out="$(python3 "${ROOT}/gate.py" roster --seats "$SEATS" --home "$HOME_AGENTS" || true)"
 echo "$out"
 python3 -c '

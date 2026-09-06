@@ -54,9 +54,8 @@ echo "example=$example"
 if [[ "$CHECK_ONLY" == "1" ]]; then
   if [[ -z "$hermes_bin" ]]; then
     echo "status=adapter-missing"
-    echo "offline: hermes-setup.sh --write-dir DIR  (poll runner, not hermes-acp)"
-    echo "install: https://hermes-agent.nousresearch.com  then: hermes gateway setup → Buzz"
-    echo "do_not: Desktop runtime hermes-acp for this path"
+    echo "offline: hermes-setup.sh --write-dir DIR  (mention-only poll, not hermes-acp)"
+    echo "do_not: curl|bash install; do_not: Desktop runtime hermes-acp"
     exit 2
   fi
   echo "status=ready"

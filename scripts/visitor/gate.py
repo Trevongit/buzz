@@ -610,7 +610,7 @@ if __name__ == "__main__":
         require_mention=bool(payload.get("require_mention", True)),
         names=list(payload.get("names") or []),
         pubkeys=list(payload.get("pubkeys") or []),
-        seat_role=payload.get("seat_role") or "grok",
+        seat_role=payload.get("seat_role") or "",
     )
     env = parse_collab_envelope(payload.get("content") or "")
     json.dump(

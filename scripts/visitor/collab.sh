@@ -36,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown: $1" >&2; exit 1 ;;
   esac
 done
+export VISITOR_AGENTS_HOME="$HOME_AGENTS"
 
 if [[ -z "$FROM_ROLE" ]]; then
   FROM_ROLE="$(visitor_default_role "$SEAT")"
@@ -54,9 +55,12 @@ esac
 
 need="$(printf '%s' "$NEED_PRIME" | tr '[:upper:]' '[:lower:]')"
 if [[ "$STATUS" == "BLOCKED" && "$need" =~ ^(1|true|yes)$ ]]; then
-  esc=(--from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --seat "$SEAT")
+  esc=(--from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --seat "$SEAT" --home "$HOME_AGENTS")
   if [[ -n "$ROOM" ]]; then
     esc+=(--room "$ROOM")
+  fi
+  if [[ -n "$ROLE_SEATS" ]]; then
+    esc+=(--role-seats "$ROLE_SEATS")
   fi
   if [[ "$DRY" == "1" ]]; then
     esc+=(--dry-run)
