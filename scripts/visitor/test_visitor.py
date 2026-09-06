@@ -20,6 +20,7 @@ from gate import (  # noqa: E402
     collab_send_gate,
     cooldown_blocks,
     filter_wakes,
+    last_room_bus_ok,
     mention_names_from_card,
     normalize_relay,
     parse_collab_envelope,
@@ -1186,7 +1187,7 @@ class LastRoomAndLimitTests(unittest.TestCase):
                 [
                     "bash",
                     "-c",
-                    'source "$1"; visitor_last_room "$2"; visitor_bound_limit 500 100; visitor_bound_limit no 100',
+                    'source "$1"; visitor_last_room "$2"; visitor_bound_limit 500 100; visitor_bound_limit no 100; visitor_bound_limit 0 300',
                     "_",
                     str(ROOT / "lib.sh"),
                     str(seat),
@@ -1199,8 +1200,51 @@ class LastRoomAndLimitTests(unittest.TestCase):
             lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
             self.assertEqual(
                 lines,
-                ["11111111-2222-3333-4444-555555555555", "100", "20"],
+                ["11111111-2222-3333-4444-555555555555", "100", "20", "20"],
             )
+
+    def test_last_room_bus_mismatch_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seat = Path(tmp) / "x"
+            seat.mkdir()
+            (seat / "PUBLIC.txt").write_text(
+                "seat: x\nrelay: wss://tail.example\n", encoding="utf-8"
+            )
+            (seat / "last-room.json").write_text(
+                '{"channel_id": "11111111-2222-3333-4444-555555555555", "relay": "https://ground.example"}\n',
+                encoding="utf-8",
+            )
+            bad = last_room_bus_ok(str(seat))
+            self.assertFalse(bad["ok"])
+            self.assertEqual(bad["reason"], "last-room-bus-mismatch")
+            proc = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'source "$1"; visitor_assert_last_room_bus "$2"',
+                    "_",
+                    str(ROOT / "lib.sh"),
+                    str(seat),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertIn("last-room-bus-mismatch", proc.stderr)
+            (seat / "last-room.json").write_text(
+                '{"channel_id": "11111111-2222-3333-4444-555555555555", "relay": "wss://tail.example/"}\n',
+                encoding="utf-8",
+            )
+            good = last_room_bus_ok(str(seat))
+            self.assertTrue(good["ok"])
+            cli = subprocess.run(
+                ["python3", str(ROOT / "gate.py"), "last-room-bus", "--dir", str(seat)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(cli.returncode, 0, cli.stdout + cli.stderr)
 
 
 class EscalateNoRecurseTests(unittest.TestCase):

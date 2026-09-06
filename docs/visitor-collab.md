@@ -26,6 +26,8 @@ Do **not** treat UATP or Hermes gateway as ACP.
 
 Send paths (`join` / `read` / `post` / `wake`) fail-closed when `PUBLIC.txt`
 host disagrees with the process `BUZZ_RELAY_URL` (agent.env is never rewritten).
+Falling back to `last-room.json` also fail-closes when that card's relay host
+disagrees with `PUBLIC.txt` (stale join from another bus).
 
 Visitors on the same job must share **one relay**. House seats today: Grok Build
 `buzz` often on Groundfeed; `codex-buzz` / `agy-buzz` may be on the Tailscale

@@ -90,6 +90,11 @@ if printf '%s\n' "$goose_check" | grep -Eq '^(/usr/bin/goose|/bin/goose)$'; then
 else
   ok "goose-cli not system goose"
 fi
+if grep -q 'send-gate' "${ROOT}/post.sh" && grep -q -- '--from-escalate' "${ROOT}/escalate.sh"; then
+  ok "send-gate + from-escalate fences"
+else
+  bad "missing send-gate / from-escalate fences"
+fi
 role="$(python3 "${ROOT}/gate.py" role-from-seat --seat codex-buzz)"
 if [[ "$role" == "codex" ]]; then
   ok "seat-to-role codex-buzz=codex"

@@ -123,6 +123,19 @@ visitor_run() {
   "$cli" --relay "${BUZZ_RELAY_URL}" "$@"
 }
 
+visitor_assert_last_room_bus() {
+  local dir="${1:-}"
+  local out reason
+  out="$(python3 "${VISITOR_ROOT}/gate.py" last-room-bus --dir "$dir" || true)"
+  if python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1] or "{}").get("ok") else 3)' "$out"; then
+    return 0
+  fi
+  reason="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("reason") or "last-room-bus-mismatch")' "$out" 2>/dev/null || echo last-room-bus-mismatch)"
+  echo "error: last-room.json relay does not match PUBLIC.txt (silent empty room)" >&2
+  echo "VISITOR_COLLAB skip reason=${reason}" >&2
+  return 3
+}
+
 visitor_last_room() {
   local dir="${1:-}"
   local f="${dir}/last-room.json"

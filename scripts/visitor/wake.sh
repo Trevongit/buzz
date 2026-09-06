@@ -29,8 +29,10 @@ done
 
 visitor_load_seat_env "$SEAT"
 LIMIT="$(visitor_bound_limit "$LIMIT" 100)"
+TICK="$(visitor_bound_limit "$TICK" 300)"
 DIR="$(visitor_seat_dir "$SEAT")"
 if [[ -z "$ROOM" ]]; then
+  visitor_assert_last_room_bus "$DIR" || exit 3
   ROOM="$(visitor_last_room "$DIR" || true)"
 fi
 if [[ -z "$ROOM" ]]; then

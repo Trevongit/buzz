@@ -335,6 +335,59 @@ def relay_from_seat_dir(seat_dir: str) -> str:
     return public_card_from_dir(seat_dir).get("relay") or ""
 
 
+def last_room_bus_ok(seat_dir: str) -> dict[str, Any]:
+    """Fail-closed: last-room.json relay host must match PUBLIC.txt when set.
+    Missing last-room (or a card with no relay) is not a mismatch. Never opens agent.env."""
+    pub_host = normalize_relay(relay_from_seat_dir(seat_dir))
+    path = Path(seat_dir) / "last-room.json"
+    if not path.is_file():
+        return {
+            "ok": True,
+            "reason": "no-last-room",
+            "last_host": "",
+            "public_host": pub_host,
+        }
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        loaded = None
+    if not isinstance(loaded, dict):
+        return {
+            "ok": False,
+            "reason": "last-room-invalid",
+            "last_host": "",
+            "public_host": pub_host,
+        }
+    last_host = normalize_relay(str(loaded.get("relay") or ""))
+    if not last_host:
+        return {
+            "ok": True,
+            "reason": "last-room-relay-missing",
+            "last_host": "",
+            "public_host": pub_host,
+        }
+    if not pub_host:
+        return {
+            "ok": False,
+            "reason": "public-relay-missing",
+            "last_host": last_host,
+            "public_host": "",
+        }
+    if last_host != pub_host:
+        return {
+            "ok": False,
+            "reason": "last-room-bus-mismatch",
+            "last_host": last_host,
+            "public_host": pub_host,
+        }
+    return {
+        "ok": True,
+        "reason": "last-room-bus-match",
+        "last_host": last_host,
+        "public_host": pub_host,
+    }
+
+
 def public_env_relay_ok(seat_dir: str, env_relay: str) -> dict[str, Any]:
     """Fail-closed: process BUZZ_RELAY_URL host must match PUBLIC.txt.
     Never opens agent.env. Does not write files."""
@@ -636,12 +689,17 @@ if __name__ == "__main__":
         sys.stdout.write("\n")
         raise SystemExit(0)
 
-    if len(sys.argv) > 1 and sys.argv[1] in ("public-env", "relay-from-dir"):
+    if len(sys.argv) > 1 and sys.argv[1] in ("public-env", "relay-from-dir", "last-room-bus"):
         kw = _parse_kw(sys.argv[2:])
         d = kw.get("dir") or ""
         if sys.argv[1] == "relay-from-dir":
             print(relay_from_seat_dir(d), end="")
             raise SystemExit(0)
+        if sys.argv[1] == "last-room-bus":
+            report = last_room_bus_ok(d)
+            json.dump(report, sys.stdout)
+            sys.stdout.write("\n")
+            raise SystemExit(0 if report["ok"] else 3)
         report = public_env_relay_ok(d, kw.get("relay") or "")
         json.dump(report, sys.stdout)
         sys.stdout.write("\n")

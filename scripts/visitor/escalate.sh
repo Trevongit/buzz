@@ -82,6 +82,7 @@ if [[ "$allow" != "True" ]]; then
 fi
 
 if [[ -z "$ROOM" ]]; then
+  visitor_assert_last_room_bus "$DIR" || exit 3
   ROOM="$(visitor_last_room "$DIR" || true)"
 fi
 if [[ -z "$ROOM" ]]; then
