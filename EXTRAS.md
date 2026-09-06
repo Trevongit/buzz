@@ -40,7 +40,7 @@ Private operator notes stay out of git. If you are an agent: **read this file, t
 | **Clone** | `git clone -b feat/origin-plus-enhancements https://github.com/Trevongit/buzz.git` |
 | **Internal Gemini** | Desktop runtime **Antigravity**, command `agy-acp`, underlying CLI `agy` |
 | **External Gemini** | Visitor seat in [Trevongit/agy-uni-adapt](https://github.com/Trevongit/agy-uni-adapt) — UATP, not ACP |
-| **Visitor collab kit** | External Codex / Antigravity / Grok — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Not ACP. Hermes/Nous Portal **parked** (paywall). |
+| **Visitor collab kit** | External Codex / Antigravity / Grok / **Goose CLI fork** — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Not ACP. Hermes/Nous Portal **parked**. |
 | **Do not** | Custom harness `agy`. Origin-PR this whole branch. Treat UATP as ACP. Register Hermes gateway as a Desktop runtime. |
 | **Install adapter** | `bash desktop/scripts/install-agy-acp.sh` → `~/.local/bin/agy-acp` |
 | **Tests** | `python3 desktop/scripts/test_agy_acp.py` · `python3 scripts/visitor/test_visitor.py` · `bash scripts/visitor/check.sh` · `bash scripts/visitor/hermes-setup.sh --check` |
@@ -57,7 +57,8 @@ External visitors (buzz-cli, idle = 0)  #
     ├── Grok Build + use-buzz
     ├── Codex CLI  (codex-buzz seat)
     ├── agy + UATP (agy-buzz / Track A)
-    └── (Hermes ③ parked — Nous Portal paywall; use wake.sh instead)
+    ├── Goose CLI fork (recipes / unattended; not Desktop goose acp)
+    └── (Hermes ③ parked — Nous Portal paywall)
 ```
 
 Same brains, different sockets. Do not merge visitor into Desktop ACP. See [docs/visitor-collab.md](docs/visitor-collab.md).
@@ -126,7 +127,7 @@ Defaults below are extras Desktop **Experiments** (`previewFeatureEnabled`). Run
 | **Codex managed turbo** | Agent spawn | on extras | Cap Codex/Grok `BUZZ_ACP_AGENTS` to 1 at spawn (stored PATCH parallelism 10 is unchanged). `CODEX_CONFIG` is `approval_policy=never` + `sandbox_mode=danger-full-access` so the first `buzz messages send` is the real send. Do not Edit/Save PATCH. |
 | **Ember send unwrap** | ACP fallback | Ember-only flag | If 9B prints `buzz messages send --content "…"` instead of calling the tool, publish-final posts the quoted body, not the argv. Helix/PATCH/Prism stay off the flag. |
 | **Metabolic spawn caps** | Agent spawn | on extras | Effective `BUZZ_ACP_AGENTS=1` for grok, Codex, agy-acp, buzz-agent. Stored Parallelism 10 is unchanged — **Cancel** the Edit form; blank Save writes 10. Prism `--print` truncates fat system prompt; timeout 90s. |
-| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for **Codex, Antigravity, Grok** (free path: `buzz-cli` + existing seats). Hermes / Nous Portal **parked** — credit paywall, do not install. OpenWorker later if a local coworker is needed. Same-bus fail-closed. Idle = 0 tokens. |
+| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity, Grok, and **Goose CLI** from [Trevongit/goose](https://github.com/Trevongit/goose) (recipes / unattended, in-tree `buzz/`). Not Desktop `goose acp`. Hermes / Nous Portal **parked**. Same-bus fail-closed. Idle = 0 tokens. |
 | **Pocket Listen** | Experiment `pocketListen` | **on** | Speak, pause/resume, wait for a named Reader summary, Follow along. Off hides Listen controls. |
 | **Public GitHub reads** | Experiment `publicGithubRead` | **on** | Overview / Files / Fetch compare for public `github.com` remotes without cloning. |
 | **GitHub machine git** | Experiment `githubMachineGit` | **off** | Clone/fetch/pull/push with this computer’s `gh`/`git` login. Buzz never puts the Nostr key in that git process. |

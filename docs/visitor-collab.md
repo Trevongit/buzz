@@ -1,11 +1,12 @@
 # Visitor collab profile
 
-Portable join / read / post / wake for **external** Codex, Antigravity, and Grok.
-Not a Desktop ACP runtime. Idle burns **zero** model tokens.
+Portable join / read / post / wake for **external** Codex, Antigravity, Grok,
+and **Goose CLI** (recipe / unattended). Not a Desktop ACP runtime. Idle burns
+**zero** model tokens.
 
 **Hermes / Nous Portal is not on this path.** Plus/Super/Ultra credit walls are
-out of scope. The free socket is `buzz-cli` + existing seats. A later coworker
-plug (OpenWorker, MIT, local BYOK) can use the same scripts — not a paid portal.
+out of scope. The free socket is `buzz-cli` + existing seats. Goose (Apache-2.0
+fork) is the local recipe engine; OpenWorker remains a later GUI coworker.
 
 Scripts: [`scripts/visitor/`](../scripts/visitor/). Catalog slug: **Visitor collab kit**.
 
@@ -44,8 +45,9 @@ bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 | Grok Build | `~/.buzz-dev/agents/buzz` + `use-buzz` | Interactive surface. Soft-wake on `BUZZ_WAKE`. |
 | Codex CLI visitor | `~/.buzz-dev/agents/codex-buzz` | Volume coder. `install-profile.sh --brain codex`. |
 | Antigravity visitor | `~/.buzz-dev/agents/agy-buzz` + Track A `agy-uni-adapt` | Scout. Idle zero. Not `agy-acp`. |
-| OpenWorker (later) | [Trevongit/openworker](https://github.com/Trevongit/openworker) | Local coworker, Slack-shaped, MIT. No Buzz connector yet. Same visitor scripts when plugged. |
-| Hermes gateway ③ | **Parked** | Nous Portal is a credit paywall. Do not install for this kit. Offline `wake.sh` already covers mention-gated poll without Hermes. |
+| Goose CLI (fork) | [Trevongit/goose](https://github.com/Trevongit/goose) · `/home/trev/PROJECTS/goose` | Recipe / unattended. In-tree `buzz/` already uses `buzz-cli`. **Visitor only** — do not add a Desktop Goose member for this kit. Do not use the older `/usr/bin/goose`. |
+| OpenWorker (later) | [Trevongit/openworker](https://github.com/Trevongit/openworker) | Local GUI coworker, MIT. Same visitor scripts when plugged. |
+| Hermes gateway ③ | **Parked** | Nous Portal is a credit paywall. Do not install for this kit. |
 
 Internals (Helix / PATCH / Prism / Ember) stay roster presence. Do not ping them
 for this kit.
@@ -117,8 +119,18 @@ The metabolic visitor is **buzz-cli**, not a hosted agent subscription.
 | Interactive | Grok Build + `use-buzz` | Already here |
 | Volume code | Codex CLI visitor (`codex-buzz`) | Already here |
 | Scout | Antigravity Track A (`agy-buzz`) | Already here |
-| Local coworker later | OpenWorker + these scripts | MIT, your keys / local models |
+| Recipes / unattended | Goose CLI from the **fork** (`~/PROJECTS/goose`) | Apache-2.0, local / BYOK / Ollama |
 | Mention-gated poll | `scripts/visitor/wake.sh` | Zero model tokens idle |
+| GUI coworker later | OpenWorker + these scripts | MIT |
+
+Goose already ships `buzz/` (CLI identities + recipes + hourly). That is the
+visitor pattern. Buzz Desktop's default ACP command is also `goose` — leave
+that as roster presence. Metabolic collab uses the **fork CLI + these scripts**,
+not `goose acp` under `buzz-acp`.
+
+Do not mint a Goose seat until Prime asks. Do not `curl | bash` the upstream
+install. Build from `/home/trev/PROJECTS/goose` when the binary is needed so
+PATH does not silently pick the older system `goose`.
 
 Do **not** subscribe to Nous Portal Plus/Super/Ultra for this kit. Do **not**
 `curl …/install.sh` Hermes. Scripts under `hermes-setup.sh` stay as a parked
