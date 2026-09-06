@@ -45,6 +45,27 @@ done
 
 export VISITOR_AGENTS_HOME="$HOME_AGENTS"
 
+need="$(printf '%s' "$NEED_PRIME" | tr '[:upper:]' '[:lower:]')"
+st="$(printf '%s' "$STATUS" | tr '[:upper:]' '[:lower:]')"
+# BLOCKED+need_prime must journal via escalate.sh (once-then-stop). Do not
+# let a raw post.sh call ping Prime without that fence.
+if [[ -n "$TO_ROLE" && -n "$TASK" && "$st" == "blocked" && "$need" =~ ^(1|true|yes)$ ]]; then
+  if [[ -z "$FROM_ROLE" ]]; then
+    FROM_ROLE="$(visitor_default_role "$SEAT")"
+  fi
+  esc=(--from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --seat "$SEAT" --home "$HOME_AGENTS")
+  if [[ -n "$ROOM" ]]; then
+    esc+=(--room "$ROOM")
+  fi
+  if [[ -n "$ROLE_SEATS" ]]; then
+    esc+=(--role-seats "$ROLE_SEATS")
+  fi
+  if [[ "$DRY" == "1" ]]; then
+    esc+=(--dry-run)
+  fi
+  exec bash "${VISITOR_ROOT}/escalate.sh" "${esc[@]}"
+fi
+
 if [[ -n "$TO_ROLE" && -n "$TASK" ]]; then
   if [[ -z "$FROM_ROLE" ]]; then
     FROM_ROLE="$(visitor_default_role "$SEAT")"
@@ -57,8 +78,15 @@ if [[ -n "$TO_ROLE" && -n "$TASK" ]]; then
   if [[ -n "$ROLE_SEATS" ]]; then
     bus+=(--role-seats "$ROLE_SEATS")
   fi
-  if ! python3 "${VISITOR_ROOT}/gate.py" "${bus[@]}" >/dev/null; then
+  bus_json="$(python3 "${VISITOR_ROOT}/gate.py" "${bus[@]}" || true)"
+  if ! python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1] or "{}").get("ok") else 3)' "$bus_json"; then
+    reason="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("reason") or "mixed-or-missing")' "$bus_json" 2>/dev/null || echo mixed-or-missing)"
     echo "error: COLLAB to=$TO_ROLE is not on the same relay bus as from=$FROM_ROLE" >&2
+    echo "VISITOR_COLLAB skip reason=${reason}" >&2
+    if [[ "$DRY" == "1" ]]; then
+      python3 "${VISITOR_ROOT}/gate.py" render --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status "$STATUS" --need-prime "$NEED_PRIME" || true
+      echo "DRY-RUN not posted"
+    fi
     exit 3
   fi
   CONTENT="$(python3 "${VISITOR_ROOT}/gate.py" render --from "$FROM_ROLE" --to "$TO_ROLE" --task "$TASK" --status "$STATUS" --need-prime "$NEED_PRIME")"

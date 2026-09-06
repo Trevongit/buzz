@@ -405,6 +405,8 @@ class RosterTests(unittest.TestCase):
             mixed = roster_report({"a": str(a), "c": str(c)})
             self.assertFalse(mixed["ready"])
             self.assertEqual(len(mixed["buses"]), 2)
+            self.assertFalse(roster_report({})["aligned"])
+            self.assertFalse(roster_report({"z": str(tmp + "/nope")})["aligned"])
 
     def test_mention_names_include_display(self):
         names = mention_names_from_card(
@@ -655,6 +657,45 @@ class SameBusSendTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertIn("VISITOR_COLLAB skip reason=", proc.stderr)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+            self.assertNotIn("error: no identity", proc.stderr)
+
+    def test_post_blocked_need_prime_uses_escalate_journal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            grok = Path(tmp) / "buzz"
+            grok.mkdir(exist_ok=True)
+            grok.joinpath("PUBLIC.txt").write_text(
+                "seat: buzz\nrelay: https://ground.example\n",
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "post.sh"),
+                    "--from",
+                    "codex",
+                    "--to",
+                    "grok",
+                    "--task",
+                    "need origin access",
+                    "--status",
+                    "BLOCKED",
+                    "--need-prime",
+                    "true",
+                    "--home",
+                    tmp,
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertIn("prime-other-bus", proc.stderr)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+            self.assertNotIn("error: no identity", proc.stderr)
 
     def test_escalate_dry_run_does_not_ping(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -870,6 +911,18 @@ class SetupScriptTests(unittest.TestCase):
 
 
 class InstallProfileTests(unittest.TestCase):
+    def test_refuse_parked_hermes(self):
+        proc = subprocess.run(
+            ["bash", str(ROOT / "install-profile.sh"), "--brain", "hermes", "--dry-run"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("parked", proc.stderr.lower())
+        self.assertNotIn("status=dry-run", proc.stdout)
+        self.assertNotIn("curl|bash", proc.stdout)
+
     def test_dry_run(self):
         proc = subprocess.run(
             ["bash", str(ROOT / "install-profile.sh"), "--brain", "codex", "--dry-run"],

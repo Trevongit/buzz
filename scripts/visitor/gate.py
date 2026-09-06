@@ -296,7 +296,7 @@ def roster_report(seat_dirs: dict[str, str]) -> dict[str, Any]:
     unique = sorted(set(hosts.values()))
     ready = len(unique) == 1 and len(hosts) >= 2 and not missing
     return {
-        "aligned": len(unique) <= 1 and not missing,
+        "aligned": len(unique) == 1 and not missing,
         "ready": ready,
         "buses": buses,
         "missing": missing,

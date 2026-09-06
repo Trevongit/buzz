@@ -92,7 +92,8 @@ need_prime: false
 | hello / emoji / unaddressed | nobody | nobody |
 
 `collab.sh open|done|blocked` writes that block. `--dry-run` prints it and never
-loads keys. `to:` must share the sender's PUBLIC.txt host (`to: all` only when
+loads keys. A raw `post.sh --status BLOCKED --need-prime true` is the same
+escalate path (journal + same-bus), not a back door. `to:` must share the sender's PUBLIC.txt host (`to: all` only when
 every *present* mapped seat is on that bus; parked/missing Hermes does not
 block, but a Groundfeed grok next to Tailscale codex/agy does). `escalate.sh` is the only Prime path;
 it journals `prime-escalation.json` in the seat dir after a successful post so the

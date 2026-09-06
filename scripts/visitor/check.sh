@@ -15,7 +15,7 @@ else
   bad "buzz-cli missing"
 fi
 
-python3 "${ROOT}/test_visitor.py" >/dev/null && ok "test_visitor.py" || bad "test_visitor.py"
+python3 "${ROOT}/test_visitor.py" >/dev/null 2>&1 && ok "test_visitor.py" || bad "test_visitor.py"
 
 echo "skip hermes (parked paywall) — free path is buzz-cli + wake.sh"
 if grep -q 'require_mention: true' "${ROOT}/hermes-gateway.example.yaml"; then
@@ -64,10 +64,15 @@ else
   echo "warn mixed/missing relays (silent empty room) — start-collab.sh --seats on one bus"
   python3 -c 'import json,sys; r=json.loads(sys.argv[1] or "{}"); print("hosts=" + str(r.get("hosts"))); print("missing=" + str(r.get("missing")))' "$align_out" || true
 fi
-if bash "${ROOT}/start-collab.sh" --seats "codex-buzz,agy-buzz" >/dev/null 2>&1; then
+if bash "${ROOT}/start-collab.sh" --seats "codex-buzz,agy-buzz" --home "$home" >/dev/null 2>&1; then
   ok "codex+agy same-bus collab-ready"
 else
   echo "skip same-bus codex+agy (missing PUBLIC.txt or split)"
+fi
+if bash "${ROOT}/install-profile.sh" --brain hermes --dry-run >/dev/null 2>&1; then
+  bad "install-profile must refuse parked hermes"
+else
+  ok "install-profile refuses hermes"
 fi
 role="$(python3 "${ROOT}/gate.py" role-from-seat --seat codex-buzz)"
 if [[ "$role" == "codex" ]]; then

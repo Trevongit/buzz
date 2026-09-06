@@ -13,7 +13,8 @@ while [[ $# -gt 0 ]]; do
     --dest) DEST="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     -h|--help)
-      echo "Usage: install-profile.sh --brain grok|codex|agy|hermes [--dest DIR] [--dry-run]"
+      echo "Usage: install-profile.sh --brain grok|codex|agy [--dest DIR] [--dry-run]"
+      echo "  Hermes/Nous Portal is parked (paywall). Free path: grok|codex|agy + wake.sh"
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;
@@ -21,8 +22,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$BRAIN" in
-  grok|codex|agy|hermes) ;;
-  *) echo "error: --brain grok|codex|agy|hermes required" >&2; exit 1 ;;
+  hermes)
+    echo "error: Hermes/Nous Portal is parked (paywall). Use --brain grok|codex|agy" >&2
+    echo "free path: scripts/visitor/wake.sh (do not curl|bash install)" >&2
+    exit 1
+    ;;
+  grok|codex|agy) ;;
+  *) echo "error: --brain grok|codex|agy required" >&2; exit 1 ;;
 esac
 
 if [[ -z "$DEST" ]]; then
@@ -30,7 +36,6 @@ if [[ -z "$DEST" ]]; then
     grok) DEST="${HOME}/.grok/skills/buzz-visitor" ;;
     codex) DEST="${HOME}/.codex/skills/buzz-visitor" ;;
     agy) DEST="${HOME}/.agy/skills/buzz-visitor" ;;
-    hermes) DEST="${HOME}/.hermes/skills/buzz-visitor" ;;
   esac
 fi
 
