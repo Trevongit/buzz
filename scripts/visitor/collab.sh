@@ -37,6 +37,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "$FROM_ROLE" ]]; then
+  FROM_ROLE="$(visitor_default_role "$SEAT")"
+fi
 if [[ -z "$ACTION" || -z "$FROM_ROLE" || -z "$TO_ROLE" || -z "$TASK" ]]; then
   echo "error: open|done|blocked and --from --to --task required" >&2
   exit 1

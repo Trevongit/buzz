@@ -77,7 +77,6 @@ cat >"$WRITE_DIR/offline-gateway.sh" <<EOF
 set -euo pipefail
 VISITOR_ROOT="${ROOT}"
 export VISITOR_REQUIRE_MENTION="\${VISITOR_REQUIRE_MENTION:-1}"
-export VISITOR_ROLE="\${VISITOR_ROLE:-hermes}"
 export VISITOR_WATCH_SECS="\${VISITOR_WATCH_SECS:-4}"
 if [[ -z "\${BUZZ_SEAT_ID:-}" ]]; then
   echo "error: set BUZZ_SEAT_ID to an existing seat (do not mint)" >&2

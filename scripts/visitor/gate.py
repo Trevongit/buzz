@@ -307,6 +307,23 @@ def relay_from_seat_dir(seat_dir: str) -> str:
     return public_card_from_dir(seat_dir).get("relay") or ""
 
 
+def role_from_seat(seat_id: str, mapping: dict[str, str] | None = None) -> str:
+    """Inverse of DEFAULT_ROLE_SEATS. Unknown seats return empty (not grok)."""
+    m = dict(DEFAULT_ROLE_SEATS)
+    if mapping:
+        m.update(mapping)
+    s = _norm(seat_id)
+    if not s:
+        return ""
+    for role, seat in m.items():
+        if _norm(seat) == s:
+            return role
+    for role in ROLES:
+        if s == role or s.startswith(f"{role}-"):
+            return role
+    return ""
+
+
 def parse_role_seats(raw: str) -> dict[str, str]:
     out = dict(DEFAULT_ROLE_SEATS)
     for part in (raw or "").split(","):
@@ -527,6 +544,11 @@ if __name__ == "__main__":
         json.dump({k: report[k] for k in ("ok", "reason", "from_seat", "to_seat")}, sys.stdout)
         sys.stdout.write("\n")
         raise SystemExit(0 if report["ok"] else 3)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "role-from-seat":
+        kw = _parse_kw(sys.argv[2:])
+        print(role_from_seat(kw.get("seat") or ""))
+        raise SystemExit(0)
 
     if len(sys.argv) > 1 and sys.argv[1] in ("relay-align", "roster", "mention-names"):
         kw = _parse_kw(sys.argv[2:])

@@ -61,6 +61,12 @@ if bash "${ROOT}/start-collab.sh" --seats "codex-buzz,agy-buzz" >/dev/null 2>&1;
 else
   echo "skip same-bus codex+agy (missing PUBLIC.txt or split)"
 fi
+role="$(python3 "${ROOT}/gate.py" role-from-seat --seat codex-buzz)"
+if [[ "$role" == "codex" ]]; then
+  ok "seat-to-role codex-buzz=codex"
+else
+  bad "seat-to-role (got $role)"
+fi
 
 if [[ "$fail" -ne 0 ]]; then
   exit 1

@@ -32,6 +32,15 @@ visitor_seat_dir() {
   echo "${HOME}/.buzz-dev/agents/${seat}"
 }
 
+visitor_default_role() {
+  if [[ -n "${VISITOR_ROLE:-}" ]]; then
+    echo "$VISITOR_ROLE"
+    return
+  fi
+  local seat="${1:-$(visitor_resolve_seat)}"
+  python3 "${VISITOR_ROOT}/gate.py" role-from-seat --seat "$seat"
+}
+
 visitor_find_cli() {
   if [[ -n "${BUZZ_CLI:-}" && -x "${BUZZ_CLI}" ]]; then
     echo "$BUZZ_CLI"

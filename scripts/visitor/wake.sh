@@ -38,7 +38,7 @@ if [[ -z "$ROOM" ]]; then
 fi
 CID="$(visitor_resolve_room "$ROOM")"
 SELF="${BUZZ_PUBLIC_KEY:-}"
-ROLE="${VISITOR_ROLE:-grok}"
+ROLE="$(visitor_default_role "$SEAT")"
 if [[ -z "${VISITOR_NAMES:-}" && -f "${DIR}/PUBLIC.txt" ]]; then
   NAMES="$(python3 "${VISITOR_ROOT}/gate.py" mention-names --dir "$DIR" --seat "$SEAT")"
 else

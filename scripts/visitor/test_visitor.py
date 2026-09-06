@@ -25,6 +25,7 @@ from gate import (  # noqa: E402
     record_prime_escalation,
     relay_from_seat_dir,
     render_envelope,
+    role_from_seat,
     roster_report,
     same_bus_for_roles,
     should_escalate_to_prime,
@@ -462,6 +463,55 @@ class RosterTests(unittest.TestCase):
             self.assertNotIn("deadbeef", dry.stdout)
 
 
+class RoleFromSeatTests(unittest.TestCase):
+    def test_known_seats(self):
+        self.assertEqual(role_from_seat("codex-buzz"), "codex")
+        self.assertEqual(role_from_seat("agy-buzz"), "agy")
+        self.assertEqual(role_from_seat("buzz"), "grok")
+        self.assertEqual(role_from_seat("hermes-buzz"), "hermes")
+
+    def test_unknown_is_not_grok(self):
+        self.assertEqual(role_from_seat("buzz-origin-plus"), "")
+        proc = subprocess.run(
+            ["python3", str(ROOT / "gate.py"), "role-from-seat", "--seat", "codex-buzz"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "codex")
+
+    def test_collab_envelope_wakes_mapped_role(self):
+        text = render_envelope(from_role="agy", to_role="codex", task="take the patch")
+        out = filter_wakes(
+            [{"id": "e1", "content": text, "pubkey": "aa", "created_at": 1}],
+            state={"seen_ids": [], "since": 0, "last_wake": 0},
+            self_pk="bb",
+            names=["codex-buzz", "Buzz-codex"],
+            pubkeys=["bb"],
+            seat_role=role_from_seat("codex-buzz"),
+            require_mention=True,
+            is_dm=False,
+            now_unix=50,
+            cooldown_secs=0,
+        )
+        self.assertEqual(len(out["wakes"]), 1)
+        self.assertEqual(out["wakes"][0]["reason"], "collab")
+        grok = filter_wakes(
+            [{"id": "e1", "content": text, "pubkey": "aa", "created_at": 1}],
+            state={"seen_ids": [], "since": 0, "last_wake": 0},
+            self_pk="cc",
+            names=["grok-build"],
+            pubkeys=["cc"],
+            seat_role=role_from_seat("buzz"),
+            require_mention=True,
+            is_dm=False,
+            now_unix=50,
+            cooldown_secs=0,
+        )
+        self.assertEqual(grok["wakes"], [])
+
+
 class SameBusSendTests(unittest.TestCase):
     def _two_seats(self, tmp: str, same: bool) -> None:
         a = Path(tmp) / "codex-buzz"
@@ -609,6 +659,7 @@ class SetupScriptTests(unittest.TestCase):
             self.assertTrue(runner.is_file())
             body = runner.read_text()
             self.assertIn("wake.sh", body)
+            self.assertNotIn('VISITOR_ROLE="${VISITOR_ROLE:-hermes}"', body)
             self.assertNotIn("managed-agents", body)
             self.assertTrue((Path(tmp) / "NOT-DESKTOP-ACP.txt").is_file())
 

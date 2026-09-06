@@ -42,6 +42,10 @@ bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 Internals (Helix / PATCH / Prism / Ember) stay roster presence. Do not ping them
 for this kit.
 
+`wake.sh` derives `VISITOR_ROLE` from the seat id (`codex-buzz` → `codex`,
+`agy-buzz` → `agy`, `buzz` → `grok`). Do not leave it defaulted to grok on a
+Codex seat — COLLAB `to: codex` would never wake.
+
 Shared install (does not mint seats):
 
 ```bash
