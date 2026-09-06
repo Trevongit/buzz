@@ -221,20 +221,84 @@ def align_relays(seats: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def parse_public_txt(text: str) -> dict[str, str]:
+    """Parse PUBLIC.txt. Drops nsec / private-key lines. Never reads agent.env."""
+    card: dict[str, str] = {}
+    allowed = ("seat", "display_name", "pubkey_hex", "npub", "relay")
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        low = line.lower()
+        if "nsec1" in low or "buzz_private_key" in low:
+            continue
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = _norm(key).replace(" ", "_")
+        val = val.strip()
+        if key in allowed and val:
+            card[key] = val
+    return card
+
+
+def public_card_from_dir(seat_dir: str) -> dict[str, str]:
+    pub = Path(seat_dir) / "PUBLIC.txt"
+    if not pub.is_file():
+        return {}
+    return parse_public_txt(pub.read_text(encoding="utf-8", errors="replace"))
+
+
+def mention_names_from_card(card: dict[str, str], seat_id: str = "") -> list[str]:
+    names: list[str] = []
+    for v in (card.get("seat"), card.get("display_name"), seat_id):
+        n = (v or "").strip()
+        if n and n not in names:
+            names.append(n)
+    return names
+
+
+def roster_report(seat_dirs: dict[str, str]) -> dict[str, Any]:
+    """Group existing seats by PUBLIC.txt relay host. agent.env is never opened."""
+    cards: list[dict[str, Any]] = []
+    buses: dict[str, list[str]] = {}
+    missing: list[str] = []
+    for seat, path in seat_dirs.items():
+        card = public_card_from_dir(path)
+        host = normalize_relay(card.get("relay") or "")
+        names = mention_names_from_card(card, seat)
+        pk = card.get("pubkey_hex") or ""
+        cards.append(
+            {
+                "seat": seat,
+                "display_name": card.get("display_name") or "",
+                "pubkey_prefix": pk[:12],
+                "relay": card.get("relay") or "",
+                "host": host,
+                "names": names,
+            }
+        )
+        if not host:
+            missing.append(seat)
+            continue
+        buses.setdefault(host, []).append(seat)
+    hosts = {c["seat"]: c["host"] for c in cards if c["host"]}
+    unique = sorted(set(hosts.values()))
+    ready = len(unique) == 1 and len(hosts) >= 2 and not missing
+    return {
+        "aligned": len(unique) <= 1 and not missing,
+        "ready": ready,
+        "buses": buses,
+        "missing": missing,
+        "cards": cards,
+        "hosts": hosts,
+        "unique": unique,
+    }
+
+
 def relay_from_seat_dir(seat_dir: str) -> str:
-    """Read only the relay line. Never returns nsec."""
-    d = Path(seat_dir)
-    pub = d / "PUBLIC.txt"
-    if pub.is_file():
-        for line in pub.read_text(encoding="utf-8", errors="replace").splitlines():
-            if line.lower().startswith("relay:"):
-                return line.split(":", 1)[1].strip()
-    envf = d / "agent.env"
-    if envf.is_file():
-        for line in envf.read_text(encoding="utf-8", errors="replace").splitlines():
-            if line.startswith("BUZZ_RELAY_URL="):
-                return line.split("=", 1)[1].strip().strip("'\"")
-    return ""
+    """PUBLIC.txt relay only. Never opens agent.env."""
+    return public_card_from_dir(seat_dir).get("relay") or ""
 
 
 def should_post_prime_escalation(
@@ -390,13 +454,24 @@ if __name__ == "__main__":
         )
         raise SystemExit(0)
 
-    if len(sys.argv) > 1 and sys.argv[1] == "relay-align":
+    if len(sys.argv) > 1 and sys.argv[1] in ("relay-align", "roster", "mention-names"):
         kw = _parse_kw(sys.argv[2:])
+        home = Path(kw["home"]) if kw.get("home") else Path.home() / ".buzz-dev" / "agents"
+        if sys.argv[1] == "mention-names":
+            seat = kw.get("seat") or ""
+            d = kw.get("dir") or str(home / seat)
+            names = mention_names_from_card(public_card_from_dir(d), seat)
+            print(",".join(names))
+            raise SystemExit(0)
         seats_raw = kw.get("seats") or "buzz,codex-buzz,agy-buzz"
-        home = Path.home() / ".buzz-dev" / "agents"
-        mapping: dict[str, str] = {}
-        for name in [s.strip() for s in seats_raw.split(",") if s.strip()]:
-            mapping[name] = relay_from_seat_dir(str(home / name))
+        seat_ids = [s.strip() for s in seats_raw.split(",") if s.strip()]
+        if sys.argv[1] == "roster":
+            dirs = {n: str(home / n) for n in seat_ids}
+            report = roster_report(dirs)
+            json.dump(report, sys.stdout)
+            sys.stdout.write("\n")
+            raise SystemExit(0 if report.get("ready") else 3)
+        mapping = {n: relay_from_seat_dir(str(home / n)) for n in seat_ids}
         report = align_relays(mapping)
         json.dump(report, sys.stdout)
         sys.stdout.write("\n")

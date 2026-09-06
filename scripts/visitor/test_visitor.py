@@ -18,11 +18,14 @@ from gate import (  # noqa: E402
     align_relays,
     cooldown_blocks,
     filter_wakes,
+    mention_names_from_card,
     normalize_relay,
     parse_collab_envelope,
+    parse_public_txt,
     record_prime_escalation,
     relay_from_seat_dir,
     render_envelope,
+    roster_report,
     should_escalate_to_prime,
     should_post_prime_escalation,
     should_wake,
@@ -342,6 +345,95 @@ class RelayAlignTests(unittest.TestCase):
             url = relay_from_seat_dir(tmp)
             self.assertEqual(url, "wss://example.relay")
             self.assertNotIn("nsec", url)
+
+    def test_never_opens_agent_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "agent.env").write_text(
+                "BUZZ_PRIVATE_KEY=deadbeefdeadbeef\nBUZZ_RELAY_URL=https://secret.example\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(relay_from_seat_dir(tmp), "")
+
+
+class RosterTests(unittest.TestCase):
+    def test_drops_private_key_lines(self):
+        card = parse_public_txt(
+            "seat: agy-buzz\ndisplay_name: agy-buzz\n"
+            "buzz_private_key=deadbeef\nrelay: wss://example.relay\n"
+        )
+        self.assertEqual(card["seat"], "agy-buzz")
+        self.assertEqual(card["relay"], "wss://example.relay")
+        self.assertNotIn("buzz_private_key", card)
+
+    def test_same_bus_ready_mixed_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = Path(tmp) / "a"
+            b = Path(tmp) / "b"
+            c = Path(tmp) / "c"
+            a.mkdir()
+            b.mkdir()
+            c.mkdir()
+            a.joinpath("PUBLIC.txt").write_text(
+                "seat: a\ndisplay_name: Buzz-codex\nrelay: wss://tail.example\n",
+                encoding="utf-8",
+            )
+            b.joinpath("PUBLIC.txt").write_text(
+                "seat: b\ndisplay_name: agy-buzz\nrelay: https://tail.example\n",
+                encoding="utf-8",
+            )
+            c.joinpath("PUBLIC.txt").write_text(
+                "seat: c\ndisplay_name: grok-build\nrelay: https://ground.example\n",
+                encoding="utf-8",
+            )
+            ready = roster_report({"a": str(a), "b": str(b)})
+            self.assertTrue(ready["ready"])
+            self.assertEqual(ready["unique"], ["tail.example"])
+            mixed = roster_report({"a": str(a), "c": str(c)})
+            self.assertFalse(mixed["ready"])
+            self.assertEqual(len(mixed["buses"]), 2)
+
+    def test_mention_names_include_display(self):
+        names = mention_names_from_card(
+            {"seat": "codex-buzz", "display_name": "Buzz-codex"}, "codex-buzz"
+        )
+        self.assertIn("codex-buzz", names)
+        self.assertIn("Buzz-codex", names)
+
+    def test_start_collab_exit_codes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = Path(tmp) / "a"
+            b = Path(tmp) / "b"
+            a.mkdir()
+            b.mkdir()
+            a.joinpath("PUBLIC.txt").write_text(
+                "seat: a\nrelay: wss://one.example\n", encoding="utf-8"
+            )
+            b.joinpath("PUBLIC.txt").write_text(
+                "seat: b\nrelay: wss://two.example\n", encoding="utf-8"
+            )
+            proc = subprocess.run(
+                ["bash", str(ROOT / "start-collab.sh"), "--seats", "a,b", "--home", tmp],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertNotIn("deadbeef", proc.stdout)
+            a.joinpath("PUBLIC.txt").write_text(
+                "seat: a\ndisplay_name: Alpha\nrelay: wss://one.example\n", encoding="utf-8"
+            )
+            b.joinpath("PUBLIC.txt").write_text(
+                "seat: b\ndisplay_name: Beta\nrelay: https://one.example\n", encoding="utf-8"
+            )
+            ok = subprocess.run(
+                ["bash", str(ROOT / "start-collab.sh"), "--seats", "a,b", "--home", tmp],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+            self.assertIn("collab-ready", ok.stdout)
+            self.assertIn("@Alpha", ok.stdout)
 
 
 class HermesExampleTests(unittest.TestCase):

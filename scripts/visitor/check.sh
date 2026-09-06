@@ -53,8 +53,13 @@ align_out="$(python3 "${ROOT}/gate.py" relay-align --seats "${VISITOR_SEATS:-buz
 if python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).get("aligned") else 1)' "$align_out"; then
   ok "visitor seats share one relay host"
 else
-  echo "warn mixed relays (silent empty room) — align before unsupervised collab"
+  echo "warn mixed relays (silent empty room) — start-collab.sh --seats on one bus"
   python3 -c 'import json,sys; r=json.loads(sys.argv[1]); print("hosts=" + str(r.get("hosts")))' "$align_out"
+fi
+if bash "${ROOT}/start-collab.sh" --seats "codex-buzz,agy-buzz" >/dev/null 2>&1; then
+  ok "codex+agy same-bus collab-ready"
+else
+  echo "skip same-bus codex+agy (missing PUBLIC.txt or split)"
 fi
 
 if [[ "$fail" -ne 0 ]]; then

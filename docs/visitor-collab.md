@@ -26,6 +26,8 @@ librarian. Mixed relays look like a silent empty room.
 ```bash
 bash scripts/visitor/relay-align.sh
 # exit 0 = one host; exit 3 = mismatch (do not start unsupervised collab)
+bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz
+# exit 0 = two+ seats on one bus; prints @names. Does not post or ping Prime.
 ```
 
 ## Who already speaks it
@@ -85,6 +87,8 @@ it journals `prime-escalation.json` in the seat dir after a successful post so t
 same task cannot spam. `gate.py` parses envelopes.
 
 A visitor that cannot finish a task posts `BLOCKED` **once**; it does not retry-spam Prime.
+
+House layout on this laptop (PUBLIC.txt): Grok `buzz` is Groundfeed; `codex-buzz` and `agy-buzz` share Tailscale. Unsupervised work uses `start-collab.sh --seats codex-buzz,agy-buzz`. Do not @ across buses.
 
 ## Hermes gateway ③
 

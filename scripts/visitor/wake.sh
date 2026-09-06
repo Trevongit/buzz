@@ -39,7 +39,11 @@ fi
 CID="$(visitor_resolve_room "$ROOM")"
 SELF="${BUZZ_PUBLIC_KEY:-}"
 ROLE="${VISITOR_ROLE:-grok}"
-NAMES="${VISITOR_NAMES:-$SEAT}"
+if [[ -z "${VISITOR_NAMES:-}" && -f "${DIR}/PUBLIC.txt" ]]; then
+  NAMES="$(python3 "${VISITOR_ROOT}/gate.py" mention-names --dir "$DIR" --seat "$SEAT")"
+else
+  NAMES="${VISITOR_NAMES:-$SEAT}"
+fi
 REQUIRE="${VISITOR_REQUIRE_MENTION:-1}"
 COOLDOWN="${VISITOR_COOLDOWN_SECS:-30}"
 IS_DM=0
