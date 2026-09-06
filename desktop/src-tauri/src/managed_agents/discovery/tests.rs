@@ -104,6 +104,10 @@ fn normalizes_grok_args_to_headless_stdio_without_leader() {
     ];
     assert_eq!(normalize_agent_args("grok", Vec::new()), expected);
     assert_eq!(
+        normalize_agent_args("grok", vec!["acp".into()]),
+        expected
+    );
+    assert_eq!(
         normalize_agent_args("/usr/local/bin/grok", Vec::new()),
         expected
     );
