@@ -28,8 +28,8 @@ Visitors on the same job must share **one relay**. House seats today: Grok Build
 librarian. Mixed relays look like a silent empty room.
 
 ```bash
-bash scripts/visitor/relay-align.sh
-# exit 0 = one host; exit 3 = mismatch (do not start unsupervised collab)
+bash scripts/visitor/relay-align.sh --seats buzz,codex-buzz,agy-buzz
+# exit 0 = every named seat shares one PUBLIC.txt host; exit 3 = mixed or missing
 bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 # exit 0 = two+ seats on one bus; prints @names + a COLLAB v0 envelope. Does not post.
 ```
@@ -93,7 +93,8 @@ need_prime: false
 
 `collab.sh open|done|blocked` writes that block. `--dry-run` prints it and never
 loads keys. `to:` must share the sender's PUBLIC.txt host (`to: all` only when
-every mapped seat is on that bus). `escalate.sh` is the only Prime path;
+every *present* mapped seat is on that bus; parked/missing Hermes does not
+block, but a Groundfeed grok next to Tailscale codex/agy does). `escalate.sh` is the only Prime path;
 it journals `prime-escalation.json` in the seat dir after a successful post so the
 same task cannot spam. If Grok/Prime is on another host (house: Groundfeed vs
 Tailscale), escalate fail-closes with `prime-other-bus` and does not post —
@@ -118,8 +119,6 @@ The metabolic visitor is **buzz-cli**, not a hosted agent subscription.
 Do **not** subscribe to Nous Portal Plus/Super/Ultra for this kit. Do **not**
 `curl …/install.sh` Hermes. Scripts under `hermes-setup.sh` stay as a parked
 offline poller (`wake.sh`); they are not an install invitation.
-
-## Check
 
 ## Check
 

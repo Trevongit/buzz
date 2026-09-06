@@ -39,6 +39,10 @@ fi
 CID="$(visitor_resolve_room "$ROOM")"
 SELF="${BUZZ_PUBLIC_KEY:-}"
 ROLE="$(visitor_default_role "$SEAT")"
+DERIVED="$(python3 "${VISITOR_ROOT}/gate.py" role-from-seat --seat "$SEAT")"
+if [[ -n "${VISITOR_ROLE:-}" && -n "$DERIVED" && "$ROLE" != "$DERIVED" ]]; then
+  echo "VISITOR_WARN role=$ROLE seat=$SEAT maps-to=$DERIVED (COLLAB to:$DERIVED may miss this seat)" >&2
+fi
 if [[ -z "${VISITOR_NAMES:-}" && -f "${DIR}/PUBLIC.txt" ]]; then
   NAMES="$(python3 "${VISITOR_ROOT}/gate.py" mention-names --dir "$DIR" --seat "$SEAT")"
 else

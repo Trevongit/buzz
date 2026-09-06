@@ -13,8 +13,8 @@ while [[ $# -gt 0 ]]; do
     --offline) shift ;;
     -h|--help)
       echo "Usage: hermes-setup.sh [--check] [--write-dir DIR] [--offline]"
-      echo "  Writes mention-only gateway yaml + an offline poll runner."
-      echo "  Never registers Desktop runtime hermes-acp."
+      echo "  PARKED. Writes mention-only yaml + wake.sh poller. Does not install Hermes."
+      echo "  Never registers Desktop runtime hermes-acp. Never curl|bash."
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;
@@ -52,13 +52,14 @@ echo "hermes_bin=${hermes_bin:-MISSING}"
 echo "example=$example"
 
 if [[ "$CHECK_ONLY" == "1" ]]; then
+  echo "parked: Nous Portal paywall — do not install Hermes for this kit"
+  echo "do_not: curl|bash install; do_not: Desktop runtime hermes-acp"
   if [[ -z "$hermes_bin" ]]; then
     echo "status=adapter-missing"
-    echo "offline: hermes-setup.sh --write-dir DIR  (mention-only poll, not hermes-acp)"
-    echo "do_not: curl|bash install; do_not: Desktop runtime hermes-acp"
+    echo "offline: hermes-setup.sh --write-dir DIR  (wake.sh poll, not hermes-acp)"
     exit 2
   fi
-  echo "status=ready"
+  echo "status=binary-present-unused"
   exit 0
 fi
 
@@ -86,19 +87,14 @@ exec bash "\$VISITOR_ROOT/wake.sh" --seat "\$BUZZ_SEAT_ID" --secs "\$VISITOR_WAT
 EOF
 chmod +x "$WRITE_DIR/offline-gateway.sh"
 cat >"$WRITE_DIR/README.txt" <<EOF
-Hermes Buzz visitor (gateway ③) — mention-only
+PARKED — Hermes / Nous Portal is a credit paywall. Do not install.
 
-If \`hermes\` is on PATH:
-  1. Put BUZZ_PRIVATE_KEY in ~/.hermes/.env (never this directory if git-tracked).
-  2. Merge config.buzz.yaml into Hermes gateway.platforms.buzz.
-  3. hermes gateway start
-  4. Do not add hermes-acp to Buzz Desktop Agents.
-
-If \`hermes\` is missing (this host):
-  1. Use an existing seat: export BUZZ_SEAT_ID=...
+Free path: existing buzz-cli seats + scripts/visitor/wake.sh
+  1. export BUZZ_SEAT_ID to an existing seat (do not mint)
   2. bash $WRITE_DIR/offline-gateway.sh --room <channel>
-  3. Cortex stays off until stdout prints VISITOR_WAKE.
+  3. Cortex stays off until stdout prints VISITOR_WAKE
 
+Do not curl|bash install Hermes. Do not add hermes-acp to Desktop Agents.
 This path is not Desktop ACP.
 EOF
 echo "wrote $WRITE_DIR/config.buzz.yaml"

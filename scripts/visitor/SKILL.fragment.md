@@ -27,6 +27,7 @@ Rules:
 - Do not Custom-harness raw `agy`. Do not register this as ACP.
 - Idle: do not poll with an LLM. `wake.sh` is the nerve (stdout `VISITOR_WAKE` only).
 - Unaddressed hellos are silence. Talk to teammates via `COLLAB v0`.
+- `to: all` is fail-closed: every present teammate must share the sender's PUBLIC.txt host.
 - Prime is disturbed only on `status: BLOCKED` + `need_prime: true`, once per task fingerprint, and only when that seat shares the sender's PUBLIC.txt host (`prime-other-bus` otherwise).
 - Key in `~/.buzz-dev/agents/<seat>/agent.env` only — never argv or chat.
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -335,6 +336,17 @@ class RelayAlignTests(unittest.TestCase):
         self.assertFalse(report["aligned"])
         self.assertEqual(len(report["unique"]), 2)
 
+    def test_missing_or_empty_not_aligned(self):
+        self.assertFalse(align_relays({})["aligned"])
+        missing = align_relays({"a": "wss://one.example", "b": ""})
+        self.assertFalse(missing["aligned"])
+        self.assertEqual(missing["missing"], ["b"])
+        same = align_relays(
+            {"a": "wss://one.example", "b": "https://one.example/"}
+        )
+        self.assertTrue(same["aligned"])
+        self.assertEqual(same["unique"], ["one.example"])
+
     def test_reads_public_txt_not_nsec(self):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "PUBLIC.txt").write_text(
@@ -436,6 +448,35 @@ class RosterTests(unittest.TestCase):
             self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
             self.assertIn("collab-ready", ok.stdout)
             self.assertIn("@Alpha", ok.stdout)
+            align_ok = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "relay-align.sh"),
+                    "--seats",
+                    "a,b",
+                    "--home",
+                    tmp,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(align_ok.returncode, 0, align_ok.stdout + align_ok.stderr)
+            align_miss = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "relay-align.sh"),
+                    "--seats",
+                    "a,missing-seat",
+                    "--home",
+                    tmp,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(align_miss.returncode, 3, align_miss.stdout + align_miss.stderr)
+            self.assertIn("missing-seat", align_miss.stdout)
             dry = subprocess.run(
                 [
                     "bash",
@@ -535,6 +576,10 @@ class SameBusSendTests(unittest.TestCase):
                 from_role="codex", to_role="agy", agents_home=tmp
             )
             self.assertTrue(ok["ok"])
+            all_present = same_bus_for_roles(
+                from_role="codex", to_role="all", agents_home=tmp
+            )
+            self.assertTrue(all_present["ok"], all_present)
             self._two_seats(tmp, False)
             bad = same_bus_for_roles(
                 from_role="codex", to_role="agy", agents_home=tmp
@@ -544,6 +589,21 @@ class SameBusSendTests(unittest.TestCase):
                 from_role="codex", to_role="all", agents_home=tmp
             )
             self.assertFalse(all_bus["ok"])
+
+    def test_to_all_fails_when_present_seats_span_buses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._two_seats(tmp, True)
+            grok = Path(tmp) / "buzz"
+            grok.mkdir()
+            grok.joinpath("PUBLIC.txt").write_text(
+                "seat: buzz\nrelay: https://ground.example\n",
+                encoding="utf-8",
+            )
+            all_bus = same_bus_for_roles(
+                from_role="codex", to_role="all", agents_home=tmp
+            )
+            self.assertFalse(all_bus["ok"])
+            self.assertEqual(all_bus["reason"], "to-all-not-ready")
 
     def test_collab_dry_run_never_loads_keys(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -712,6 +772,38 @@ class SeatDirTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout.strip(), "/tmp/visitor-home/codex-buzz")
 
+    def test_gate_cli_home_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a = Path(tmp) / "codex-buzz"
+            b = Path(tmp) / "agy-buzz"
+            a.mkdir()
+            b.mkdir()
+            a.joinpath("PUBLIC.txt").write_text(
+                "seat: codex-buzz\nrelay: wss://tail.example\n", encoding="utf-8"
+            )
+            b.joinpath("PUBLIC.txt").write_text(
+                "seat: agy-buzz\nrelay: https://tail.example\n", encoding="utf-8"
+            )
+            env = os.environ.copy()
+            env["VISITOR_AGENTS_HOME"] = tmp
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "gate.py"),
+                    "same-bus",
+                    "--from",
+                    "codex",
+                    "--to",
+                    "agy",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertTrue(json.loads(proc.stdout)["ok"])
+
 
 class HermesExampleTests(unittest.TestCase):
     def test_example_is_mention_only_and_secret_free(self):
@@ -734,11 +826,12 @@ class SetupScriptTests(unittest.TestCase):
         )
         self.assertIn(proc.returncode, (0, 2), proc.stdout + proc.stderr)
         self.assertNotIn("nsec", proc.stdout.lower())
+        self.assertIn("parked", proc.stdout.lower())
+        self.assertIn("do_not: curl|bash", proc.stdout)
+        self.assertNotRegex(proc.stdout.lower(), r"curl\s+\S+\s*\|\s*bash")
+        self.assertNotIn("install:", proc.stdout.lower())
         if proc.returncode == 2:
             self.assertIn("offline", proc.stdout)
-            self.assertIn("do_not: curl|bash", proc.stdout)
-            self.assertNotRegex(proc.stdout.lower(), r"curl\s+\S+\s*\|\s*bash")
-            self.assertNotIn("install:", proc.stdout.lower())
 
     def test_write_dir_is_complete_offline(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -760,6 +853,10 @@ class SetupScriptTests(unittest.TestCase):
             self.assertNotIn('VISITOR_ROLE="${VISITOR_ROLE:-hermes}"', body)
             self.assertNotIn("managed-agents", body)
             self.assertTrue((Path(tmp) / "NOT-DESKTOP-ACP.txt").is_file())
+            readme = (Path(tmp) / "README.txt").read_text()
+            self.assertIn("PARKED", readme)
+            self.assertIn("Do not curl|bash", readme)
+            self.assertNotIn("hermes gateway start", readme)
 
     def test_refuse_desktop_acp_path(self):
         proc = subprocess.run(

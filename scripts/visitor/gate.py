@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -212,18 +213,21 @@ def normalize_relay(url: str) -> str:
 
 
 def align_relays(seats: dict[str, str]) -> dict[str, Any]:
-    """seats: name -> relay URL. aligned if every non-empty host matches."""
+    """seats: name -> relay URL. Fail-closed: aligned only when every named
+    seat resolved and they share exactly one host. Empty/missing is not aligned.
+    """
     hosts: dict[str, str] = {}
     for name, url in seats.items():
         host = normalize_relay(url)
         if host:
             hosts[name] = host
     unique = sorted(set(hosts.values()))
+    missing = sorted(n for n, u in seats.items() if not normalize_relay(u))
     return {
-        "aligned": len(unique) <= 1,
+        "aligned": len(unique) == 1 and not missing,
         "hosts": hosts,
         "unique": unique,
-        "missing": sorted(n for n, u in seats.items() if not normalize_relay(u)),
+        "missing": missing,
     }
 
 
@@ -350,18 +354,36 @@ def same_bus_for_roles(
         mapping.update(role_seats)
     home = Path(agents_home)
     dest = _norm(to_role)
+    fr = mapping.get(_norm(from_role), "")
     if dest in ("all", "*"):
         dirs = {s: str(home / s) for s in mapping.values()}
         report = roster_report(dirs)
-        ok = bool(report.get("ready"))
+        present = {
+            s: p
+            for s, p in dirs.items()
+            if normalize_relay(relay_from_seat_dir(p))
+        }
+        from_host = normalize_relay(relay_from_seat_dir(str(home / fr))) if fr else ""
+        unique = sorted(
+            {
+                normalize_relay(relay_from_seat_dir(p))
+                for p in present.values()
+            }
+        )
+        unique = [h for h in unique if h]
+        # Parked/missing seats (hermes) must not block. Mixed *present* buses do.
+        ok = (
+            bool(from_host)
+            and len(present) >= 2
+            and unique == [from_host]
+        )
         return {
             "ok": ok,
             "reason": "all-ready" if ok else "to-all-not-ready",
-            "from_seat": mapping.get(_norm(from_role), ""),
+            "from_seat": fr,
             "to_seat": "all",
             "report": report,
         }
-    fr = mapping.get(_norm(from_role), "")
     to = mapping.get(dest, dest)
     dirs: dict[str, str] = {}
     if fr:
@@ -515,6 +537,15 @@ def _parse_kw(args: list[str]) -> dict[str, str]:
     return kw
 
 
+def _agents_home(kw: dict[str, str]) -> Path:
+    if kw.get("home"):
+        return Path(kw["home"])
+    env = (os.environ.get("VISITOR_AGENTS_HOME") or "").strip()
+    if env:
+        return Path(env)
+    return Path.home() / ".buzz-dev" / "agents"
+
+
 if __name__ == "__main__":
     import sys
 
@@ -534,7 +565,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] == "same-bus":
         kw = _parse_kw(sys.argv[2:])
-        home = kw.get("home") or str(Path.home() / ".buzz-dev" / "agents")
+        home = str(_agents_home(kw))
         report = same_bus_for_roles(
             from_role=kw.get("from", ""),
             to_role=kw.get("to", ""),
@@ -552,7 +583,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] in ("relay-align", "roster", "mention-names"):
         kw = _parse_kw(sys.argv[2:])
-        home = Path(kw["home"]) if kw.get("home") else Path.home() / ".buzz-dev" / "agents"
+        home = _agents_home(kw)
         if sys.argv[1] == "mention-names":
             seat = kw.get("seat") or ""
             d = kw.get("dir") or str(home / seat)

@@ -17,21 +17,22 @@ fi
 
 python3 "${ROOT}/test_visitor.py" >/dev/null && ok "test_visitor.py" || bad "test_visitor.py"
 
-hermes_check="$(bash "${ROOT}/hermes-setup.sh" --check 2>&1 || true)"
-if printf '%s\n' "$hermes_check" | grep -q '^status=ready$'; then
-  ok "hermes gateway binary"
+echo "skip hermes (parked paywall) — free path is buzz-cli + wake.sh"
+if grep -q 'require_mention: true' "${ROOT}/hermes-gateway.example.yaml"; then
+  ok "hermes example mention-only (offline only)"
 else
-  echo "skip hermes binary (adapter-missing) — offline runner still valid"
-  if grep -q 'require_mention: true' "${ROOT}/hermes-gateway.example.yaml"; then
-    ok "hermes example mention-only"
-  else
-    bad "hermes example"
-  fi
+  bad "hermes example"
 fi
+hermes_check="$(bash "${ROOT}/hermes-setup.sh" --check 2>&1 || true)"
 if printf '%s\n' "$hermes_check" | grep -Eiq 'curl[[:space:]].+\|[[:space:]]*bash|https?://.+\|[[:space:]]*bash'; then
   bad "hermes-setup --check must not curl|bash install"
 else
   ok "hermes-setup no curl|bash"
+fi
+if printf '%s\n' "$hermes_check" | grep -Eiq 'nousportal|install\.sh'; then
+  bad "hermes-setup must not advertise an install URL"
+else
+  ok "hermes-setup no install URL"
 fi
 
 acp_hits="$(grep -RInE 'managed-agents\.json' "$ROOT" --include='*.sh' --include='*.py' --include='*.md' --include='*.yaml' || true)"
@@ -55,12 +56,13 @@ else
   ok "no nsec in visitor kit"
 fi
 
-align_out="$(python3 "${ROOT}/gate.py" relay-align --seats "${VISITOR_SEATS:-buzz,codex-buzz,agy-buzz}" || true)"
+home="${VISITOR_AGENTS_HOME:-$HOME/.buzz-dev/agents}"
+align_out="$(python3 "${ROOT}/gate.py" relay-align --seats "${VISITOR_SEATS:-buzz,codex-buzz,agy-buzz}" --home "$home" || true)"
 if python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).get("aligned") else 1)' "$align_out"; then
   ok "visitor seats share one relay host"
 else
-  echo "warn mixed relays (silent empty room) — start-collab.sh --seats on one bus"
-  python3 -c 'import json,sys; r=json.loads(sys.argv[1]); print("hosts=" + str(r.get("hosts")))' "$align_out"
+  echo "warn mixed/missing relays (silent empty room) — start-collab.sh --seats on one bus"
+  python3 -c 'import json,sys; r=json.loads(sys.argv[1] or "{}"); print("hosts=" + str(r.get("hosts"))); print("missing=" + str(r.get("missing")))' "$align_out" || true
 fi
 if bash "${ROOT}/start-collab.sh" --seats "codex-buzz,agy-buzz" >/dev/null 2>&1; then
   ok "codex+agy same-bus collab-ready"
