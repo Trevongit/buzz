@@ -62,9 +62,23 @@ visitor_find_cli() {
   return 1
 }
 
+visitor_assert_public_relay() {
+  local seat="${1:-}"
+  local dir out reason
+  dir="$(visitor_seat_dir "$seat")"
+  out="$(python3 "${VISITOR_ROOT}/gate.py" public-env --dir "$dir" --relay "${BUZZ_RELAY_URL:-}" || true)"
+  if python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1] or "{}").get("ok") else 3)' "$out"; then
+    return 0
+  fi
+  reason="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("reason") or "public-env-mismatch")' "$out" 2>/dev/null || echo public-env-mismatch)"
+  echo "error: PUBLIC.txt host does not match BUZZ_RELAY_URL (silent empty room)" >&2
+  echo "VISITOR_COLLAB skip reason=${reason}" >&2
+  return 3
+}
+
 visitor_load_seat_env() {
   local seat="${1:-$(visitor_resolve_seat)}"
-  local dir envf
+  local dir envf pub
   dir="$(visitor_seat_dir "$seat")"
   envf="${dir}/agent.env"
   if [[ ! -f "$envf" ]]; then
@@ -75,11 +89,19 @@ visitor_load_seat_env() {
   set -a
   source "$envf"
   set +a
-  export BUZZ_RELAY_URL="${BUZZ_RELAY_URL:-$(visitor_default_relay)}"
+  # Process-only fill from PUBLIC.txt when agent.env omitted a URL.
+  # Never rewrite agent.env. Mismatch vs PUBLIC.txt is fail-closed.
+  pub="$(python3 "${VISITOR_ROOT}/gate.py" relay-from-dir --dir "$dir")"
+  if [[ -z "${BUZZ_RELAY_URL:-}" && -n "$pub" ]]; then
+    export BUZZ_RELAY_URL="$pub"
+  else
+    export BUZZ_RELAY_URL="${BUZZ_RELAY_URL:-$(visitor_default_relay)}"
+  fi
   if [[ -z "${BUZZ_PRIVATE_KEY:-}" ]]; then
     echo "error: BUZZ_PRIVATE_KEY missing in $envf" >&2
     return 1
   fi
+  visitor_assert_public_relay "$seat"
 }
 
 visitor_run() {

@@ -23,6 +23,7 @@ from gate import (  # noqa: E402
     normalize_relay,
     parse_collab_envelope,
     parse_public_txt,
+    public_env_relay_ok,
     record_prime_escalation,
     relay_from_seat_dir,
     render_envelope,
@@ -367,6 +368,81 @@ class RelayAlignTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(relay_from_seat_dir(tmp), "")
+
+    def test_public_env_relay_must_match(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "PUBLIC.txt").write_text(
+                "seat: x\nrelay: wss://tail.example\n", encoding="utf-8"
+            )
+            Path(tmp, "agent.env").write_text(
+                "BUZZ_PRIVATE_KEY=deadbeefdeadbeef\nBUZZ_RELAY_URL=https://ground.example\n",
+                encoding="utf-8",
+            )
+            bad = public_env_relay_ok(tmp, "https://ground.example")
+            self.assertFalse(bad["ok"])
+            self.assertEqual(bad["reason"], "public-env-mismatch")
+            self.assertEqual(bad["public_host"], "tail.example")
+            self.assertEqual(bad["env_host"], "ground.example")
+            ok = public_env_relay_ok(tmp, "https://tail.example/")
+            self.assertTrue(ok["ok"])
+            missing = public_env_relay_ok(tmp + "-nope", "https://tail.example")
+            self.assertFalse(missing["ok"])
+            self.assertEqual(missing["reason"], "public-relay-missing")
+            proc = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "gate.py"),
+                    "public-env",
+                    "--dir",
+                    tmp,
+                    "--relay",
+                    "https://ground.example",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+            self.assertNotIn("deadbeef", proc.stdout)
+            Path(tmp, "x").mkdir()
+            Path(tmp, "x", "PUBLIC.txt").write_text(
+                "seat: x\nrelay: wss://tail.example\n", encoding="utf-8"
+            )
+            Path(tmp, "x", "agent.env").write_text(
+                "BUZZ_PRIVATE_KEY=deadbeefdeadbeef\n", encoding="utf-8"
+            )
+            bash = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'source "$1"; export VISITOR_AGENTS_HOME="$2"; '
+                    "BUZZ_RELAY_URL=https://ground.example visitor_assert_public_relay x",
+                    "_",
+                    str(ROOT / "lib.sh"),
+                    tmp,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(bash.returncode, 3, bash.stdout + bash.stderr)
+            self.assertIn("public-env-mismatch", bash.stderr)
+            self.assertNotIn("deadbeef", bash.stdout + bash.stderr)
+            good = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'source "$1"; export VISITOR_AGENTS_HOME="$2"; '
+                    "BUZZ_RELAY_URL=https://tail.example visitor_assert_public_relay x",
+                    "_",
+                    str(ROOT / "lib.sh"),
+                    tmp,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(good.returncode, 0, good.stdout + good.stderr)
 
 
 class RosterTests(unittest.TestCase):

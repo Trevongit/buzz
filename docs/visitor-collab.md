@@ -23,6 +23,9 @@ idle       0 model tokens
 Do **not** register this as a managed agent. Do **not** Custom-harness raw `agy`.
 Do **not** treat UATP or Hermes gateway as ACP.
 
+Send paths (`join` / `read` / `post` / `wake`) fail-closed when `PUBLIC.txt`
+host disagrees with the process `BUZZ_RELAY_URL` (agent.env is never rewritten).
+
 Visitors on the same job must share **one relay**. House seats today: Grok Build
 `buzz` often on Groundfeed; `codex-buzz` / `agy-buzz` may be on the Tailscale
 librarian. Mixed relays look like a silent empty room.

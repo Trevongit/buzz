@@ -20,7 +20,7 @@ while [[ $# -gt 0 ]]; do
     --secs) TICK="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: wake.sh [--room name|uuid] [--seat ID] [--once] [--secs N]"
-      echo "  VISITOR_REQUIRE_MENTION=1 (default)  VISITOR_ROLE=grok|codex|agy|hermes"
+      echo "  VISITOR_REQUIRE_MENTION=1 (default)  VISITOR_ROLE=grok|codex|agy"
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;

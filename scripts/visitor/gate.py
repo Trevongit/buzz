@@ -311,6 +311,31 @@ def relay_from_seat_dir(seat_dir: str) -> str:
     return public_card_from_dir(seat_dir).get("relay") or ""
 
 
+def public_env_relay_ok(seat_dir: str, env_relay: str) -> dict[str, Any]:
+    """Fail-closed: process BUZZ_RELAY_URL host must match PUBLIC.txt.
+    Never opens agent.env. Does not write files."""
+    pub_host = normalize_relay(relay_from_seat_dir(seat_dir))
+    env_host = normalize_relay(env_relay)
+    if not pub_host:
+        reason = "public-relay-missing"
+        ok = False
+    elif not env_host:
+        reason = "env-relay-missing"
+        ok = False
+    elif pub_host != env_host:
+        reason = "public-env-mismatch"
+        ok = False
+    else:
+        reason = "public-env-match"
+        ok = True
+    return {
+        "ok": ok,
+        "reason": reason,
+        "public_host": pub_host,
+        "env_host": env_host,
+    }
+
+
 def role_from_seat(seat_id: str, mapping: dict[str, str] | None = None) -> str:
     """Inverse of DEFAULT_ROLE_SEATS. Unknown seats return empty (not grok)."""
     m = dict(DEFAULT_ROLE_SEATS)
@@ -580,6 +605,17 @@ if __name__ == "__main__":
         kw = _parse_kw(sys.argv[2:])
         print(role_from_seat(kw.get("seat") or ""))
         raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("public-env", "relay-from-dir"):
+        kw = _parse_kw(sys.argv[2:])
+        d = kw.get("dir") or ""
+        if sys.argv[1] == "relay-from-dir":
+            print(relay_from_seat_dir(d), end="")
+            raise SystemExit(0)
+        report = public_env_relay_ok(d, kw.get("relay") or "")
+        json.dump(report, sys.stdout)
+        sys.stdout.write("\n")
+        raise SystemExit(0 if report["ok"] else 3)
 
     if len(sys.argv) > 1 and sys.argv[1] in ("relay-align", "roster", "mention-names"):
         kw = _parse_kw(sys.argv[2:])
