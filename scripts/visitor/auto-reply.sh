@@ -9,6 +9,7 @@ source "${ROOT}/lib.sh"
 
 SEAT="$(visitor_resolve_seat)"
 ROOMS=()
+DMS=()
 DRY=0
 ONCE=0
 CATCH=0
@@ -20,14 +21,16 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --seat) SEAT="$2"; shift 2 ;;
     --room) ROOMS+=("$2"); shift 2 ;;
+    --dm) DMS+=("$2"); shift 2 ;;
     --secs) TICK="$2"; shift 2 ;;
     --timeout) TO="$2"; shift 2 ;;
     --once) ONCE=1; shift ;;
     --catch-up) CATCH=1; shift ;;
     --dry-run) DRY=1; shift ;;
     -h|--help)
-      echo "Usage: auto-reply.sh --seat ID --room UUID [--room UUID] [--once] [--catch-up] [--dry-run]"
-      echo "  Idle = wake.sh. On VISITOR_WAKE, one agy -p / codex exec turn that must post."
+      echo "Usage: auto-reply.sh --seat ID --room UUID [--dm UUID] [--once] [--catch-up] [--dry-run]"
+      echo "  --dm UUID  admit without @mention (Prime DMs). Rooms stay mention-gated."
+      echo "  Idle = wake.sh. On VISITOR_WAKE, kit posts one print-mode body."
       echo "  Grok: use monitor(buzz-watcher.sh). Do not mint seats. Do not rewrite agent.env."
       exit 0
       ;;
@@ -60,6 +63,22 @@ if [[ "$CATCH" == "1" && "$ONCE" != "1" ]]; then
   exit 1
 fi
 
+room_is_forced_dm() {
+  local r="$1" d
+  for d in "${DMS[@]+"${DMS[@]}"}"; do
+    [[ "$d" == "$r" ]] && return 0
+  done
+  return 1
+}
+
+if [[ ${#DMS[@]} -gt 0 ]]; then
+  ROOMS+=("${DMS[@]}")
+  if [[ "$DRY" != "1" ]]; then
+    for d in "${DMS[@]}"; do
+      visitor_mark_dm "$SEAT" "$d" || true
+    done
+  fi
+fi
 if [[ ${#ROOMS[@]} -eq 0 ]]; then
   if [[ "$DRY" == "1" ]]; then
     echo "error: --room required" >&2
@@ -184,8 +203,12 @@ poll_room() {
     run_turn "$room" "dry" "(dry-run: no relay read)"
     return 0
   fi
+  wake_args=(--seat "$SEAT" --room "$room" --once)
+  if room_is_forced_dm "$room" || visitor_channel_is_dm "$SEAT" "$room"; then
+    wake_args+=(--dm)
+  fi
   wake="$(
-    VISITOR_WAKE_ONCE=1 bash "${ROOT}/wake.sh" --seat "$SEAT" --room "$room" --once 2>/dev/null || true
+    VISITOR_WAKE_ONCE=1 bash "${ROOT}/wake.sh" "${wake_args[@]}" 2>/dev/null || true
   )"
   if [[ "$CATCH" == "1" && -z "$wake" ]]; then
     wake="VISITOR_WAKE match seat=$SEAT room=$room channel=$room reason=catch-up from=prime id=catch preview=catch-up"

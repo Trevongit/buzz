@@ -33,6 +33,29 @@ visitor_seat_dir() {
   echo "${home}/${seat}"
 }
 
+visitor_dm_list() {
+  echo "$(visitor_seat_dir "${1:-}")/dm-channels.txt"
+}
+
+visitor_mark_dm() {
+  local seat="${1:-}" cid="${2:-}" f
+  [[ -n "$seat" && -n "$cid" ]] || return 1
+  f="$(visitor_dm_list "$seat")"
+  mkdir -p "$(dirname "$f")"
+  if [[ -f "$f" ]] && grep -qx "$cid" "$f"; then
+    return 0
+  fi
+  echo "$cid" >>"$f"
+}
+
+visitor_channel_is_dm() {
+  local seat="${1:-}" room="${2:-}" f
+  [[ "$room" == DM-* ]] && return 0
+  [[ "${VISITOR_IS_DM:-0}" == "1" ]] && return 0
+  f="$(visitor_dm_list "$seat")"
+  [[ -f "$f" ]] && grep -qx "$room" "$f"
+}
+
 visitor_default_role() {
   if [[ -n "${VISITOR_ROLE:-}" ]]; then
     echo "$VISITOR_ROLE"

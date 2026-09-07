@@ -106,6 +106,11 @@ if grep -q 'managed-agents' "${ROOT}/auto-reply.sh"; then
 else
   ok "auto-reply not Desktop ACP"
 fi
+if grep -q -- '--dm' "${ROOT}/wake.sh" && grep -q 'visitor_channel_is_dm' "${ROOT}/wake.sh"; then
+  ok "wake.sh --dm for UUID DMs"
+else
+  bad "wake.sh must admit DMs via --dm (not DM-* prefix only)"
+fi
 role="$(python3 "${ROOT}/gate.py" role-from-seat --seat codex-buzz)"
 if [[ "$role" == "codex" ]]; then
   ok "seat-to-role codex-buzz=codex"

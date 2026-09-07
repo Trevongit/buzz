@@ -11,15 +11,18 @@ TICK="${VISITOR_WATCH_SECS:-15}"
 LIMIT="${VISITOR_WATCH_LIMIT:-20}"
 ONCE="${VISITOR_WAKE_ONCE:-0}"
 LOG="${VISITOR_WATCHER_LOG:-/tmp/visitor-wake.log}"
+FORCE_DM=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --room) ROOM="$2"; shift 2 ;;
     --seat) SEAT="$2"; shift 2 ;;
+    --dm) FORCE_DM=1; shift ;;
     --once) ONCE=1; shift ;;
     --secs) TICK="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: wake.sh [--room name|uuid] [--seat ID] [--once] [--secs N]"
+      echo "Usage: wake.sh [--room name|uuid] [--seat ID] [--dm] [--once] [--secs N]"
+      echo "  --dm  this UUID is a DM: admit without @mention (rooms stay mention-gated)"
       echo "  VISITOR_REQUIRE_MENTION=1 (default)  VISITOR_ROLE=grok|codex|agy"
       exit 0
       ;;
@@ -54,7 +57,10 @@ fi
 REQUIRE="${VISITOR_REQUIRE_MENTION:-1}"
 COOLDOWN="${VISITOR_COOLDOWN_SECS:-30}"
 IS_DM=0
-if [[ "${ROOM}" == DM-* ]] || [[ "${VISITOR_IS_DM:-0}" == "1" ]]; then
+if [[ "$FORCE_DM" == "1" ]]; then
+  visitor_mark_dm "$SEAT" "$CID" || true
+fi
+if visitor_channel_is_dm "$SEAT" "$CID" || visitor_channel_is_dm "$SEAT" "$ROOM"; then
   IS_DM=1
 fi
 

@@ -1134,6 +1134,58 @@ class SetupScriptTests(unittest.TestCase):
         self.assertIn("refuse Desktop ACP", proc.stderr)
 
 
+class DmChannelFlagTests(unittest.TestCase):
+    def test_wake_help_documents_dm_flag(self):
+        proc = subprocess.run(
+            ["bash", str(ROOT / "wake.sh"), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("--dm", proc.stdout)
+        self.assertIn("without @mention", proc.stdout)
+
+    def test_mark_dm_file_then_detect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {**os.environ, "VISITOR_AGENTS_HOME": tmp}
+            script = (
+                "set -euo pipefail\n"
+                f"source '{ROOT}/lib.sh'\n"
+                "visitor_mark_dm seat1 a186571d-15ef-4ded-bca2-6cb5a8969457\n"
+                "visitor_channel_is_dm seat1 a186571d-15ef-4ded-bca2-6cb5a8969457\n"
+                "if visitor_channel_is_dm seat1 d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed; then exit 4; fi\n"
+                "exit 0\n"
+            )
+            proc = subprocess.run(
+                ["bash", "-c", script],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            listed = Path(tmp) / "seat1" / "dm-channels.txt"
+            self.assertTrue(listed.is_file())
+            self.assertIn("a186571d-15ef-4ded-bca2-6cb5a8969457", listed.read_text())
+
+    def test_auto_reply_help_has_dm(self):
+        proc = subprocess.run(
+            ["bash", str(ROOT / "auto-reply.sh"), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("--dm UUID", proc.stdout)
+
+    def test_room_without_dm_flag_stays_mention_gated_in_wake_source(self):
+        body = (ROOT / "wake.sh").read_text()
+        self.assertIn("FORCE_DM", body)
+        self.assertIn("visitor_channel_is_dm", body)
+        self.assertIn("visitor_mark_dm", body)
+
+
 class ParseWakeLineTests(unittest.TestCase):
     def test_wake_line_fields(self):
         line = (

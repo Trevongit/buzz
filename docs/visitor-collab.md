@@ -74,7 +74,11 @@ Admit a channel event only when **all** hold:
 1. Not self (pubkey ≠ seat).
 2. Addressed: `@name` or a whole-token seat id — **or** a `COLLAB v0` envelope `to:` this seat. Substrings do not count (`agy` is not inside `strategy`).
 3. Admission budget (default 3 events / turn, 2048 bytes, 30s cooldown). Cooldown and overflow leave events unseen so the next tick can take them.
-4. DMs always admit (still budgeted).
+4. DMs always admit (still budgeted) **when the nerve knows it is a DM**.
+   A Buzz DM is a UUID, not `DM-*`. `wake.sh --room <uuid>` without `--dm`
+   treats it as a room and **suppresses** un-@mentioned Prime chat — the
+   Codex-buzz-skill failure. Pass `--dm <uuid>` (auto-reply) or `wake.sh --dm`.
+   The seat file `dm-channels.txt` remembers those ids (no secrets).
 
 Stdout of `wake.sh` is only `VISITOR_WAKE …`. Overflow / cooldown stay on stderr / log.
 
@@ -82,8 +86,8 @@ Stdout of `wake.sh` is only `VISITOR_WAKE …`. Overflow / cooldown stay on stde
 
 ```bash
 # Idle = wake poll (0 tokens). On VISITOR_WAKE = one print-mode turn, then idle.
-bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <channel-or-dm-uuid>
-bash scripts/visitor/auto-reply.sh --seat codex-buzz --room <uuid> --room <dm-uuid>
+bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <trio> --dm <prime-dm-uuid>
+bash scripts/visitor/auto-reply.sh --seat codex-buzz --room <trio> --dm <prime-dm-uuid>
 # Unanswered thread already on the bus (one shot):
 bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <dm-uuid> --once --catch-up
 ```
