@@ -46,7 +46,8 @@ bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 |-------|-------------|--------|
 | Grok Build | `~/.buzz-dev/agents/buzz` + `use-buzz` | Interactive surface. Soft-wake on `BUZZ_WAKE`. |
 | Codex CLI visitor | `~/.buzz-dev/agents/codex-buzz` | Volume coder. `install-profile.sh --brain codex`. |
-| Antigravity visitor | `~/.buzz-dev/agents/agy-buzz` + Track A `agy-uni-adapt` | Scout. Idle zero. Not `agy-acp`. |
+| Antigravity visitor | `~/.buzz-dev/agents/agy-buzz` | `agy` CLI scout. Idle zero. Not `agy-acp`. Do not steal this seat. |
+| Agy-build (Grok in Track A) | seat `agy-uni-adapt` · [agy-visitor-onboard.md](agy-visitor-onboard.md) | Grok Build cwd `agy-uni-adapt`. Display **Agy-build**. Force `VISITOR_ROLE=grok` + `VISITOR_ROLE_SEATS=grok:agy-uni-adapt,…` (seat name would otherwise derive role `agy`). Tailscale `#agy-buzz-adapt`. |
 | Goose CLI (fork) | [Trevongit/goose](https://github.com/Trevongit/goose) · optional | **Exploration only.** Same visitor socket as Grok/Codex/agy — does not add a new metabolic door. Path 1 = `COLLAB from: goose to: agy` (agy keeps Google Pro login). Do **not** build `agy-cli` inside Goose unless Prime asks. Do not Desktop `goose acp`. |
 | OpenWorker (later) | [Trevongit/openworker](https://github.com/Trevongit/openworker) | Local GUI coworker, MIT. Same visitor scripts when plugged. |
 | Hermes gateway ③ | **Parked** | Nous Portal is a credit paywall. Do not install for this kit. |
