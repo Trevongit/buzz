@@ -119,7 +119,7 @@ EOF
 }
 
 run_turn() {
-  local room="$1" preview="$2" hist prompt_file cmd cwd
+  local room="$1" preview="$2" hist="${3:-}" prompt_file cmd cwd
   echo "VISITOR_TURN start seat=$SEAT role=$ROLE room=$room preview=${preview:0:80}"
   if [[ "$DRY" == "1" ]]; then
     brain_argv || true
