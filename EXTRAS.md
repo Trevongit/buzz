@@ -57,7 +57,7 @@ External visitors (buzz-cli, idle = 0)  #
     ├── Grok Build + use-buzz
     ├── Codex CLI  (codex-buzz seat)
     ├── agy + UATP (agy-buzz / Track A)
-    ├── Goose CLI fork (recipes / unattended; not Desktop goose acp)
+    ├── Goose CLI fork (optional visitor; COLLAB to agy — not agy-inside-goose)
     └── (Hermes ③ parked — Nous Portal paywall)
 ```
 
@@ -127,7 +127,7 @@ Defaults below are extras Desktop **Experiments** (`previewFeatureEnabled`). Run
 | **Codex managed turbo** | Agent spawn | on extras | Cap Codex/Grok `BUZZ_ACP_AGENTS` to 1 at spawn (stored PATCH parallelism 10 is unchanged). `CODEX_CONFIG` is `approval_policy=never` + `sandbox_mode=danger-full-access` so the first `buzz messages send` is the real send. Do not Edit/Save PATCH. |
 | **Ember send unwrap** | ACP fallback | Ember-only flag | If 9B prints `buzz messages send --content "…"` instead of calling the tool, publish-final posts the quoted body, not the argv. Helix/PATCH/Prism stay off the flag. |
 | **Metabolic spawn caps** | Agent spawn | on extras | Effective `BUZZ_ACP_AGENTS=1` for grok, Codex, agy-acp, buzz-agent. Stored Parallelism 10 is unchanged — **Cancel** the Edit form; blank Save writes 10. Prism `--print` truncates fat system prompt; timeout 90s. |
-| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity, Grok, and **Goose CLI** from [Trevongit/goose](https://github.com/Trevongit/goose) (recipes / unattended, in-tree `buzz/`). Not Desktop `goose acp`. Hermes / Nous Portal **parked**. Same-bus fail-closed. Idle = 0 tokens. |
+| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity (agy Track A / Google Pro login), Grok. Goose fork is an **optional** visitor on the same socket (COLLAB to agy) — not agy-inside-goose. Hermes parked. Same-bus fail-closed. Idle = 0 tokens. |
 | **Pocket Listen** | Experiment `pocketListen` | **on** | Speak, pause/resume, wait for a named Reader summary, Follow along. Off hides Listen controls. |
 | **Public GitHub reads** | Experiment `publicGithubRead` | **on** | Overview / Files / Fetch compare for public `github.com` remotes without cloning. |
 | **GitHub machine git** | Experiment `githubMachineGit` | **off** | Clone/fetch/pull/push with this computer’s `gh`/`git` login. Buzz never puts the Nostr key in that git process. |

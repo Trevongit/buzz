@@ -47,7 +47,7 @@ bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 | Grok Build | `~/.buzz-dev/agents/buzz` + `use-buzz` | Interactive surface. Soft-wake on `BUZZ_WAKE`. |
 | Codex CLI visitor | `~/.buzz-dev/agents/codex-buzz` | Volume coder. `install-profile.sh --brain codex`. |
 | Antigravity visitor | `~/.buzz-dev/agents/agy-buzz` + Track A `agy-uni-adapt` | Scout. Idle zero. Not `agy-acp`. |
-| Goose CLI (fork) | [Trevongit/goose](https://github.com/Trevongit/goose) · `/home/trev/PROJECTS/goose` | Recipe / unattended. In-tree `buzz/` already uses `buzz-cli`. **Visitor only** — do not add a Desktop Goose member for this kit. Do not use the older `/usr/bin/goose`. Onboard prompt: [goose-visitor-onboard.md](goose-visitor-onboard.md). |
+| Goose CLI (fork) | [Trevongit/goose](https://github.com/Trevongit/goose) · optional | **Exploration only.** Same visitor socket as Grok/Codex/agy — does not add a new metabolic door. Path 1 = `COLLAB from: goose to: agy` (agy keeps Google Pro login). Do **not** build `agy-cli` inside Goose unless Prime asks. Do not Desktop `goose acp`. |
 | OpenWorker (later) | [Trevongit/openworker](https://github.com/Trevongit/openworker) | Local GUI coworker, MIT. Same visitor scripts when plugged. |
 | Hermes gateway ③ | **Parked** | Nous Portal is a credit paywall. Do not install for this kit. |
 
@@ -123,14 +123,13 @@ The metabolic visitor is **buzz-cli**, not a hosted agent subscription.
 | Interactive | Grok Build + `use-buzz` | Already here |
 | Volume code | Codex CLI visitor (`codex-buzz`) | Already here |
 | Scout | Antigravity Track A (`agy-buzz`) | Already here |
-| Recipes / unattended | Goose CLI from the **fork** (`~/PROJECTS/goose`) | Apache-2.0, local / BYOK / Ollama |
+| Recipes / unattended | Goose CLI fork | Optional. Same `buzz-cli` socket — not more metabolic than Grok Build + Codex + agy. |
 | Mention-gated poll | `scripts/visitor/wake.sh` | Zero model tokens idle |
 | GUI coworker later | OpenWorker + these scripts | MIT |
 
-Goose already ships `buzz/` (CLI identities + recipes + hourly). That is the
-visitor pattern. Buzz Desktop's default ACP command is also `goose` — leave
-that as roster presence. Metabolic collab uses the **fork CLI + these scripts**,
-not `goose acp` under `buzz-acp`.
+Goose is the same visitor pattern, not a new door. **Path 1:** `COLLAB from:
+goose to: agy` (agy keeps Google Pro login). Do not build Antigravity-inside-Goose
+(`agy-cli`) unless Prime asks. Desktop `goose acp` stays roster-only.
 
 Do not mint a Goose seat until Prime asks. Do not `curl | bash` the upstream
 install. `scripts/visitor/goose-cli.sh --check` must resolve the fork binary
