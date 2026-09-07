@@ -82,7 +82,7 @@ brain_argv() {
       return 2
       ;;
     agy)
-      echo "agy --print --print-timeout ${TO}s --mode=accept-edits --dangerously-skip-permissions -- <prompt-file>"
+      echo "agy --print-timeout ${TO}s --mode=accept-edits --dangerously-skip-permissions --print=<prompt-file>"
       ;;
     codex)
       cwd="${VISITOR_CODEX_ROOT:-$HOME/PROJECTS/buzz-origin-plus}"
@@ -136,14 +136,20 @@ run_turn() {
       ;;
     agy)
       cwd="${VISITOR_AGY_ROOT:-$HOME/PROJECTS/agy-uni-adapt}"
-      ( cd "$cwd" && timeout "${TO}s" agy --print --print-timeout "${TO}s" \
+      if ! ( cd "$cwd" && timeout "${TO}s" agy --print-timeout "${TO}s" \
           --mode=accept-edits --dangerously-skip-permissions \
-          -- "$(cat "$prompt_file")" ) >>"$LOG" 2>&1
+          --print="$(cat "$prompt_file")" ) >>"$LOG" 2>&1; then
+        echo "VISITOR_TURN fail seat=$SEAT room=$room reason=agy-print" >&2
+        return 1
+      fi
       ;;
     codex)
       cwd="${VISITOR_CODEX_ROOT:-$HOME/PROJECTS/buzz-origin-plus}"
-      timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
-        -s danger-full-access -C "$cwd" - <"$prompt_file" >>"$LOG" 2>&1
+      if ! timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
+        -s danger-full-access -C "$cwd" - <"$prompt_file" >>"$LOG" 2>&1; then
+        echo "VISITOR_TURN fail seat=$SEAT room=$room reason=codex-exec" >&2
+        return 1
+      fi
       ;;
     *)
       echo "VISITOR_TURN fail seat=$SEAT reason=unknown-role" >&2
