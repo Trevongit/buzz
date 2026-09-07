@@ -154,7 +154,8 @@ run_turn() {
     agy)
       cwd="${VISITOR_AGY_ROOT:-${DIR}/l2-scratch}"
       mkdir -p "$cwd"
-      if ! ( cd "$cwd" && timeout "${TO}s" agy --print-timeout "${TO}s" \
+      if ! ( cd "$cwd" && env -u BUZZ_PRIVATE_KEY -u BUZZ_NSEC -u BUZZ_AUTH_TAG \
+          timeout "${TO}s" agy --print-timeout "${TO}s" \
           --mode=accept-edits --dangerously-skip-permissions \
           --print="$(cat "$prompt_file")" >"$out_file" ) >>"$LOG" 2>&1; then
         echo "VISITOR_TURN fail seat=$SEAT room=$room reason=agy-print" >&2
@@ -164,7 +165,8 @@ run_turn() {
     codex)
       cwd="${VISITOR_CODEX_ROOT:-${DIR}/l2-scratch}"
       mkdir -p "$cwd"
-      if ! timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
+      if ! env -u BUZZ_PRIVATE_KEY -u BUZZ_NSEC -u BUZZ_AUTH_TAG \
+        timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
         -s read-only -C "$cwd" -o "$out_file" - \
         <"$prompt_file" >>"$LOG" 2>&1; then
         echo "VISITOR_TURN fail seat=$SEAT room=$room reason=codex-exec" >&2

@@ -1337,6 +1337,7 @@ class AutoReplyScriptTests(unittest.TestCase):
         self.assertIn("unsee_wake", body)
         self.assertIn("l2-scratch", body)
         self.assertIn("secret-in-body", body)
+        self.assertIn("env -u BUZZ_PRIVATE_KEY", body)
 
     def test_grok_uses_monitor_not_print(self):
         proc = subprocess.run(
