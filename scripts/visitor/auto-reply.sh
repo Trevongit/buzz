@@ -52,6 +52,8 @@ TO="$(visitor_bound_limit "$TO" 300)"
 if [[ "$DRY" != "1" ]]; then
   visitor_load_seat_env "$SEAT"
 fi
+# Own cursor so a TUI wake.sh on the same UUID cannot eat L2 wakes.
+export VISITOR_WAKE_STATE_PREFIX="${VISITOR_WAKE_STATE_PREFIX:-l2-}"
 DIR="$(visitor_seat_dir "$SEAT")"
 LOG="${VISITOR_AUTO_REPLY_LOG:-${DIR}/auto-reply.log}"
 if [[ "$DRY" != "1" ]]; then
@@ -215,28 +217,39 @@ poll_room() {
   fi
   parsed="$(printf '%s\n' "$wake" | python3 "${ROOT}/gate.py" parse-wake || true)"
   if [[ -z "$parsed" || "$parsed" == "{}" ]]; then
-    return 0
+    return 1
   fi
   preview="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("preview") or "")' "$parsed")"
   hist="$(hist_for "$room")"
   run_turn "$room" "$preview" "$hist"
 }
 
+drain_room() {
+  local room="$1" n=0
+  poll_room "$room" || return 0
+  if room_is_forced_dm "$room" || visitor_channel_is_dm "$SEAT" "$room"; then
+    while [[ "$n" -lt 3 ]]; do
+      n=$((n + 1))
+      poll_room "$room" || break
+    done
+  fi
+}
+
 if [[ "$DRY" == "1" ]]; then
-  poll_room "${ROOMS[0]}"
+  poll_room "${ROOMS[0]}" || true
   exit 0
 fi
 
 if [[ "$ONCE" == "1" ]]; then
   for r in "${ROOMS[@]}"; do
-    poll_room "$r" || true
+    drain_room "$r" || true
   done
   exit 0
 fi
 
 while true; do
   for r in "${ROOMS[@]}"; do
-    poll_room "$r" || true
+    drain_room "$r" || true
   done
   sleep "$TICK"
 done

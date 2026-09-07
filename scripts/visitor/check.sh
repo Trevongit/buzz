@@ -111,6 +111,11 @@ if grep -q -- '--dm' "${ROOT}/wake.sh" && grep -q 'visitor_channel_is_dm' "${ROO
 else
   bad "wake.sh must admit DMs via --dm (not DM-* prefix only)"
 fi
+if grep -q 'VISITOR_DM_COOLDOWN_SECS' "${ROOT}/wake.sh" && grep -q 'l2-' "${ROOT}/auto-reply.sh"; then
+  ok "DM cooldown 0 + L2 cursor"
+else
+  bad "DM auto-reply must not share TUI wake state or 30s cooldown"
+fi
 role="$(python3 "${ROOT}/gate.py" role-from-seat --seat codex-buzz)"
 if [[ "$role" == "codex" ]]; then
   ok "seat-to-role codex-buzz=codex"

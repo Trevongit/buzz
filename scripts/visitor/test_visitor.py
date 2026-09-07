@@ -1184,6 +1184,11 @@ class DmChannelFlagTests(unittest.TestCase):
         self.assertIn("FORCE_DM", body)
         self.assertIn("visitor_channel_is_dm", body)
         self.assertIn("visitor_mark_dm", body)
+        self.assertIn("VISITOR_DM_COOLDOWN_SECS", body)
+        self.assertIn("VISITOR_WAKE_STATE_PREFIX", body)
+        ar = (ROOT / "auto-reply.sh").read_text()
+        self.assertIn("l2-", ar)
+        self.assertIn("drain_room", ar)
 
 
 class ParseWakeLineTests(unittest.TestCase):

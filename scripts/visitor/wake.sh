@@ -63,8 +63,15 @@ fi
 if visitor_channel_is_dm "$SEAT" "$CID" || visitor_channel_is_dm "$SEAT" "$ROOM"; then
   IS_DM=1
 fi
+if [[ "$IS_DM" == "1" ]]; then
+  COOLDOWN="${VISITOR_DM_COOLDOWN_SECS:-0}"
+  if ! [[ "$COOLDOWN" =~ ^[0-9]+$ ]]; then
+    COOLDOWN=0
+  fi
+fi
 
-STATE="${DIR}/visitor-wake-${CID}.json"
+STATE_PREFIX="${VISITOR_WAKE_STATE_PREFIX:-}"
+STATE="${DIR}/visitor-wake-${STATE_PREFIX}${CID}.json"
 poll_once() {
   local json
   json="$(visitor_run messages get --channel "$CID" --limit "$LIMIT" 2>/dev/null || true)"
