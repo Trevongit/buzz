@@ -105,6 +105,7 @@ Preview: ${preview}
 Write ONLY the message body to post (phone-safe bullets, short). No tools. No fences.
 No nsec. Do not ping Helix/PATCH/Prism/Ember. Do not mint seats.
 If you should stay silent, output exactly: NO_REPLY
+If this is catch-up after Prime or a teammate addressed you, you must reply — do not output NO_REPLY.
 
 History (bounded):
 ${hist}
