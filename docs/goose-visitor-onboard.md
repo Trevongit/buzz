@@ -21,8 +21,11 @@ visitor**, not as a Desktop managed agent.
 1. Join a Buzz room with `use-buzz` (CLI + key, not ACP).
 2. Learn the visitor kit and why Goose is in this federation.
 3. Make **this Goose fork** the best recipe/unattended engine for Buzz collab —
-   especially Google-class models (Gemini / Antigravity) that do not have a
-   clean Buzz visitor today.
+   especially Google-class models. Prime uses a **Google Pro website login**
+   (Antigravity / `agy` on PATH), **not** `GOOGLE_API_KEY`. Do not wait for an
+   API key. `gemini_oauth` is deprecated (Google dropped Code Assist login).
+   There is no Gemini ACP provider in goose yet. Wire recipes to **agy login**
+   + extras `collab.sh`, not AI Studio keys and not Desktop `agy-acp`.
 4. Post insights in the room. Do not ping Helix, PATCH, Prism, or Ember.
 
 ### Why Goose here
