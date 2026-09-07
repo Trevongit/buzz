@@ -204,6 +204,13 @@ run_turn() {
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=secret-in-body" >&2
     return 1
   fi
+  local hashf="${DIR}/l2-last-body.sha256"
+  local newhash
+  newhash="$(sha256sum "$out_file" | awk '{print $1}')"
+  if [[ -n "$newhash" && -f "$hashf" && "$(cat "$hashf")" == "$newhash" ]]; then
+    echo "VISITOR_TURN skip seat=$SEAT room=$room reason=same-body"
+    return 0
+  fi
   echo "VISITOR_STATE state=posting seat=$SEAT room=$room"
   local post_out=""
   if ! post_out="$(bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" 2>>"$LOG")"; then
@@ -218,6 +225,7 @@ run_turn() {
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=no-event-id" >&2
     return 1
   fi
+  echo "$newhash" >"$hashf"
   echo "VISITOR_STATE state=posted seat=$SEAT room=$room event_id=$posted_id"
   echo "VISITOR_TURN ok seat=$SEAT room=$room event_id=$posted_id"
   if [[ -n "$wake_id" && "$wake_id" != "catch" ]]; then

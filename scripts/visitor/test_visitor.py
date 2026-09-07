@@ -1345,6 +1345,7 @@ class AutoReplyScriptTests(unittest.TestCase):
         self.assertIn("VISITOR_STATE state=posting", body)
         self.assertIn("repo-cwd", body)
         self.assertIn("l2-posted", body)
+        self.assertIn("same-body", body)
 
     def test_fake_cli_stdin_dash_body_and_mention(self):
         with tempfile.TemporaryDirectory() as tmp:
