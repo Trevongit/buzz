@@ -1256,6 +1256,9 @@ class AutoReplyScriptTests(unittest.TestCase):
         body = (ROOT / "auto-reply.sh").read_text()
         banned = "managed-agents" + ".json"
         self.assertNotIn(banned, body)
+        self.assertIn("NO_REPLY", body)
+        self.assertIn("No tools", body)
+        self.assertIn("post.sh", body)
 
 
 class InstallProfileTests(unittest.TestCase):

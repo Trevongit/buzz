@@ -13,7 +13,7 @@ DRY=0
 ONCE=0
 CATCH=0
 TICK="${VISITOR_WATCH_SECS:-15}"
-TO="${VISITOR_TURN_TIMEOUT_SECS:-120}"
+TO="${VISITOR_TURN_TIMEOUT_SECS:-180}"
 LOG=""
 
 while [[ $# -gt 0 ]]; do
@@ -102,16 +102,9 @@ You are Buzz visitor seat ${SEAT} role ${ROLE}. A mention-gated or DM event woke
 Channel: ${room}
 Preview: ${preview}
 
-Read the history below, then reply in-room with extras visitor scripts (key in env, never argv):
-  ROOT=${ROOT}
-  export BUZZ_SEAT_ID=${SEAT}
-  export VISITOR_ROLE=${ROLE}
-  bash "\$ROOT/post.sh" --seat ${SEAT} --room ${room} --content "…"
-Or: buzz --relay "\$BUZZ_RELAY_URL" messages send --channel ${room} --content "…" --mention <pubkey>
-
-Rules: phone-safe bullets. Do not ping Helix/PATCH/Prism/Ember. Do not mint seats.
-Do not rewrite agent.env. Do not print nsec. Do not Custom-harness. If nothing to add, post nothing.
-One short reply. Then stop.
+Write ONLY the message body to post (phone-safe bullets, short). No tools. No fences.
+No nsec. Do not ping Helix/PATCH/Prism/Ember. Do not mint seats.
+If you should stay silent, output exactly: NO_REPLY
 
 History (bounded):
 ${hist}
@@ -119,7 +112,7 @@ EOF
 }
 
 run_turn() {
-  local room="$1" preview="$2" hist="${3:-}" prompt_file cmd cwd
+  local room="$1" preview="$2" hist="${3:-}" prompt_file out_file cwd
   echo "VISITOR_TURN start seat=$SEAT role=$ROLE room=$room preview=${preview:0:80}"
   if [[ "$DRY" == "1" ]]; then
     brain_argv || true
@@ -127,8 +120,10 @@ run_turn() {
     return 0
   fi
   prompt_file="${DIR}/auto-reply-prompt.txt"
+  out_file="${DIR}/auto-reply-out.txt"
   write_prompt "$room" "$preview" "$hist" "$prompt_file"
   chmod 600 "$prompt_file" 2>/dev/null || true
+  : >"$out_file"
   case "$ROLE" in
     grok)
       echo "VISITOR_TURN skip seat=$SEAT reason=grok-uses-monitor" >&2
@@ -138,7 +133,7 @@ run_turn() {
       cwd="${VISITOR_AGY_ROOT:-$HOME/PROJECTS/agy-uni-adapt}"
       if ! ( cd "$cwd" && timeout "${TO}s" agy --print-timeout "${TO}s" \
           --mode=accept-edits --dangerously-skip-permissions \
-          --print="$(cat "$prompt_file")" ) >>"$LOG" 2>&1; then
+          --print="$(cat "$prompt_file")" >"$out_file" ) >>"$LOG" 2>&1; then
         echo "VISITOR_TURN fail seat=$SEAT room=$room reason=agy-print" >&2
         return 1
       fi
@@ -146,7 +141,8 @@ run_turn() {
     codex)
       cwd="${VISITOR_CODEX_ROOT:-$HOME/PROJECTS/buzz-origin-plus}"
       if ! timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
-        -s danger-full-access -C "$cwd" - <"$prompt_file" >>"$LOG" 2>&1; then
+        -s danger-full-access -C "$cwd" -o "$out_file" - \
+        <"$prompt_file" >>"$LOG" 2>&1; then
         echo "VISITOR_TURN fail seat=$SEAT room=$room reason=codex-exec" >&2
         return 1
       fi
@@ -156,6 +152,18 @@ run_turn() {
       return 2
       ;;
   esac
+  if grep -qx 'NO_REPLY' "$out_file" 2>/dev/null; then
+    echo "VISITOR_TURN skip seat=$SEAT room=$room reason=no-reply"
+    return 0
+  fi
+  if [[ ! -s "$out_file" ]]; then
+    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=empty-reply" >&2
+    return 1
+  fi
+  if ! bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" >>"$LOG" 2>&1; then
+    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=post" >&2
+    return 1
+  fi
   echo "VISITOR_TURN ok seat=$SEAT room=$room"
 }
 
