@@ -163,4 +163,11 @@ fi
 while IFS= read -r pk; do
   [[ -n "$pk" ]] && args+=(--mention "$pk")
 done < <(printf '%s' "$CONTENT" | python3 "${VISITOR_ROOT}/gate.py" mention-pubkeys --home "$HOME_AGENTS")
-printf '%s' "$CONTENT" | visitor_run "${args[@]}"
+send_out="$(printf '%s' "$CONTENT" | visitor_run "${args[@]}")"
+printf '%s\n' "$send_out"
+eid="$(printf '%s' "$send_out" | python3 "${VISITOR_ROOT}/gate.py" parse-send-id || true)"
+if [[ -z "$eid" ]]; then
+  echo "error: send did not return accepted event_id" >&2
+  exit 2
+fi
+echo "VISITOR_POST event_id=$eid"

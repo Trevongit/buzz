@@ -27,6 +27,9 @@ from gate import (  # noqa: E402
     parse_public_txt,
     parse_wake_line,
     mention_pubkeys_from_content,
+    parse_send_event_id,
+    l2_already_posted,
+    l2_record_posted,
     public_env_relay_ok,
     record_prime_escalation,
     relay_from_seat_dir,
@@ -1340,6 +1343,8 @@ class AutoReplyScriptTests(unittest.TestCase):
         self.assertIn("env -u BUZZ_PRIVATE_KEY", body)
         self.assertIn("l2-lease.lock", body)
         self.assertIn("VISITOR_STATE state=posting", body)
+        self.assertIn("repo-cwd", body)
+        self.assertIn("l2-posted", body)
 
     def test_fake_cli_stdin_dash_body_and_mention(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1402,6 +1407,19 @@ class AutoReplyScriptTests(unittest.TestCase):
             self.assertIn("--mention", argv)
             self.assertEqual(argv[argv.index("--mention") + 1], pk)
             self.assertTrue(stdin_p.read_text().startswith("- Gate on p-tags."))
+            self.assertIn("VISITOR_POST event_id=ab", proc.stdout)
+
+    def test_parse_send_and_l2_journal(self):
+        self.assertEqual(
+            parse_send_event_id('{"accepted":true,"event_id":"deadbeefcafe"}'),
+            "deadbeefcafe",
+        )
+        self.assertEqual(parse_send_event_id('{"accepted":false}'), "")
+        st = {}
+        self.assertFalse(l2_already_posted(st, "abc123"))
+        st = l2_record_posted(st, "abc123def", "evt1", 1)
+        self.assertTrue(l2_already_posted(st, "abc123"))
+        self.assertTrue(l2_already_posted(st, "abc123def"))
 
     def test_grok_uses_monitor_not_print(self):
         proc = subprocess.run(

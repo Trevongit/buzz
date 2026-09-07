@@ -139,7 +139,7 @@ EOF
 }
 
 run_turn() {
-  local room="$1" preview="$2" hist="${3:-}" prompt_file out_file cwd
+  local room="$1" preview="$2" hist="${3:-}" wake_id="${4:-}" prompt_file out_file cwd
   echo "VISITOR_TURN start seat=$SEAT role=$ROLE room=$room preview=${preview:0:80}"
   echo "VISITOR_STATE state=generating seat=$SEAT role=$ROLE room=$room"
   if [[ "$DRY" == "1" ]]; then
@@ -160,6 +160,10 @@ run_turn() {
     agy)
       cwd="${VISITOR_AGY_ROOT:-${DIR}/l2-scratch}"
       mkdir -p "$cwd"
+      if [[ -d "$cwd/.git" ]]; then
+        echo "VISITOR_TURN fail seat=$SEAT reason=repo-cwd" >&2
+        return 1
+      fi
       if ! ( cd "$cwd" && env -u BUZZ_PRIVATE_KEY -u BUZZ_NSEC -u BUZZ_AUTH_TAG \
           timeout "${TO}s" agy --print-timeout "${TO}s" \
           --mode=accept-edits --dangerously-skip-permissions \
@@ -171,6 +175,10 @@ run_turn() {
     codex)
       cwd="${VISITOR_CODEX_ROOT:-${DIR}/l2-scratch}"
       mkdir -p "$cwd"
+      if [[ -d "$cwd/.git" ]]; then
+        echo "VISITOR_TURN fail seat=$SEAT reason=repo-cwd" >&2
+        return 1
+      fi
       if ! env -u BUZZ_PRIVATE_KEY -u BUZZ_NSEC -u BUZZ_AUTH_TAG \
         timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
         -s read-only -C "$cwd" -o "$out_file" - \
@@ -197,13 +205,25 @@ run_turn() {
     return 1
   fi
   echo "VISITOR_STATE state=posting seat=$SEAT room=$room"
-  if ! bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" >>"$LOG" 2>&1; then
+  local post_out=""
+  if ! post_out="$(bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" 2>>"$LOG")"; then
     echo "VISITOR_STATE state=failed seat=$SEAT room=$room reason=post"
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=post" >&2
     return 1
   fi
-  echo "VISITOR_STATE state=posted seat=$SEAT room=$room"
-  echo "VISITOR_TURN ok seat=$SEAT room=$room"
+  local posted_id=""
+  posted_id="$(printf '%s\n' "$post_out" | sed -n 's/^VISITOR_POST event_id=//p' | tail -1)"
+  if [[ -z "$posted_id" ]]; then
+    echo "VISITOR_STATE state=failed seat=$SEAT room=$room reason=no-event-id"
+    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=no-event-id" >&2
+    return 1
+  fi
+  echo "VISITOR_STATE state=posted seat=$SEAT room=$room event_id=$posted_id"
+  echo "VISITOR_TURN ok seat=$SEAT room=$room event_id=$posted_id"
+  if [[ -n "$wake_id" && "$wake_id" != "catch" ]]; then
+    python3 "${ROOT}/gate.py" l2-posted --action record \
+      --file "${DIR}/l2-posted.json" --wake "$wake_id" --event "$posted_id" || true
+  fi
 }
 
 unsee_wake() {
@@ -261,8 +281,13 @@ poll_room() {
   fi
   preview="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("preview") or "")' "$parsed")"
   eid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("id") or "")' "$parsed")"
+  journal="${DIR}/l2-posted.json"
+  if python3 "${ROOT}/gate.py" l2-posted --action check --file "$journal" --wake "$eid"; then
+    echo "VISITOR_STATE state=posted seat=$SEAT room=$room reason=already"
+    return 0
+  fi
   hist="$(hist_for "$room")"
-  if ! run_turn "$room" "$preview" "$hist"; then
+  if ! run_turn "$room" "$preview" "$hist" "$eid"; then
     unsee_wake "$room" "$eid"
     return 1
   fi

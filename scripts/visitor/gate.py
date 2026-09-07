@@ -445,6 +445,53 @@ def public_env_relay_ok(seat_dir: str, env_relay: str) -> dict[str, Any]:
     }
 
 
+def parse_send_event_id(raw: str) -> str:
+    """Extract accepted event_id from buzz messages send JSON. Empty if missing."""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return ""
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return ""
+    if not isinstance(data, dict):
+        return ""
+    if data.get("accepted") is False:
+        return ""
+    eid = data.get("event_id") or ""
+    return eid if isinstance(eid, str) else ""
+
+
+def l2_already_posted(journal: dict[str, Any], wake_id: str) -> bool:
+    if not wake_id:
+        return False
+    posted = journal.get("posted") or {}
+    if not isinstance(posted, dict):
+        return False
+    return wake_id in posted or any(
+        str(k).startswith(wake_id) or wake_id.startswith(str(k)[:12])
+        for k in posted
+    )
+
+
+def l2_record_posted(
+    journal: dict[str, Any], wake_id: str, event_id: str, now_unix: int
+) -> dict[str, Any]:
+    posted = dict(journal.get("posted") or {})
+    if wake_id and event_id:
+        posted[wake_id] = {"event_id": event_id, "unix": now_unix}
+    out = dict(journal)
+    out["posted"] = posted
+    return out
+
+
 def parse_wake_line(line: str) -> dict[str, str]:
     """Parse a `VISITOR_WAKE …` stdout line. Empty dict if not a wake."""
     s = (line or "").strip()
@@ -738,6 +785,32 @@ if __name__ == "__main__":
         for pk in mention_pubkeys_from_content(body, home):
             print(pk)
         raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "parse-send-id":
+        print(parse_send_event_id(sys.stdin.read()), end="")
+        raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "l2-posted":
+        kw = _parse_kw(sys.argv[2:])
+        path = Path(kw.get("file") or "")
+        try:
+            journal = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            journal = {}
+        if not isinstance(journal, dict):
+            journal = {}
+        action = kw.get("action") or "check"
+        wake_id = kw.get("wake") or ""
+        if action == "check":
+            raise SystemExit(0 if l2_already_posted(journal, wake_id) else 1)
+        if action == "record":
+            journal = l2_record_posted(
+                journal, wake_id, kw.get("event") or "", int(time.time())
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(journal, indent=2) + "\n", encoding="utf-8")
+            raise SystemExit(0)
+        raise SystemExit(2)
 
     if len(sys.argv) > 1 and sys.argv[1] == "parse-wake":
         parsed = parse_wake_line(sys.stdin.read())
