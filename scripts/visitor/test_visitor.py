@@ -1304,7 +1304,38 @@ class AutoReplyScriptTests(unittest.TestCase):
         self.assertIn("codex exec", proc.stdout)
         self.assertIn("--ephemeral", proc.stdout)
         self.assertIn("read-only", proc.stdout)
+        self.assertIn("l2-scratch", proc.stdout)
         self.assertNotIn("danger-full-access", proc.stdout)
+        self.assertNotIn("PROJECTS/buzz-origin-plus", proc.stdout)
+
+    def test_dash_prefixed_body_dry_run_prints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            body = Path(tmp) / "body.txt"
+            body.write_text("- Gate on explicit room/DM p-tags.\n", encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "post.sh"),
+                    "--seat",
+                    "codex-buzz",
+                    "--room",
+                    "00000000-0000-4000-8000-000000000001",
+                    "--file",
+                    str(body),
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("- Gate on explicit room/DM p-tags.", proc.stdout)
+            self.assertIn("DRY-RUN not posted", proc.stdout)
+
+    def test_unsee_on_post_fail_in_source(self):
+        body = (ROOT / "auto-reply.sh").read_text()
+        self.assertIn("unsee_wake", body)
+        self.assertIn("l2-scratch", body)
 
     def test_grok_uses_monitor_not_print(self):
         proc = subprocess.run(

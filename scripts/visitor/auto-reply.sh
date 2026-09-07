@@ -106,7 +106,7 @@ brain_argv() {
       echo "agy --print-timeout ${TO}s --mode=accept-edits --dangerously-skip-permissions --print=<prompt-file>"
       ;;
     codex)
-      cwd="${VISITOR_CODEX_ROOT:-$HOME/PROJECTS/buzz-origin-plus}"
+      cwd="${VISITOR_CODEX_ROOT:-${DIR}/l2-scratch}"
       echo "codex exec --ephemeral --skip-git-repo-check -s read-only -C ${cwd} -"
       ;;
     *)
@@ -152,7 +152,8 @@ run_turn() {
       return 2
       ;;
     agy)
-      cwd="${VISITOR_AGY_ROOT:-$HOME/PROJECTS/agy-uni-adapt}"
+      cwd="${VISITOR_AGY_ROOT:-${DIR}/l2-scratch}"
+      mkdir -p "$cwd"
       if ! ( cd "$cwd" && timeout "${TO}s" agy --print-timeout "${TO}s" \
           --mode=accept-edits --dangerously-skip-permissions \
           --print="$(cat "$prompt_file")" >"$out_file" ) >>"$LOG" 2>&1; then
@@ -161,7 +162,8 @@ run_turn() {
       fi
       ;;
     codex)
-      cwd="${VISITOR_CODEX_ROOT:-$HOME/PROJECTS/buzz-origin-plus}"
+      cwd="${VISITOR_CODEX_ROOT:-${DIR}/l2-scratch}"
+      mkdir -p "$cwd"
       if ! timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
         -s read-only -C "$cwd" -o "$out_file" - \
         <"$prompt_file" >>"$LOG" 2>&1; then
@@ -189,6 +191,29 @@ run_turn() {
   echo "VISITOR_TURN ok seat=$SEAT room=$room"
 }
 
+unsee_wake() {
+  local room="$1" eid="$2" state
+  [[ -n "$eid" && "$eid" != "catch" ]] || return 0
+  state="${DIR}/visitor-wake-${VISITOR_WAKE_STATE_PREFIX:-}${room}.json"
+  python3 - "$state" "$eid" <<'PY'
+import json, sys
+from pathlib import Path
+p, eid = Path(sys.argv[1]), sys.argv[2]
+if not p.is_file() or not eid:
+    raise SystemExit(0)
+try:
+    st = json.loads(p.read_text(encoding="utf-8"))
+except json.JSONDecodeError:
+    raise SystemExit(0)
+if not isinstance(st, dict):
+    raise SystemExit(0)
+seen = [x for x in (st.get("seen_ids") or []) if x != eid and not str(x).startswith(eid)]
+st["seen_ids"] = seen[-80:]
+st["last_wake"] = 0
+p.write_text(json.dumps(st, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 hist_for() {
   local room="$1"
   if [[ "$DRY" == "1" ]]; then
@@ -200,7 +225,7 @@ hist_for() {
 }
 
 poll_room() {
-  local room="$1" wake parsed preview hist
+  local room="$1" wake parsed preview hist eid
   if [[ "$DRY" == "1" ]]; then
     run_turn "$room" "dry" "(dry-run: no relay read)"
     return 0
@@ -220,8 +245,12 @@ poll_room() {
     return 1
   fi
   preview="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("preview") or "")' "$parsed")"
+  eid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("id") or "")' "$parsed")"
   hist="$(hist_for "$room")"
-  run_turn "$room" "$preview" "$hist"
+  if ! run_turn "$room" "$preview" "$hist"; then
+    unsee_wake "$room" "$eid"
+    return 1
+  fi
 }
 
 drain_room() {
