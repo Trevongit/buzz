@@ -184,6 +184,10 @@ run_turn() {
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=empty-reply" >&2
     return 1
   fi
+  if grep -Eiq 'nsec1|BUZZ_PRIVATE_KEY' "$out_file"; then
+    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=secret-in-body" >&2
+    return 1
+  fi
   if ! bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" >>"$LOG" 2>&1; then
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=post" >&2
     return 1

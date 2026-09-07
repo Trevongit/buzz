@@ -1336,6 +1336,7 @@ class AutoReplyScriptTests(unittest.TestCase):
         body = (ROOT / "auto-reply.sh").read_text()
         self.assertIn("unsee_wake", body)
         self.assertIn("l2-scratch", body)
+        self.assertIn("secret-in-body", body)
 
     def test_grok_uses_monitor_not_print(self):
         proc = subprocess.run(
