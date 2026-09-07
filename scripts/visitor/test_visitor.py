@@ -145,6 +145,15 @@ class EnvelopeTests(unittest.TestCase):
         assert env is not None
         self.assertEqual(env["from"], "hermes")
 
+    def test_goose_role_ok(self):
+        text = render_envelope(from_role="goose", to_role="agy", task="google-class visitor")
+        env = parse_collab_envelope(text)
+        assert env is not None
+        self.assertEqual(env["from"], "goose")
+        self.assertEqual(env["to"], "agy")
+        self.assertEqual(role_from_seat("goose"), "goose")
+        self.assertEqual(role_from_seat("Goose-build"), "goose")
+
     def test_blocked_without_flag_does_not_escalate(self):
         text = render_envelope(
             from_role="agy",
@@ -612,6 +621,7 @@ class RoleFromSeatTests(unittest.TestCase):
         self.assertEqual(role_from_seat("codex-buzz"), "codex")
         self.assertEqual(role_from_seat("agy-buzz"), "agy")
         self.assertEqual(role_from_seat("buzz"), "grok")
+        self.assertEqual(role_from_seat("goose"), "goose")
         self.assertEqual(role_from_seat("hermes-buzz"), "hermes")
 
     def test_unknown_is_not_grok(self):

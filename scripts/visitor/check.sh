@@ -64,10 +64,10 @@ else
   echo "warn mixed/missing relays (silent empty room) — start-collab.sh --seats on one bus"
   python3 -c 'import json,sys; r=json.loads(sys.argv[1] or "{}"); print("hosts=" + str(r.get("hosts"))); print("missing=" + str(r.get("missing")))' "$align_out" || true
 fi
-if bash "${ROOT}/start-collab.sh" --seats "codex-buzz,agy-buzz" --home "$home" >/dev/null 2>&1; then
-  ok "codex+agy same-bus collab-ready"
+if bash "${ROOT}/start-collab.sh" --seats "codex-buzz,agy-buzz,goose" --home "$home" >/dev/null 2>&1; then
+  ok "codex+agy+goose same-bus collab-ready"
 else
-  echo "skip same-bus codex+agy (missing PUBLIC.txt or split)"
+  echo "skip same-bus Tailscale trio (missing PUBLIC.txt or split)"
 fi
 if bash "${ROOT}/install-profile.sh" --brain hermes --dry-run >/dev/null 2>&1; then
   bad "install-profile must refuse parked hermes"

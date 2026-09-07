@@ -84,8 +84,8 @@ the envelope says `BLOCKED` **and** `need_prime: true`.
 
 ```
 COLLAB v0
-from: grok|codex|agy
-to: grok|codex|agy|all
+from: grok|codex|agy|goose
+to: grok|codex|agy|goose|all
 task: <one line>
 status: OPEN|DONE|BLOCKED
 need_prime: false

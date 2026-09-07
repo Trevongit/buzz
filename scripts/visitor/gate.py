@@ -14,11 +14,12 @@ COLLAB_HEADER = "COLLAB v0"
 STATUS_OPEN = "OPEN"
 STATUS_DONE = "DONE"
 STATUS_BLOCKED = "BLOCKED"
-ROLES = ("grok", "codex", "agy", "hermes")
+ROLES = ("grok", "codex", "agy", "goose", "hermes")
 DEFAULT_ROLE_SEATS = {
     "grok": "buzz",
     "codex": "codex-buzz",
     "agy": "agy-buzz",
+    "goose": "goose",
     "hermes": "hermes-buzz",
 }
 DEFAULT_COOLDOWN_SECS = 30

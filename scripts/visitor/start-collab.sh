@@ -3,7 +3,7 @@
 # Does not mint seats. Does not post. PUBLIC.txt roster only.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SEATS="${VISITOR_SEATS:-codex-buzz,agy-buzz}"
+SEATS="${VISITOR_SEATS:-codex-buzz,agy-buzz,goose}"
 HOME_AGENTS="${VISITOR_AGENTS_HOME:-$HOME/.buzz-dev/agents}"
 ROOM=""
 DRY=0
@@ -21,7 +21,7 @@ while [[ $# -gt 0 ]]; do
     --task) TASK="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: start-collab.sh [--seats a,b] [--room name|uuid] [--home DIR] [--dry-run]"
-      echo "  Default seats: codex-buzz,agy-buzz (same Tailscale bus on this host)."
+      echo "  Default seats: codex-buzz,agy-buzz,goose (Tailscale bus on this host)."
       echo "  Exit 0 ready; 3 mixed/missing. Does not send messages."
       exit 0
       ;;

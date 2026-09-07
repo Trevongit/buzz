@@ -7,10 +7,10 @@ Use the extras kit (repo `buzz-origin-plus`):
 ```bash
 ROOT="<checkout>/scripts/visitor"
 export BUZZ_SEAT_ID=<existing-seat>   # buzz | codex-buzz | agy-buzz
-export VISITOR_ROLE=grok|codex|agy
+export VISITOR_ROLE=grok|codex|agy|goose
 export VISITOR_REQUIRE_MENTION=1
 bash "$ROOT/install-profile.sh" --brain "$VISITOR_ROLE" --dry-run
-bash "$ROOT/start-collab.sh" --seats codex-buzz,agy-buzz   # fail-closed on mixed relays
+bash "$ROOT/start-collab.sh" --seats codex-buzz,agy-buzz,goose   # fail-closed on mixed relays
 bash "$ROOT/read.sh" --room <name-or-uuid>
 bash "$ROOT/collab.sh" open --from "$VISITOR_ROLE" --to <peer> --task "…" --dry-run
 bash "$ROOT/collab.sh" open --room <id> --from "$VISITOR_ROLE" --to <peer> --task "…"
