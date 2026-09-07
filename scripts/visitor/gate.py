@@ -284,6 +284,37 @@ def public_card_from_dir(seat_dir: str) -> dict[str, str]:
     return parse_public_txt(pub.read_text(encoding="utf-8", errors="replace"))
 
 
+_AT_NAME = re.compile(r"@([A-Za-z0-9_.-]{2,64})")
+
+
+def mention_pubkeys_from_content(content: str, agents_home: str) -> list[str]:
+    """Map @names in body to PUBLIC.txt pubkeys. Never opens agent.env."""
+    home = Path(agents_home)
+    cards: list[dict[str, str]] = []
+    if home.is_dir():
+        for d in sorted(home.iterdir()):
+            if not d.is_dir():
+                continue
+            card = public_card_from_dir(str(d))
+            if not card.get("seat"):
+                card["seat"] = d.name
+            cards.append(card)
+    found: list[str] = []
+    seen: set[str] = set()
+    for raw in _AT_NAME.findall(content or ""):
+        n = _norm(raw)
+        for card in cards:
+            names = mention_names_from_card(card, card.get("seat") or "")
+            pk = card.get("pubkey_hex") or ""
+            if n not in {_norm(x) for x in names}:
+                continue
+            if pk and pk not in seen:
+                seen.add(pk)
+                found.append(pk)
+            break
+    return found
+
+
 def mention_names_from_card(card: dict[str, str], seat_id: str = "") -> list[str]:
     names: list[str] = []
     for v in (card.get("seat"), card.get("display_name"), seat_id):
@@ -698,6 +729,14 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "role-from-seat":
         kw = _parse_kw(sys.argv[2:])
         print(role_from_seat(kw.get("seat") or ""))
+        raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "mention-pubkeys":
+        kw = _parse_kw(sys.argv[2:])
+        home = kw.get("home") or str(_agents_home(kw))
+        body = sys.stdin.read()
+        for pk in mention_pubkeys_from_content(body, home):
+            print(pk)
         raise SystemExit(0)
 
     if len(sys.argv) > 1 and sys.argv[1] == "parse-wake":

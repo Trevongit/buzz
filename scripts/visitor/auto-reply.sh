@@ -107,7 +107,7 @@ brain_argv() {
       ;;
     codex)
       cwd="${VISITOR_CODEX_ROOT:-$HOME/PROJECTS/buzz-origin-plus}"
-      echo "codex exec --ephemeral --skip-git-repo-check -s danger-full-access -C ${cwd} -"
+      echo "codex exec --ephemeral --skip-git-repo-check -s read-only -C ${cwd} -"
       ;;
     *)
       echo "error: no print-mode brain for role=$ROLE" >&2
@@ -163,7 +163,7 @@ run_turn() {
     codex)
       cwd="${VISITOR_CODEX_ROOT:-$HOME/PROJECTS/buzz-origin-plus}"
       if ! timeout "${TO}s" codex exec --ephemeral --skip-git-repo-check \
-        -s danger-full-access -C "$cwd" -o "$out_file" - \
+        -s read-only -C "$cwd" -o "$out_file" - \
         <"$prompt_file" >>"$LOG" 2>&1; then
         echo "VISITOR_TURN fail seat=$SEAT room=$room reason=codex-exec" >&2
         return 1

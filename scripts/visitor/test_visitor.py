@@ -26,6 +26,7 @@ from gate import (  # noqa: E402
     parse_collab_envelope,
     parse_public_txt,
     parse_wake_line,
+    mention_pubkeys_from_content,
     public_env_relay_ok,
     record_prime_escalation,
     relay_from_seat_dir,
@@ -113,6 +114,40 @@ class MentionTests(unittest.TestCase):
         )
         self.assertTrue(wake)
         self.assertEqual(reason, "dm")
+
+    def test_at_name_maps_to_pubkey(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / "codex-buzz"
+            d.mkdir()
+            (d / "PUBLIC.txt").write_text(
+                "seat: codex-buzz\n"
+                "display_name: Buzz-codex\n"
+                "pubkey_hex: 01b23ef7d3c9dfbfbc874e7ed752f05033c74c5ba11444c1989527ed81c5c4af\n"
+                "relay: wss://asus-g501vw.tailb74de6.ts.net\n",
+                encoding="utf-8",
+            )
+            pks = mention_pubkeys_from_content(
+                "@Buzz-codex next. @nope ignore.",
+                tmp,
+            )
+            self.assertEqual(
+                pks,
+                ["01b23ef7d3c9dfbfbc874e7ed752f05033c74c5ba11444c1989527ed81c5c4af"],
+            )
+            proc = subprocess.run(
+                ["python3", str(ROOT / "gate.py"), "mention-pubkeys", "--home", tmp],
+                input="@buzz-codex hello",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("01b23ef7d3c9", proc.stdout)
+
+    def test_post_sends_content_on_stdin(self):
+        body = (ROOT / "post.sh").read_text()
+        self.assertIn("--content -", body)
+        self.assertIn("mention-pubkeys", body)
 
     def test_pubkey_prefix(self):
         self.assertTrue(
@@ -1268,6 +1303,8 @@ class AutoReplyScriptTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("codex exec", proc.stdout)
         self.assertIn("--ephemeral", proc.stdout)
+        self.assertIn("read-only", proc.stdout)
+        self.assertNotIn("danger-full-access", proc.stdout)
 
     def test_grok_uses_monitor_not_print(self):
         proc = subprocess.run(

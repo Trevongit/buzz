@@ -111,6 +111,11 @@ if grep -q -- '--dm' "${ROOT}/wake.sh" && grep -q 'visitor_channel_is_dm' "${ROO
 else
   bad "wake.sh must admit DMs via --dm (not DM-* prefix only)"
 fi
+if grep -q -- '--content -' "${ROOT}/post.sh" && grep -q 'mention-pubkeys' "${ROOT}/post.sh"; then
+  ok "post.sh stdin body + mention pubkeys"
+else
+  bad "post.sh must send --content - and --mention pubkeys"
+fi
 if grep -q 'VISITOR_DM_COOLDOWN_SECS' "${ROOT}/wake.sh" && grep -q 'l2-' "${ROOT}/auto-reply.sh"; then
   ok "DM cooldown 0 + L2 cursor"
 else

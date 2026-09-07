@@ -154,8 +154,13 @@ if [[ -z "$ROOM" ]]; then
 fi
 CID="$(visitor_resolve_room "$ROOM")"
 
-args=(messages send --channel "$CID" --content "$CONTENT")
+# --content - (stdin) so bodies that start with "- " are not clap flags.
+# Explicit --mention pubkeys so @Buzz-codex etc. do not fail member-name match.
+args=(messages send --channel "$CID" --content -)
 if [[ -n "$REPLY_TO" ]]; then
   args+=(--reply-to "$REPLY_TO")
 fi
-visitor_run "${args[@]}"
+while IFS= read -r pk; do
+  [[ -n "$pk" ]] && args+=(--mention "$pk")
+done < <(printf '%s' "$CONTENT" | python3 "${VISITOR_ROOT}/gate.py" mention-pubkeys --home "$HOME_AGENTS")
+printf '%s' "$CONTENT" | visitor_run "${args[@]}"
