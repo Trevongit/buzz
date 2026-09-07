@@ -58,6 +58,11 @@ DIR="$(visitor_seat_dir "$SEAT")"
 LOG="${VISITOR_AUTO_REPLY_LOG:-${DIR}/auto-reply.log}"
 if [[ "$DRY" != "1" ]]; then
   mkdir -p "$DIR"
+  exec 9>"${DIR}/l2-lease.lock"
+  if ! flock -n 9; then
+    echo "VISITOR_TURN fail seat=$SEAT reason=lease-held" >&2
+    exit 1
+  fi
 fi
 
 if [[ "$CATCH" == "1" && "$ONCE" != "1" ]]; then
@@ -136,6 +141,7 @@ EOF
 run_turn() {
   local room="$1" preview="$2" hist="${3:-}" prompt_file out_file cwd
   echo "VISITOR_TURN start seat=$SEAT role=$ROLE room=$room preview=${preview:0:80}"
+  echo "VISITOR_STATE state=generating seat=$SEAT role=$ROLE room=$room"
   if [[ "$DRY" == "1" ]]; then
     brain_argv || true
     echo "VISITOR_TURN dry-run seat=$SEAT role=$ROLE"
@@ -186,14 +192,17 @@ run_turn() {
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=empty-reply" >&2
     return 1
   fi
-  if grep -Eiq 'nsec1|BUZZ_PRIVATE_KEY' "$out_file"; then
+  if grep -Eiq 'nsec1[a-z0-9]{20,}|BUZZ_PRIVATE_KEY[[:space:]]*=' "$out_file"; then
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=secret-in-body" >&2
     return 1
   fi
+  echo "VISITOR_STATE state=posting seat=$SEAT room=$room"
   if ! bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" >>"$LOG" 2>&1; then
+    echo "VISITOR_STATE state=failed seat=$SEAT room=$room reason=post"
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=post" >&2
     return 1
   fi
+  echo "VISITOR_STATE state=posted seat=$SEAT room=$room"
   echo "VISITOR_TURN ok seat=$SEAT room=$room"
 }
 

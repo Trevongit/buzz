@@ -1338,6 +1338,70 @@ class AutoReplyScriptTests(unittest.TestCase):
         self.assertIn("l2-scratch", body)
         self.assertIn("secret-in-body", body)
         self.assertIn("env -u BUZZ_PRIVATE_KEY", body)
+        self.assertIn("l2-lease.lock", body)
+        self.assertIn("VISITOR_STATE state=posting", body)
+
+    def test_fake_cli_stdin_dash_body_and_mention(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seat = Path(tmp) / "codex-buzz"
+            seat.mkdir()
+            pk = "01b23ef7d3c9dfbfbc874e7ed752f05033c74c5ba11444c1989527ed81c5c4af"
+            (seat / "PUBLIC.txt").write_text(
+                "seat: codex-buzz\n"
+                "display_name: Buzz-codex\n"
+                f"pubkey_hex: {pk}\n"
+                "relay: https://tail.example\n",
+                encoding="utf-8",
+            )
+            (seat / "agent.env").write_text(
+                "BUZZ_PRIVATE_KEY=" + ("ab" * 32) + "\n"
+                "BUZZ_RELAY_URL=https://tail.example\n",
+                encoding="utf-8",
+            )
+            os.chmod(seat / "agent.env", 0o600)
+            fake = Path(tmp) / "fake-buzz"
+            argv_p = Path(tmp) / "argv.txt"
+            stdin_p = Path(tmp) / "stdin.txt"
+            fake.write_text(
+                "#!/bin/bash\n"
+                f'printf "%s\\n" "$@" > "{argv_p}"\n'
+                f'cat > "{stdin_p}"\n'
+                'echo \'{"accepted":true,"event_id":"ab","message":""}\'\n',
+                encoding="utf-8",
+            )
+            os.chmod(fake, 0o755)
+            body = Path(tmp) / "body.txt"
+            body.write_text("- Gate on p-tags.\n@Buzz-codex next.\n", encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "post.sh"),
+                    "--seat",
+                    "codex-buzz",
+                    "--room",
+                    "00000000-0000-4000-8000-000000000001",
+                    "--file",
+                    str(body),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                env={
+                    **os.environ,
+                    "VISITOR_AGENTS_HOME": tmp,
+                    "BUZZ_CLI": str(fake),
+                    "BUZZ_RELAY_URL": "https://tail.example",
+                    "BUZZ_SEAT_ID": "codex-buzz",
+                },
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            argv = argv_p.read_text().splitlines()
+            self.assertIn("--content", argv)
+            self.assertIn("-", argv)
+            self.assertEqual(argv[argv.index("--content") + 1], "-")
+            self.assertIn("--mention", argv)
+            self.assertEqual(argv[argv.index("--mention") + 1], pk)
+            self.assertTrue(stdin_p.read_text().startswith("- Gate on p-tags."))
 
     def test_grok_uses_monitor_not_print(self):
         proc = subprocess.run(

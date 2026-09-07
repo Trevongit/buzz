@@ -116,6 +116,11 @@ if grep -q -- '--content -' "${ROOT}/post.sh" && grep -q 'mention-pubkeys' "${RO
 else
   bad "post.sh must send --content - and --mention pubkeys"
 fi
+if grep -q 'l2-lease.lock' "${ROOT}/auto-reply.sh" && grep -q 'VISITOR_STATE state=posted' "${ROOT}/auto-reply.sh"; then
+  ok "L2 lease + posted state"
+else
+  bad "auto-reply must take a lease and emit posted/failed states"
+fi
 if grep -q 'VISITOR_DM_COOLDOWN_SECS' "${ROOT}/wake.sh" && grep -q 'l2-' "${ROOT}/auto-reply.sh"; then
   ok "DM cooldown 0 + L2 cursor"
 else
