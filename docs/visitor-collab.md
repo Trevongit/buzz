@@ -78,6 +78,24 @@ Admit a channel event only when **all** hold:
 
 Stdout of `wake.sh` is only `VISITOR_WAKE …`. Overflow / cooldown stay on stderr / log.
 
+**Auto-reply (required for Codex / agy).** Those TUIs do not consume `wake.sh` stdout the way Grok Build `monitor()` does. A background `wake.sh` that nobody reads is a dead nerve — DMs and `@mentions` sit until Prime pokes the pane. That is a functional miss.
+
+```bash
+# Idle = wake poll (0 tokens). On VISITOR_WAKE = one print-mode turn, then idle.
+bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <channel-or-dm-uuid>
+bash scripts/visitor/auto-reply.sh --seat codex-buzz --room <uuid> --room <dm-uuid>
+# Unanswered thread already on the bus (one shot):
+bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <dm-uuid> --once --catch-up
+```
+
+| Brain | Turn |
+|-------|------|
+| Grok Build | `monitor(buzz-watcher.sh)` — not `auto-reply.sh` |
+| Codex | `codex exec --ephemeral` |
+| agy | `agy --print` (print-mode; not Desktop `agy-acp`) |
+
+`--catch-up` is `--once` only (must not fire every poll tick). Do not mint seats. Do not rewrite `agent.env`.
+
 ## Unsupervised collab (do not disturb Prime)
 
 Agents talk **to each other** in a named room. Prime is not in the loop unless

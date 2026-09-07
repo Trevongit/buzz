@@ -25,6 +25,7 @@ from gate import (  # noqa: E402
     normalize_relay,
     parse_collab_envelope,
     parse_public_txt,
+    parse_wake_line,
     public_env_relay_ok,
     record_prime_escalation,
     relay_from_seat_dir,
@@ -1131,6 +1132,130 @@ class SetupScriptTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 1)
         self.assertIn("refuse Desktop ACP", proc.stderr)
+
+
+class ParseWakeLineTests(unittest.TestCase):
+    def test_wake_line_fields(self):
+        line = (
+            "VISITOR_WAKE match seat=agy-buzz room=d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed "
+            "channel=d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed reason=collab from=b3ab103c8c9b "
+            "id=636117b84852 preview=Opening #visitor-trio"
+        )
+        got = parse_wake_line(line)
+        self.assertEqual(got.get("seat"), "agy-buzz")
+        self.assertEqual(got.get("channel"), "d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed")
+        self.assertEqual(got.get("reason"), "collab")
+        proc = subprocess.run(
+            ["python3", str(ROOT / "gate.py"), "parse-wake"],
+            input=line,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout).get("seat"), "agy-buzz")
+
+    def test_non_wake_empty(self):
+        self.assertEqual(parse_wake_line("VISITOR_OK seeded"), {})
+        proc = subprocess.run(
+            ["python3", str(ROOT / "gate.py"), "parse-wake"],
+            input="hello",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 1)
+
+
+class AutoReplyScriptTests(unittest.TestCase):
+    def test_dry_run_agy_print_mode(self):
+        proc = subprocess.run(
+            [
+                "bash",
+                str(ROOT / "auto-reply.sh"),
+                "--seat",
+                "agy-buzz",
+                "--room",
+                "00000000-0000-4000-8000-000000000001",
+                "--dry-run",
+                "--once",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "VISITOR_ROLE": "agy"},
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("agy --print", proc.stdout)
+        self.assertIn("VISITOR_TURN dry-run", proc.stdout)
+        self.assertNotIn("nsec", proc.stdout.lower())
+        self.assertNotIn("BUZZ_PRIVATE_KEY", proc.stdout)
+        self.assertNotIn("managed-agents", proc.stdout)
+
+    def test_dry_run_codex_exec(self):
+        proc = subprocess.run(
+            [
+                "bash",
+                str(ROOT / "auto-reply.sh"),
+                "--seat",
+                "codex-buzz",
+                "--room",
+                "00000000-0000-4000-8000-000000000001",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "VISITOR_ROLE": "codex"},
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("codex exec", proc.stdout)
+        self.assertIn("--ephemeral", proc.stdout)
+
+    def test_grok_uses_monitor_not_print(self):
+        proc = subprocess.run(
+            [
+                "bash",
+                str(ROOT / "auto-reply.sh"),
+                "--seat",
+                "buzz",
+                "--room",
+                "00000000-0000-4000-8000-000000000001",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "VISITOR_ROLE": "grok"},
+        )
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("grok-uses-monitor", proc.stderr)
+        self.assertNotIn("agy --print", proc.stdout)
+
+    def test_catch_up_requires_once(self):
+        proc = subprocess.run(
+            [
+                "bash",
+                str(ROOT / "auto-reply.sh"),
+                "--seat",
+                "agy-buzz",
+                "--room",
+                "00000000-0000-4000-8000-000000000001",
+                "--catch-up",
+                "--dry-run",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "VISITOR_ROLE": "agy"},
+        )
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("--catch-up requires --once", proc.stderr)
+
+    def test_script_refuses_desktop_catalog(self):
+        body = (ROOT / "auto-reply.sh").read_text()
+        banned = "managed-agents" + ".json"
+        self.assertNotIn(banned, body)
 
 
 class InstallProfileTests(unittest.TestCase):

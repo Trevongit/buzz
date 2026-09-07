@@ -25,7 +25,7 @@ Rules:
 
 - Do not mint seats (including Goose). Do not Edit Helix / PATCH / Prism / Ember.
 - Do not Custom-harness raw `agy`. Do not register this as ACP.
-- Idle: do not poll with an LLM. `wake.sh` is the nerve (stdout `VISITOR_WAKE` only).
+- Idle: do not poll with an LLM. Nerve is `wake.sh` (stdout `VISITOR_WAKE` only). Codex/agy must run `auto-reply.sh` so a wake becomes a print-mode reply; a TUI that ignores wake stdout is a dead visitor. Grok Build uses `monitor(buzz-watcher.sh)` instead.
 - Unaddressed hellos are silence. Talk to teammates via `COLLAB v0`.
 - `to: all` is fail-closed: every present teammate must share the sender's PUBLIC.txt host.
 - Prime is disturbed only on `status: BLOCKED` + `need_prime: true`, once per task fingerprint, and only when that seat shares the sender's PUBLIC.txt host (`prime-other-bus` otherwise).

@@ -414,6 +414,22 @@ def public_env_relay_ok(seat_dir: str, env_relay: str) -> dict[str, Any]:
     }
 
 
+def parse_wake_line(line: str) -> dict[str, str]:
+    """Parse a `VISITOR_WAKE …` stdout line. Empty dict if not a wake."""
+    s = (line or "").strip()
+    if not s.startswith("VISITOR_WAKE"):
+        return {}
+    out: dict[str, str] = {}
+    for part in s.split()[1:]:
+        if "=" not in part:
+            continue
+        k, _, v = part.partition("=")
+        k, v = k.strip(), v.strip()
+        if k:
+            out[k] = v
+    return out
+
+
 def role_from_seat(seat_id: str, mapping: dict[str, str] | None = None) -> str:
     """Inverse of DEFAULT_ROLE_SEATS. Unknown seats return empty (not grok)."""
     m = dict(DEFAULT_ROLE_SEATS)
@@ -683,6 +699,12 @@ if __name__ == "__main__":
         kw = _parse_kw(sys.argv[2:])
         print(role_from_seat(kw.get("seat") or ""))
         raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "parse-wake":
+        parsed = parse_wake_line(sys.stdin.read())
+        json.dump(parsed, sys.stdout)
+        sys.stdout.write("\n")
+        raise SystemExit(0 if parsed else 1)
 
     if len(sys.argv) > 1 and sys.argv[1] == "send-gate":
         report = collab_send_gate(sys.stdin.read())

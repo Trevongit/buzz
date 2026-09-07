@@ -95,6 +95,17 @@ if grep -q 'send-gate' "${ROOT}/post.sh" && grep -q -- '--from-escalate' "${ROOT
 else
   bad "missing send-gate / from-escalate fences"
 fi
+ar="$(VISITOR_ROLE=agy bash "${ROOT}/auto-reply.sh" --seat agy-buzz --room 00000000-0000-4000-8000-000000000001 --dry-run --once 2>/dev/null || true)"
+if printf '%s\n' "$ar" | grep -q 'agy --print' && printf '%s\n' "$ar" | grep -q 'VISITOR_TURN dry-run'; then
+  ok "auto-reply dry-run print-mode"
+else
+  bad "auto-reply.sh dry-run must print agy --print"
+fi
+if grep -q 'managed-agents' "${ROOT}/auto-reply.sh"; then
+  bad "auto-reply must not mention Desktop catalog"
+else
+  ok "auto-reply not Desktop ACP"
+fi
 role="$(python3 "${ROOT}/gate.py" role-from-seat --seat codex-buzz)"
 if [[ "$role" == "codex" ]]; then
   ok "seat-to-role codex-buzz=codex"

@@ -12,6 +12,7 @@ python3 scripts/visitor/test_visitor.py
 bash scripts/visitor/install-profile.sh --brain grok --dry-run
 bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 bash scripts/visitor/goose-cli.sh --check
+bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <uuid> --dry-run
 ```
 
 Does not mint identities. Does not add Desktop runtimes. Goose is the fork CLI, not ACP.
