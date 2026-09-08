@@ -5,6 +5,7 @@ import { toast } from "sonner";
 export type ListenPlaybackStatus = "idle" | "playing" | "paused";
 
 const LISTEN_TOAST_ID = "listen-playback";
+export const LISTEN_SUMMARY_TOAST_ID = "listen-summary-wait";
 
 let status: ListenPlaybackStatus = "idle";
 let lastText: string | null = null;
@@ -161,6 +162,7 @@ export async function stopListenPlayback(): Promise<void> {
   abortListenSummaryWait();
   setStatus("idle");
   toast.dismiss(LISTEN_TOAST_ID);
+  toast.dismiss(LISTEN_SUMMARY_TOAST_ID);
   toast.message("Stopped listening.");
   await invokeStop();
 }

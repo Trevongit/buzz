@@ -3,6 +3,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import {
+  LISTEN_SUMMARY_TOAST_ID,
   pauseListenPlayback,
   resumeListenPlayback,
   speakListenText,
@@ -73,15 +74,16 @@ export function MessageListenButton({
         throw new Error("Listen (summary) needs a delivered channel message.");
       }
       const agent = await resolveReaderAgent();
-      const waitToast = toast.loading(
+      toast.loading(
         `Asking ${agent.name}… Pocket starts when they post. 0:00`,
+        { id: LISTEN_SUMMARY_TOAST_ID },
       );
       const started = Date.now();
       const tick = window.setInterval(() => {
         const elapsed = Math.floor((Date.now() - started) / 1000);
         toast.loading(
           `Asking ${agent.name}… still searching ${formatElapsed(elapsed)}. Pocket starts when they post.`,
-          { id: waitToast },
+          { id: LISTEN_SUMMARY_TOAST_ID },
         );
       }, 1000);
       try {
@@ -91,10 +93,10 @@ export function MessageListenButton({
           messageId: message.id,
           text: plain,
         });
-        toast.dismiss(waitToast);
+        toast.dismiss(LISTEN_SUMMARY_TOAST_ID);
         await speakListenText(summary);
       } catch (error) {
-        toast.dismiss(waitToast);
+        toast.dismiss(LISTEN_SUMMARY_TOAST_ID);
         throw error;
       } finally {
         window.clearInterval(tick);

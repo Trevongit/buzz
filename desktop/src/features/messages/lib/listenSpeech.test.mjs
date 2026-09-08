@@ -4,6 +4,8 @@ import { test } from "node:test";
 import {
   finishSpokenSummary,
   isFollowAlongMessage,
+  isListenSummaryReplyEvent,
+  isPocketFollowAlongBody,
   isReaderAgentName,
   listenPlainText,
   listenReaderAsk,
@@ -70,6 +72,77 @@ test("isFollowAlongMessage matches Reader posts and read-along agent bodies", ()
   assert.equal(
     isFollowAlongMessage({ author: "open121", body: "hello", isAgent: false }),
     false,
+  );
+});
+
+test("isPocketFollowAlongBody matches Reader-laptop asks' replies", () => {
+  assert.equal(
+    isPocketFollowAlongBody(
+      "Trevor, here is the follow-along for Pocket. Trial three is clean.",
+    ),
+    true,
+  );
+  assert.equal(isPocketFollowAlongBody("hello from agy"), false);
+  assert.equal(
+    isPocketFollowAlongBody(
+      listenReaderAsk("Reader-laptop", "Ship extras tonight."),
+    ),
+    false,
+    "the Desktop ask must not count as the Pocket reply",
+  );
+});
+
+test("isListenSummaryReplyEvent requires thread for CLI Pocket posts", () => {
+  const reader = "aa".repeat(32);
+  const grok = "bb".repeat(32);
+  const askId = "cc".repeat(32);
+  const rootId = "dd".repeat(32);
+  const pocket =
+    "Trevor, here is the follow-along for Pocket. Trial three is clean.";
+  assert.equal(
+    isListenSummaryReplyEvent({
+      body: "plain Reader prose",
+      eventPubkey: reader,
+      readerPubkey: reader,
+      askEventId: askId,
+      threadRootId: rootId,
+      tags: [],
+    }),
+    true,
+  );
+  assert.equal(
+    isListenSummaryReplyEvent({
+      body: pocket,
+      eventPubkey: grok,
+      readerPubkey: reader,
+      askEventId: askId,
+      threadRootId: rootId,
+      tags: [["e", askId]],
+    }),
+    true,
+  );
+  assert.equal(
+    isListenSummaryReplyEvent({
+      body: pocket,
+      eventPubkey: grok,
+      readerPubkey: reader,
+      askEventId: askId,
+      threadRootId: rootId,
+      tags: [["e", rootId]],
+    }),
+    true,
+  );
+  assert.equal(
+    isListenSummaryReplyEvent({
+      body: pocket,
+      eventPubkey: grok,
+      readerPubkey: reader,
+      askEventId: askId,
+      threadRootId: rootId,
+      tags: [["e", "ee".repeat(32)]],
+    }),
+    false,
+    "a Pocket phrase in another thread must not steal this wait",
   );
 });
 

@@ -1,6 +1,7 @@
 import { pickListenSummaryAgent } from "@/features/messages/lib/listenSummaryAgentPreference";
 import {
   finishSpokenSummary,
+  isListenSummaryReplyEvent,
   listenReaderAsk,
   spokenProseFromReaderReply,
 } from "@/features/messages/lib/listenSpeech";
@@ -13,7 +14,7 @@ import {
 } from "@/shared/api/tauri";
 import type { ManagedAgent, RelayEvent } from "@/shared/api/types";
 
-const READER_REPLY_TIMEOUT_MS = 240_000;
+export const READER_REPLY_TIMEOUT_MS = 240_000;
 const READER_REPLY_POLL_MS = 2_000;
 
 let waitGeneration = 0;
@@ -73,14 +74,6 @@ export async function summarizeWithReader(input: {
   return { summary: finishSpokenSummary(spoken), agentName: reader.name };
 }
 
-function isReplyToAsk(event: RelayEvent, askEventId: string | null): boolean {
-  if (!askEventId) return false;
-  return event.tags.some(
-    (tag) =>
-      tag[0] === "e" && tag[1]?.toLowerCase() === askEventId.toLowerCase(),
-  );
-}
-
 async function pollThreadForReply(
   channelId: string,
   rootEventId: string,
@@ -111,9 +104,11 @@ function waitForReaderReply(input: {
   let askEventId: string | null = null;
   const pending: RelayEvent[] = [];
   let resolveReady: () => void = () => {};
+  let rejectReady: (error: Error) => void = () => {};
   let consider: (event: RelayEvent) => void = () => {};
-  const ready = new Promise<void>((resolve) => {
+  const ready = new Promise<void>((resolve, reject) => {
     resolveReady = resolve;
+    rejectReady = reject;
   });
 
   const reply = new Promise<string>((resolve, reject) => {
@@ -127,19 +122,22 @@ function waitForReaderReply(input: {
       fn();
     };
 
+    const failWait = (error: Error) => {
+      rejectReady(error);
+      finish(() => reject(error));
+    };
+
     const timeoutId = window.setTimeout(() => {
-      finish(() =>
-        reject(
-          new Error(
-            `${input.readerName} is still writing after 4 minutes. Wait for their post in this thread, then click Follow along.`,
-          ),
+      failWait(
+        new Error(
+          `${input.readerName} is still writing after 4 minutes. Wait for their post in this thread, then click Follow along.`,
         ),
       );
     }, READER_REPLY_TIMEOUT_MS);
 
     pollId = window.setInterval(() => {
       if (input.generation !== waitGeneration) {
-        finish(() => reject(new Error("Stopped listening.")));
+        failWait(new Error("Stopped listening."));
         return;
       }
       const roots = [input.threadRootId, askEventId].filter(
@@ -153,7 +151,7 @@ function waitForReaderReply(input: {
     consider = (event: RelayEvent) => {
       if (settled) return;
       if (input.generation !== waitGeneration) {
-        finish(() => reject(new Error("Stopped listening.")));
+        failWait(new Error("Stopped listening."));
         return;
       }
       if (event.created_at < input.since) return;
@@ -162,11 +160,20 @@ function waitForReaderReply(input: {
         return;
       }
       if (event.id.toLowerCase() === askEventId.toLowerCase()) return;
-      const fromReader =
-        event.pubkey.toLowerCase() === input.readerPubkey.toLowerCase();
-      if (!fromReader && !isReplyToAsk(event, askEventId)) return;
       const body = event.content?.trim();
       if (!body) return;
+      if (
+        !isListenSummaryReplyEvent({
+          body,
+          eventPubkey: event.pubkey,
+          readerPubkey: input.readerPubkey,
+          askEventId,
+          threadRootId: input.threadRootId,
+          tags: event.tags,
+        })
+      ) {
+        return;
+      }
       finish(() => resolve(body));
     };
 
@@ -182,13 +189,10 @@ function waitForReaderReply(input: {
         if (settled) void stop();
       })
       .catch((error) => {
-        resolveReady();
-        finish(() =>
-          reject(
-            error instanceof Error
-              ? error
-              : new Error(`Could not wait for ${input.readerName}.`),
-          ),
+        failWait(
+          error instanceof Error
+            ? error
+            : new Error(`Could not wait for ${input.readerName}.`),
         );
       });
   });
