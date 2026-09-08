@@ -7,8 +7,16 @@ Hermes / Nous Portal is **parked** (paywall). Do not install Hermes for this kit
 See [docs/visitor-collab.md](../../docs/visitor-collab.md).
 
 ```bash
+# One step on a machine (any of the three terminals):
+bash scripts/visitor/bring.sh
+# After that, type: use buzz
+# Later, from any folder: buzz-skill
+```
+
+```bash
 bash scripts/visitor/check.sh
 python3 scripts/visitor/test_visitor.py
+bash scripts/visitor/install-profile.sh --all
 bash scripts/visitor/install-profile.sh --brain grok --dry-run
 bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 bash scripts/visitor/goose-cli.sh --check

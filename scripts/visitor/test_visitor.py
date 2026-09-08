@@ -18,6 +18,7 @@ from gate import (  # noqa: E402
     addressed_to,
     align_relays,
     collab_send_gate,
+    community_for_seat,
     cooldown_blocks,
     filter_wakes,
     last_room_bus_ok,
@@ -30,6 +31,18 @@ from gate import (  # noqa: E402
     parse_send_event_id,
     l2_already_posted,
     l2_record_posted,
+    l2_body_hash,
+    l2_body_suppressed,
+    l2_lease_check,
+    l2_lease_is_stale,
+    l2_lease_take,
+    l2_inflight_begin,
+    l2_record_body,
+    l2_collab_hint,
+    l2_noreply_allowed,
+    l2_retry_bump,
+    redact_auto_reply_log,
+    normalize_l2_body,
     public_env_relay_ok,
     record_prime_escalation,
     relay_from_seat_dir,
@@ -243,10 +256,103 @@ class EnvelopeTests(unittest.TestCase):
             seat_role="codex",
         )
         self.assertFalse(wake)
-        self.assertEqual(reason, "unaddressed")
+        self.assertEqual(reason, "collab-other")
+
+    def test_collab_other_beats_extra_at_mention(self):
+        text = (
+            "@agy-buzz @Buzz-codex grok-build. Trial 2.\n\n"
+            + render_envelope(
+                from_role="grok",
+                to_role="agy",
+                task="trial 2 scout finding",
+            )
+        )
+        wake, reason = should_wake(
+            content=text,
+            from_pubkey="aa",
+            self_pubkey="bb",
+            is_dm=False,
+            require_mention=True,
+            names=["codex-buzz", "Buzz-codex"],
+            pubkeys=["bb"],
+            seat_role="codex",
+        )
+        self.assertFalse(wake)
+        self.assertEqual(reason, "collab-other")
+        agy, agy_reason = should_wake(
+            content=text,
+            from_pubkey="aa",
+            self_pubkey="cc",
+            is_dm=False,
+            require_mention=True,
+            names=["agy-buzz"],
+            pubkeys=["cc"],
+            seat_role="agy",
+        )
+        self.assertTrue(agy)
+        self.assertEqual(agy_reason, "collab")
 
     def test_hello_is_not_envelope(self):
         self.assertIsNone(parse_collab_envelope("hello"))
+
+    def test_noreply_forbidden_when_collab_to_self_or_all(self):
+        pocket = (
+            "Trevor, here is the follow-along for Pocket.\n\n"
+            + render_envelope(
+                from_role="grok",
+                to_role="all",
+                task="each visitor posts a take",
+            )
+        )
+        ok, reason = l2_noreply_allowed(
+            content=pocket, seat_role="agy", names=["agy-buzz", "agy"]
+        )
+        self.assertFalse(ok)
+        self.assertEqual(reason, "collab-must-reply")
+        self.assertIn("to: all", l2_collab_hint(pocket))
+        other, r2 = l2_noreply_allowed(
+            content=render_envelope(from_role="grok", to_role="codex", task="safety"),
+            seat_role="agy",
+            names=["agy-buzz", "agy"],
+        )
+        self.assertTrue(other)
+        self.assertEqual(r2, "noreply-ok")
+        dm, r3 = l2_noreply_allowed(
+            content="yes",
+            seat_role="agy",
+            names=["agy"],
+            is_dm=True,
+        )
+        self.assertFalse(dm)
+        self.assertEqual(r3, "dm-must-reply")
+        proc = subprocess.run(
+            [
+                "python3",
+                str(ROOT / "gate.py"),
+                "l2-noreply",
+                "--role",
+                "agy",
+                "--names",
+                "agy-buzz,agy",
+                "--preview",
+                "Trevor,",
+            ],
+            input=json.dumps([{"content": pocket}]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertEqual(proc.stdout.strip(), "collab-must-reply")
+
+    def test_envelope_after_prose_parses(self):
+        env = parse_collab_envelope(
+            "@agy-buzz hello\n\n"
+            + render_envelope(from_role="grok", to_role="agy", task="trial 2")
+        )
+        assert env is not None
+        self.assertEqual(env["to"], "agy")
+        self.assertEqual(env["from"], "grok")
 
     def test_send_gate_classifies_content(self):
         open_text = render_envelope(from_role="codex", to_role="agy", task="scout")
@@ -391,6 +497,61 @@ class EscalationJournalTests(unittest.TestCase):
             )
             self.assertEqual(second.returncode, 3)
             self.assertEqual(json.loads(second.stdout)["reason"], "already-escalated")
+
+
+class CommunityPortabilityTests(unittest.TestCase):
+    def test_public_txt_is_default_community(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "PUBLIC.txt").write_text(
+                "seat: codex-buzz\nrelay: wss://asus-g501vw.tailb74de6.ts.net\n",
+                encoding="utf-8",
+            )
+            ok = community_for_seat(tmp, "")
+            self.assertTrue(ok["ok"])
+            self.assertEqual(ok["host"], "asus-g501vw.tailb74de6.ts.net")
+            miss = community_for_seat(tmp, "open121")
+            self.assertFalse(miss["ok"])
+            self.assertEqual(miss["reason"], "community-mismatch")
+            same = community_for_seat(tmp, "asus-g501vw")
+            self.assertTrue(same["ok"])
+            empty = community_for_seat(tmp + "-nope", "")
+            self.assertFalse(empty["ok"])
+            self.assertEqual(empty["reason"], "community-missing")
+
+    def test_use_buzz_dry_run_reads_public_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seat = Path(tmp) / "agy-buzz"
+            seat.mkdir()
+            seat.joinpath("PUBLIC.txt").write_text(
+                "seat: agy-buzz\nrelay: https://asus-g501vw.tailb74de6.ts.net\n",
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                ["bash", str(ROOT / "use-buzz.sh"), "--seat", "agy-buzz", "--dry-run"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env={**os.environ, "VISITOR_AGENTS_HOME": tmp, "BUZZ_SEAT_ID": "agy-buzz"},
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("community-ok", proc.stdout)
+            self.assertNotIn("deadbeef", proc.stdout)
+            bad = subprocess.run(
+                [
+                    "bash",
+                    str(ROOT / "use-buzz.sh"),
+                    "--seat",
+                    "agy-buzz",
+                    "--community",
+                    "groundfeed",
+                    "--dry-run",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                env={**os.environ, "VISITOR_AGENTS_HOME": tmp},
+            )
+            self.assertEqual(bad.returncode, 3, bad.stdout + bad.stderr)
 
 
 class RelayAlignTests(unittest.TestCase):
@@ -1346,6 +1507,59 @@ class AutoReplyScriptTests(unittest.TestCase):
         self.assertIn("repo-cwd", body)
         self.assertIn("l2-posted", body)
         self.assertIn("same-body", body)
+        self.assertIn("l2-noreply", body)
+        self.assertIn("retry-must-reply", body)
+        self.assertIn("MUST REPLY", body)
+        self.assertIn("t[-2048:]", body)
+        self.assertIn("redact-log", body)
+        self.assertIn("retry-exhausted", body)
+        self.assertIn("Codex workflow:", body)
+        self.assertIn("inflight-begin", body)
+        self.assertIn("post-no-unsee", body)
+        self.assertIn("no-unsee-after-send", body)
+
+    def test_inflight_same_body_is_idempotent(self):
+        room = "4dc8f551-6053-481e-8df0-31be95c4813d"
+        body = "- Safety: persist key before send.\n"
+        st = l2_inflight_begin({}, room, body, "wake1", 10)
+        self.assertTrue(l2_body_suppressed(st, room, body))
+        self.assertTrue(l2_body_suppressed(st, room, "  - Safety: persist key before send. \n"))
+        self.assertFalse(l2_body_suppressed(st, room, "- different\n"))
+
+    def test_redact_log_strips_secrets_and_caps(self):
+        raw = "ok\nBUZZ_PRIVATE_KEY=" + ("ab" * 32) + "\nnsec1abcdefghijklmnopqrstuv\n"
+        out = redact_auto_reply_log(raw, max_bytes=10_000)
+        self.assertNotIn("ab" * 32, out)
+        self.assertIn("BUZZ_PRIVATE_KEY=[redacted]", out)
+        self.assertIn("nsec1[redacted]", out)
+        tiny = redact_auto_reply_log("x" * 500, max_bytes=50)
+        self.assertLessEqual(len(tiny.encode("utf-8")), 50)
+
+    def test_retry_budget_stops_after_three(self):
+        st = {}
+        st, ok, n = l2_retry_bump(st, "wake1")
+        self.assertTrue(ok)
+        self.assertEqual(n, 1)
+        st, ok, n = l2_retry_bump(st, "wake1")
+        self.assertTrue(ok)
+        st, ok, n = l2_retry_bump(st, "wake1")
+        self.assertTrue(ok)
+        st, ok, n = l2_retry_bump(st, "wake1")
+        self.assertFalse(ok)
+        self.assertEqual(n, 4)
+        proc = subprocess.run(
+            [
+                "python3",
+                str(ROOT / "gate.py"),
+                "redact-log",
+                "--file",
+                "/no/such/log",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_fake_cli_stdin_dash_body_and_mention(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1421,6 +1635,165 @@ class AutoReplyScriptTests(unittest.TestCase):
         st = l2_record_posted(st, "abc123def", "evt1", 1)
         self.assertTrue(l2_already_posted(st, "abc123"))
         self.assertTrue(l2_already_posted(st, "abc123def"))
+
+    def test_join_before_seed_and_scoped_dedupe_in_source(self):
+        body = (ROOT / "auto-reply.sh").read_text()
+        self.assertIn("join_rooms_before_seed", body)
+        self.assertLess(body.find("join_rooms_before_seed"), body.find("while true"))
+        self.assertIn("l2-body", body)
+        self.assertIn("l2-lease", body)
+        self.assertIn("stale-lease", body)
+        self.assertIn("lease-held-stale", body)
+
+    def test_body_hash_normalizes_whitespace(self):
+        a = "- Gate on p-tags.\n- Next."
+        b = "  - Gate on p-tags.   - Next.  "
+        self.assertEqual(normalize_l2_body(a), normalize_l2_body(b))
+        self.assertEqual(l2_body_hash(a), l2_body_hash(b))
+        self.assertNotEqual(l2_body_hash(a), l2_body_hash("- Gate on p-tags.\n- Changed."))
+
+    def test_dedupe_is_channel_and_task_not_global(self):
+        room_a = "4dc8f551-6053-481e-8df0-31be95c4813d"
+        room_b = "d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed"
+        body = "- Codex finding: scoped dedupe.\n"
+        other_task = render_envelope(
+            from_role="codex",
+            to_role="agy",
+            task="different round",
+        ) + "\n" + body
+        st = l2_record_body({}, room_a, body, "evt1", 1)
+        self.assertTrue(l2_body_suppressed(st, room_a, body))
+        self.assertTrue(l2_body_suppressed(st, room_a, "  " + body + "\n"))
+        self.assertFalse(l2_body_suppressed(st, room_b, body))
+        self.assertFalse(l2_body_suppressed(st, room_a, other_task))
+        self.assertFalse(l2_body_suppressed(st, room_a, "- changed body\n"))
+
+    def test_lease_epoch_fence_and_ttl(self):
+        alive = lambda pid: pid == 7
+        taken = l2_lease_take({}, 7, 100, ttl=30)
+        self.assertEqual(taken["epoch"], 1)
+        ok, reason = l2_lease_check(taken, 7, 1, 110, ttl=30, pid_alive=alive)
+        self.assertTrue(ok)
+        self.assertEqual(reason, "ok")
+        bad_epoch, r2 = l2_lease_check(taken, 7, 2, 110, ttl=30, pid_alive=alive)
+        self.assertFalse(bad_epoch)
+        self.assertEqual(r2, "stale-epoch")
+        expired, r3 = l2_lease_check(taken, 7, 1, 200, ttl=30, pid_alive=alive)
+        self.assertFalse(expired)
+        self.assertEqual(r3, "lease-expired")
+        self.assertTrue(l2_lease_is_stale(taken, 200, ttl=30, pid_alive=alive))
+        self.assertFalse(l2_lease_is_stale(taken, 110, ttl=30, pid_alive=alive))
+        dead = l2_lease_is_stale(taken, 110, ttl=30, pid_alive=lambda _pid: False)
+        self.assertTrue(dead)
+
+    def test_fake_cli_two_identical_bodies_one_relay_accept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            seat = Path(tmp) / "codex-buzz"
+            seat.mkdir()
+            pk = "01b23ef7d3c9dfbfbc874e7ed752f05033c74c5ba11444c1989527ed81c5c4af"
+            (seat / "PUBLIC.txt").write_text(
+                "seat: codex-buzz\n"
+                "display_name: Buzz-codex\n"
+                f"pubkey_hex: {pk}\n"
+                "relay: https://tail.example\n",
+                encoding="utf-8",
+            )
+            (seat / "agent.env").write_text(
+                "BUZZ_PRIVATE_KEY=" + ("ab" * 32) + "\n"
+                "BUZZ_RELAY_URL=https://tail.example\n",
+                encoding="utf-8",
+            )
+            os.chmod(seat / "agent.env", 0o600)
+            count_p = Path(tmp) / "send-count"
+            count_p.write_text("0\n", encoding="utf-8")
+            fake = Path(tmp) / "fake-buzz"
+            fake.write_text(
+                "#!/bin/bash\n"
+                f"n=$(cat '{count_p}')\n"
+                f"echo $((n + 1)) > '{count_p}'\n"
+                'echo \'{"accepted":true,"event_id":"evt-once","message":""}\'\n',
+                encoding="utf-8",
+            )
+            os.chmod(fake, 0o755)
+            journal = Path(tmp) / "l2-posted.json"
+            room = "00000000-0000-4000-8000-000000000001"
+            env = {
+                **os.environ,
+                "VISITOR_AGENTS_HOME": tmp,
+                "BUZZ_CLI": str(fake),
+                "BUZZ_RELAY_URL": "https://tail.example",
+                "BUZZ_SEAT_ID": "codex-buzz",
+            }
+
+            def try_send(text: str) -> str:
+                body = Path(tmp) / "body.txt"
+                body.write_text(text, encoding="utf-8")
+                chk = subprocess.run(
+                    [
+                        "python3",
+                        str(ROOT / "gate.py"),
+                        "l2-body",
+                        "--action",
+                        "check",
+                        "--file",
+                        str(journal),
+                        "--room",
+                        room,
+                        "--body-file",
+                        str(body),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if chk.returncode == 0:
+                    return "skip"
+                proc = subprocess.run(
+                    [
+                        "bash",
+                        str(ROOT / "post.sh"),
+                        "--seat",
+                        "codex-buzz",
+                        "--room",
+                        room,
+                        "--file",
+                        str(body),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    env=env,
+                )
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                rec = subprocess.run(
+                    [
+                        "python3",
+                        str(ROOT / "gate.py"),
+                        "l2-body",
+                        "--action",
+                        "record",
+                        "--file",
+                        str(journal),
+                        "--room",
+                        room,
+                        "--body-file",
+                        str(body),
+                        "--event",
+                        "evt-once",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(rec.returncode, 0, rec.stderr)
+                return "sent"
+
+            first = "- Gate on p-tags.\n@Buzz-codex next.\n"
+            self.assertEqual(try_send(first), "sent")
+            self.assertEqual(try_send(first), "skip")
+            self.assertEqual(try_send("  - Gate on p-tags.  @Buzz-codex next. \n"), "skip")
+            self.assertEqual(try_send("- Gate on p-tags.\n@Buzz-codex changed.\n"), "sent")
+            self.assertEqual(count_p.read_text().strip(), "2")
 
     def test_grok_uses_monitor_not_print(self):
         proc = subprocess.run(
@@ -1508,6 +1881,26 @@ class InstallProfileTests(unittest.TestCase):
             self.assertIn("COLLAB v0", skill)
             self.assertNotIn("nsec1", skill)
             self.assertIn("do not mint", proc.stdout.lower())
+            kit = (dest / "KIT_ROOT").read_text().strip()
+            self.assertTrue(kit)
+            self.assertNotIn("nsec", kit)
+            allp = subprocess.run(
+                ["bash", str(ROOT / "install-profile.sh"), "--all", "--dry-run"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(allp.returncode, 0, allp.stdout + allp.stderr)
+            self.assertEqual(allp.stdout.count("status=dry-run"), 3)
+            bring = subprocess.run(
+                ["bash", str(ROOT / "bring.sh"), "--dry-run"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(bring.returncode, 0, bring.stdout + bring.stderr)
+            self.assertIn("use buzz", bring.stdout)
+            self.assertNotIn("nsec", bring.stdout.lower())
 
     def test_refuse_goose_mint(self):
         proc = subprocess.run(

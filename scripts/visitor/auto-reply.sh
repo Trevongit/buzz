@@ -56,13 +56,21 @@ fi
 export VISITOR_WAKE_STATE_PREFIX="${VISITOR_WAKE_STATE_PREFIX:-l2-}"
 DIR="$(visitor_seat_dir "$SEAT")"
 LOG="${VISITOR_AUTO_REPLY_LOG:-${DIR}/auto-reply.log}"
+LEASE_JSON="${DIR}/l2-lease.json"
+LEASE_TTL="${VISITOR_L2_LEASE_TTL_SECS:-300}"
+LEASE_EPOCH=""
 if [[ "$DRY" != "1" ]]; then
   mkdir -p "$DIR"
   exec 9>"${DIR}/l2-lease.lock"
   if ! flock -n 9; then
-    echo "VISITOR_TURN fail seat=$SEAT reason=lease-held" >&2
+    if python3 "${ROOT}/gate.py" l2-lease --action stale --file "$LEASE_JSON" --ttl "$LEASE_TTL" >/dev/null; then
+      echo "VISITOR_TURN fail seat=$SEAT reason=lease-held-stale" >&2
+    else
+      echo "VISITOR_TURN fail seat=$SEAT reason=lease-held" >&2
+    fi
     exit 1
   fi
+  LEASE_EPOCH="$(python3 "${ROOT}/gate.py" l2-lease --action take --file "$LEASE_JSON" --pid "$$" --ttl "$LEASE_TTL")"
 fi
 
 if [[ "$CATCH" == "1" && "$ONCE" != "1" ]]; then
@@ -122,35 +130,43 @@ brain_argv() {
 }
 
 write_prompt() {
-  local room="$1" preview="$2" hist="$3" out="$4"
+  local room="$1" preview="$2" hist="$3" out="$4" must="${5:-0}" hint
+  hint="$(printf '%s' "$hist" | python3 "${ROOT}/gate.py" l2-hint --preview "$preview" 2>/dev/null || true)"
   cat >"$out" <<EOF
 You are Buzz visitor seat ${SEAT} role ${ROLE}. A mention-gated or DM event woke you.
 Channel: ${room}
 Preview: ${preview}
+Dest: ${hint:-none}
 
 Write ONLY the message body to post (phone-safe bullets, short). No tools. No fences.
 No nsec. Do not ping Helix/PATCH/Prism/Ember. Do not mint seats.
-If you should stay silent, output exactly: NO_REPLY
-If this is catch-up after Prime or a teammate addressed you, you must reply — do not output NO_REPLY.
+Vendor team: Grok steward/kit, Codex volume+safety, agy Google-class scout (not agy-acp).
+One NEW finding per post. Duplicate skip is the kit (same-body hash), not your job.
+Do not treat a first line that greets Prime (Trevor) as silence when Dest names you or all.
+
+NO_REPLY is allowed only when you are not the dest (no COLLAB to: ${ROLE}|all, no @mention, not a DM).
+EOF
+  if [[ "$ROLE" == "codex" ]]; then
+    cat >>"$out" <<'EOF'
+Codex workflow: fail-closed safety + bounded volume. TUI is listen-only. This L2 post is Buzz evidence.
+TTY (collab.sh --dry-run) is for tight pairs with agy before promoting. Turbo is house spawn, not this seat.
+One safety finding. Then COLLAB to: agy or leave idle. Do not to: all. Do not start a second auto-reply.
+EOF
+  fi
+  if [[ "$must" == "1" ]]; then
+    cat >>"$out" <<EOF
+MUST REPLY: Dest is you. Do not output NO_REPLY. Write one new phone-safe bullet from your role, then idle.
+EOF
+  fi
+  cat >>"$out" <<EOF
 
 History (bounded):
 ${hist}
 EOF
 }
 
-run_turn() {
-  local room="$1" preview="$2" hist="${3:-}" wake_id="${4:-}" prompt_file out_file cwd
-  echo "VISITOR_TURN start seat=$SEAT role=$ROLE room=$room preview=${preview:0:80}"
-  echo "VISITOR_STATE state=generating seat=$SEAT role=$ROLE room=$room"
-  if [[ "$DRY" == "1" ]]; then
-    brain_argv || true
-    echo "VISITOR_TURN dry-run seat=$SEAT role=$ROLE"
-    return 0
-  fi
-  prompt_file="${DIR}/auto-reply-prompt.txt"
-  out_file="${DIR}/auto-reply-out.txt"
-  write_prompt "$room" "$preview" "$hist" "$prompt_file"
-  chmod 600 "$prompt_file" 2>/dev/null || true
+invoke_brain() {
+  local cwd
   : >"$out_file"
   case "$ROLE" in
     grok)
@@ -192,6 +208,40 @@ run_turn() {
       return 2
       ;;
   esac
+  python3 "${ROOT}/gate.py" redact-log --file "$LOG" || true
+}
+
+run_turn() {
+  local room="$1" preview="$2" hist="${3:-}" wake_id="${4:-}" prompt_file out_file
+  local names noreply_reason dm_flag=0
+  echo "VISITOR_TURN start seat=$SEAT role=$ROLE room=$room preview=${preview:0:80}"
+  echo "VISITOR_STATE state=generating seat=$SEAT role=$ROLE room=$room"
+  if [[ "$DRY" == "1" ]]; then
+    brain_argv || true
+    echo "VISITOR_TURN dry-run seat=$SEAT role=$ROLE"
+    return 0
+  fi
+  prompt_file="${DIR}/auto-reply-prompt.txt"
+  out_file="${DIR}/auto-reply-out.txt"
+  names="${SEAT},${ROLE}"
+  if room_is_forced_dm "$room" || visitor_channel_is_dm "$SEAT" "$room"; then
+    dm_flag=1
+  fi
+  write_prompt "$room" "$preview" "$hist" "$prompt_file" 0
+  chmod 600 "$prompt_file" 2>/dev/null || true
+  invoke_brain || return $?
+  if grep -qx 'NO_REPLY' "$out_file" 2>/dev/null; then
+    noreply_reason="$(
+      printf '%s' "$hist" | python3 "${ROOT}/gate.py" l2-noreply \
+        --role "$ROLE" --names "$names" --preview "$preview" --dm "$dm_flag" \
+        2>/dev/null || true
+    )"
+    if [[ "$noreply_reason" != "noreply-ok" ]]; then
+      echo "VISITOR_STATE state=retry-must-reply seat=$SEAT room=$room reason=${noreply_reason:-collab-must-reply}"
+      write_prompt "$room" "$preview" "$hist" "$prompt_file" 1
+      invoke_brain || return $?
+    fi
+  fi
   if grep -qx 'NO_REPLY' "$out_file" 2>/dev/null; then
     echo "VISITOR_TURN skip seat=$SEAT room=$room reason=no-reply"
     return 0
@@ -204,34 +254,47 @@ run_turn() {
     echo "VISITOR_TURN fail seat=$SEAT room=$room reason=secret-in-body" >&2
     return 1
   fi
-  local hashf="${DIR}/l2-last-body.sha256"
-  local newhash
-  newhash="$(sha256sum "$out_file" | awk '{print $1}')"
-  if [[ -n "$newhash" && -f "$hashf" && "$(cat "$hashf")" == "$newhash" ]]; then
+  local journal="${DIR}/l2-posted.json"
+  if python3 "${ROOT}/gate.py" l2-body --action check \
+      --file "$journal" --room "$room" --body-file "$out_file"; then
     echo "VISITOR_TURN skip seat=$SEAT room=$room reason=same-body"
     return 0
   fi
+  if [[ -n "${LEASE_EPOCH:-}" ]]; then
+    if ! python3 "${ROOT}/gate.py" l2-lease --action check \
+        --file "$LEASE_JSON" --pid "$$" --epoch "$LEASE_EPOCH" --ttl "$LEASE_TTL" >/dev/null; then
+      echo "VISITOR_TURN fail seat=$SEAT room=$room reason=stale-lease" >&2
+      return 1
+    fi
+  fi
   echo "VISITOR_STATE state=posting seat=$SEAT room=$room"
-  local post_out=""
-  if ! post_out="$(bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" 2>>"$LOG")"; then
-    echo "VISITOR_STATE state=failed seat=$SEAT room=$room reason=post"
-    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=post" >&2
-    return 1
-  fi
+  python3 "${ROOT}/gate.py" l2-body --action inflight-begin \
+    --file "$journal" --room "$room" --body-file "$out_file" --wake "${wake_id:-}" || true
+  local post_out="" post_rc=0
+  post_out="$(bash "${ROOT}/post.sh" --seat "$SEAT" --room "$room" --file "$out_file" 2>>"$LOG")" || post_rc=$?
   local posted_id=""
-  posted_id="$(printf '%s\n' "$post_out" | sed -n 's/^VISITOR_POST event_id=//p' | tail -1)"
+  posted_id="$(printf '%s\n' "$post_out" | python3 "${ROOT}/gate.py" parse-send-id 2>/dev/null || true)"
   if [[ -z "$posted_id" ]]; then
-    echo "VISITOR_STATE state=failed seat=$SEAT room=$room reason=no-event-id"
-    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=no-event-id" >&2
-    return 1
+    posted_id="$(printf '%s\n' "$post_out" | sed -n 's/^VISITOR_POST event_id=//p' | tail -1)"
   fi
-  echo "$newhash" >"$hashf"
-  echo "VISITOR_STATE state=posted seat=$SEAT room=$room event_id=$posted_id"
-  echo "VISITOR_TURN ok seat=$SEAT room=$room event_id=$posted_id"
-  if [[ -n "$wake_id" && "$wake_id" != "catch" ]]; then
-    python3 "${ROOT}/gate.py" l2-posted --action record \
-      --file "${DIR}/l2-posted.json" --wake "$wake_id" --event "$posted_id" || true
+  if [[ -z "$posted_id" && -f "$LOG" ]]; then
+    posted_id="$(python3 "${ROOT}/gate.py" parse-send-id <"$LOG" 2>/dev/null || true)"
   fi
+  python3 "${ROOT}/gate.py" redact-log --file "$LOG" || true
+  if [[ -n "$posted_id" ]]; then
+    python3 "${ROOT}/gate.py" l2-body --action record \
+      --file "$journal" --room "$room" --body-file "$out_file" --event "$posted_id" || true
+    echo "VISITOR_STATE state=posted seat=$SEAT room=$room event_id=$posted_id"
+    echo "VISITOR_TURN ok seat=$SEAT room=$room event_id=$posted_id"
+    if [[ -n "$wake_id" && "$wake_id" != "catch" ]]; then
+      python3 "${ROOT}/gate.py" l2-posted --action record \
+        --file "$journal" --wake "$wake_id" --event "$posted_id" || true
+    fi
+    return 0
+  fi
+  echo "VISITOR_STATE state=failed seat=$SEAT room=$room reason=post-idempotent"
+  echo "VISITOR_TURN fail seat=$SEAT room=$room reason=post-no-unsee rc=${post_rc}" >&2
+  return 4
 }
 
 unsee_wake() {
@@ -264,7 +327,7 @@ hist_for() {
     return 0
   fi
   visitor_run --format compact messages get --channel "$room" --limit 8 2>/dev/null \
-    | python3 -c 'import sys; t=sys.stdin.read(); print(t[:2048] if t else "(empty)")'
+    | python3 -c 'import sys; t=sys.stdin.read(); print(t[-2048:] if t else "(empty)")'
 }
 
 poll_room() {
@@ -295,10 +358,26 @@ poll_room() {
     return 0
   fi
   hist="$(hist_for "$room")"
-  if ! run_turn "$room" "$preview" "$hist" "$eid"; then
-    unsee_wake "$room" "$eid"
+  local rc=0
+  set +e
+  run_turn "$room" "$preview" "$hist" "$eid"
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$rc" -eq 4 ]]; then
+    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=no-unsee-after-send" >&2
+    python3 "${ROOT}/gate.py" redact-log --file "$LOG" || true
     return 1
   fi
+  if python3 "${ROOT}/gate.py" l2-retry --file "$journal" --wake "$eid"; then
+    unsee_wake "$room" "$eid"
+  else
+    echo "VISITOR_TURN fail seat=$SEAT room=$room reason=retry-exhausted" >&2
+  fi
+  python3 "${ROOT}/gate.py" redact-log --file "$LOG" || true
+  return 1
 }
 
 drain_room() {
@@ -312,10 +391,24 @@ drain_room() {
   fi
 }
 
+join_rooms_before_seed() {
+  local r
+  for r in "${ROOMS[@]}"; do
+    if room_is_forced_dm "$r" || visitor_channel_is_dm "$SEAT" "$r"; then
+      continue
+    fi
+    bash "${ROOT}/join.sh" --seat "$SEAT" --room "$r" >>"$LOG" 2>&1 || true
+  done
+}
+
 if [[ "$DRY" == "1" ]]; then
   poll_room "${ROOMS[0]}" || true
   exit 0
 fi
+
+# Seed wake cursors after membership. Starting L2 on an unjoined room
+# captures an empty head and misses the first mentions (19af73d3).
+join_rooms_before_seed
 
 if [[ "$ONCE" == "1" ]]; then
   for r in "${ROOMS[@]}"; do
@@ -325,6 +418,10 @@ if [[ "$ONCE" == "1" ]]; then
 fi
 
 while true; do
+  if [[ -n "${LEASE_EPOCH:-}" ]]; then
+    python3 "${ROOT}/gate.py" l2-lease --action heartbeat \
+      --file "$LEASE_JSON" --pid "$$" --epoch "$LEASE_EPOCH" >/dev/null || true
+  fi
   for r in "${ROOMS[@]}"; do
     drain_room "$r" || true
   done

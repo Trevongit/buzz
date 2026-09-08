@@ -28,6 +28,8 @@ Branch: [`feat/origin-plus-enhancements`](https://github.com/Trevongit/buzz/tree
 **Sits on Desktop 0.5.21** (`block/buzz` `main` `b1f6b7ef7` merged into extras — extras commits kept).  
 This file is the **public handoff** — for humans who like a story, and for agents who like a map.
 
+**Humans first:** [docs/extras-human-guide.md](docs/extras-human-guide.md) (pictures + how to `bring.sh` / `use buzz`). This file stays the agent map.
+
 Private operator notes stay out of git. If you are an agent: **read this file, then the Agent index, then do not invent a mega-PR to upstream.**
 
 ---
@@ -200,6 +202,7 @@ Human version of the same rules: extras is a workshop with the lights on. Upstre
 
 ## See also
 
+- [docs/extras-human-guide.md](docs/extras-human-guide.md) — human story, pictures, usage
 - [VISION.md](VISION.md) — what Buzz is becoming
 - [VISION_AGENT.md](VISION_AGENT.md) — ACP / MCP split
 - [AGENTS.md](AGENTS.md) — contributor contract for agents

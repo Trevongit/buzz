@@ -6,21 +6,33 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BRAIN=""
 DEST=""
 DRY=0
+ALL=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --brain) BRAIN="$2"; shift 2 ;;
     --dest) DEST="$2"; shift 2 ;;
+    --all) ALL=1; shift ;;
     --dry-run) DRY=1; shift ;;
     -h|--help)
       echo "Usage: install-profile.sh --brain grok|codex|agy [--dest DIR] [--dry-run]"
-      echo "  Hermes/Nous Portal is parked (paywall). Free path: grok|codex|agy + wake.sh"
-      echo "  Goose is the fork CLI recipe engine — do not mint a goose seat."
+      echo "       install-profile.sh --all [--dry-run]"
+      echo "  Copies the shared skill into each vendor skill dir on this computer."
+      echo "  Source of truth stays in extras git. Never copies nsec."
       exit 0
       ;;
     *) echo "unknown: $1" >&2; exit 1 ;;
   esac
 done
+
+if [[ "$ALL" == "1" ]]; then
+  extra=()
+  [[ "$DRY" == "1" ]] && extra+=(--dry-run)
+  bash "$0" --brain grok "${extra[@]}"
+  bash "$0" --brain codex "${extra[@]}"
+  bash "$0" --brain agy "${extra[@]}"
+  exit 0
+fi
 
 case "$BRAIN" in
   hermes)
@@ -76,6 +88,9 @@ mkdir -p "$DEST"
   cat "$src"
 } >"${DEST}/SKILL.md"
 cp "${ROOT}/profile.env.example" "${DEST}/profile.env.example"
+# Point this machine's skill copy at the extras checkout (scripts stay in git).
+printf '%s\n' "$(cd "${ROOT}/../.." && pwd)" >"${DEST}/KIT_ROOT"
 echo "wrote ${DEST}/SKILL.md"
+echo "kit_root=$(cat "${DEST}/KIT_ROOT")"
 echo "status=installed"
 echo "next: export BUZZ_SEAT_ID to an existing seat; do not mint"

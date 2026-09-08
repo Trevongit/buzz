@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 COLLAB_HEADER = "COLLAB v0"
 STATUS_OPEN = "OPEN"
@@ -25,6 +26,10 @@ DEFAULT_ROLE_SEATS = {
 DEFAULT_COOLDOWN_SECS = 30
 DEFAULT_MAX_EVENTS = 3
 DEFAULT_MAX_BYTES = 2048
+DEFAULT_L2_LEASE_TTL_SECS = 300
+DEFAULT_L2_BODY_CAP = 80
+DEFAULT_L2_RETRY_MAX = 3
+DEFAULT_L2_LOG_MAX_BYTES = 65536
 PUBKEY_MIN = 8
 
 
@@ -61,15 +66,24 @@ def addressed_to(content: str, names: list[str], pubkeys: list[str]) -> bool:
 
 
 def parse_collab_envelope(content: str) -> Optional[dict[str, str]]:
-    """Parse a COLLAB v0 block. Unknown keys ignored. None if not an envelope."""
+    """Parse a COLLAB v0 block. Unknown keys ignored. None if not an envelope.
+
+    The header may follow other body text (lab posts put the round token last).
+    """
     text = (content or "").strip()
-    if not text.upper().startswith(COLLAB_HEADER.upper()):
-        stripped = re.sub(r"^```[a-zA-Z0-9]*\n", "", text)
-        if not stripped.upper().startswith(COLLAB_HEADER.upper()):
-            return None
-        text = stripped
+    if not text:
+        return None
+    lines = text.splitlines()
+    start = None
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        s = re.sub(r"^```[a-zA-Z0-9]*\s*", "", s).strip()
+        if s.upper().startswith(COLLAB_HEADER.upper()):
+            start = i
+    if start is None:
+        return None
     fields: dict[str, str] = {}
-    for raw in text.splitlines()[1:]:
+    for raw in lines[start + 1 :]:
         line = raw.strip()
         if not line or line.startswith("```"):
             continue
@@ -151,13 +165,105 @@ def should_wake(
     if is_dm:
         return True, "dm"
     env = parse_collab_envelope(content)
-    if env and envelope_to(env, seat_role, names):
-        return True, "collab"
+    if env:
+        if envelope_to(env, seat_role, names):
+            return True, "collab"
+        # Round token wins over extra @mentions (Trial 2: dual-@ woke Codex
+        # while COLLAB to: agy).
+        return False, "collab-other"
     if not require_mention:
         return True, "open"
     if addressed_to(content, names, pubkeys):
         return True, "mention"
     return False, "unaddressed"
+
+
+def l2_wake_blob(preview: str, hist: str) -> str:
+    """Join wake preview with bounded history contents for dest checks."""
+    parts = [preview or ""]
+    raw = (hist or "").strip()
+    if raw.startswith("["):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, list):
+            for ev in data:
+                if isinstance(ev, dict):
+                    parts.append(str(ev.get("content") or ""))
+            return "\n".join(parts)
+    parts.append(raw)
+    return "\n".join(parts)
+
+
+def l2_collab_hint(content: str) -> str:
+    env = parse_collab_envelope(content)
+    if not env:
+        return ""
+    to = env.get("to") or ""
+    fr = env.get("from") or ""
+    task = (env.get("task") or "").strip()
+    return f"COLLAB to: {to} from: {fr} task: {task}"
+
+
+def redact_auto_reply_log(text: str, max_bytes: int = DEFAULT_L2_LOG_MAX_BYTES) -> str:
+    """Strip secrets and cap diagnostics. Codex finding: log must not keep prompts/keys."""
+    out = text or ""
+    out = re.sub(r"nsec1[a-z0-9]{20,}", "nsec1[redacted]", out, flags=re.IGNORECASE)
+    out = re.sub(
+        r"BUZZ_PRIVATE_KEY\s*=\s*\S+",
+        "BUZZ_PRIVATE_KEY=[redacted]",
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(
+        r"BUZZ_NSEC\s*=\s*\S+",
+        "BUZZ_NSEC=[redacted]",
+        out,
+        flags=re.IGNORECASE,
+    )
+    if max_bytes > 0 and len(out.encode("utf-8")) > max_bytes:
+        raw = out.encode("utf-8")[-max_bytes:]
+        out = raw.decode("utf-8", errors="ignore")
+    return out
+
+
+def l2_retry_bump(
+    journal: dict[str, Any],
+    wake_id: str,
+    max_n: int = DEFAULT_L2_RETRY_MAX,
+) -> tuple[dict[str, Any], bool, int]:
+    """Count a failed turn. False = stop (do not unsee; no more retries)."""
+    if not wake_id or wake_id == "catch":
+        return dict(journal), False, 0
+    retries = dict(journal.get("retries") or {})
+    n = int(retries.get(wake_id) or 0) + 1
+    retries[wake_id] = n
+    out = dict(journal)
+    out["retries"] = retries
+    return out, n <= int(max_n), n
+
+
+def l2_noreply_allowed(
+    *,
+    content: str,
+    seat_role: str,
+    names: list[str],
+    is_dm: bool = False,
+) -> tuple[bool, str]:
+    """Print-mode may emit NO_REPLY only when this seat is not the dest.
+
+    Trial 2: agy woke on COLLAB to: all but preview was 'Trevor,' and chose
+    NO_REPLY. Duplicate skip is same-body in the kit, not NO_REPLY.
+    """
+    if is_dm:
+        return False, "dm-must-reply"
+    env = parse_collab_envelope(content)
+    if env and envelope_to(env, seat_role, names):
+        return False, "collab-must-reply"
+    if addressed_to(content, names, []):
+        return False, "mention-must-reply"
+    return True, "noreply-ok"
 
 
 def render_envelope(
@@ -223,6 +329,59 @@ def cooldown_blocks(
 
 def task_fingerprint(task: str) -> str:
     return _norm(task)[:200]
+
+
+COMMUNITY_ALIASES = {
+    # Desktop switcher names (what Prime sees), then relay hosts.
+    "open121": "groundfeed.communities.buzz.xyz",
+    "groundfeed": "groundfeed.communities.buzz.xyz",
+    "asus-g501vw": "asus-g501vw.tailb74de6.ts.net",
+    "tailscale": "asus-g501vw.tailb74de6.ts.net",
+    "librarian": "asus-g501vw.tailb74de6.ts.net",
+    "asus": "asus-g501vw.tailb74de6.ts.net",
+    "local": "localhost:3000",
+    "localhost": "localhost:3000",
+}
+
+
+def resolve_community_want(raw: str) -> str:
+    """Map a community name or URL to a host. Empty if none given."""
+    s = _norm(raw).lstrip("#")
+    if not s:
+        return ""
+    if s in COMMUNITY_ALIASES:
+        return COMMUNITY_ALIASES[s]
+    return normalize_relay(raw) or s
+
+
+def community_for_seat(seat_dir: str, want: str = "") -> dict[str, Any]:
+    """Default community is PUBLIC.txt. Ask if missing; refuse a silent other bus."""
+    card = public_card_from_dir(seat_dir)
+    host = normalize_relay(card.get("relay") or "")
+    want_host = resolve_community_want(want)
+    if not host:
+        return {
+            "ok": False,
+            "reason": "community-missing",
+            "host": "",
+            "want": want_host,
+            "relay": "",
+        }
+    if want_host and want_host != host:
+        return {
+            "ok": False,
+            "reason": "community-mismatch",
+            "host": host,
+            "want": want_host,
+            "relay": card.get("relay") or "",
+        }
+    return {
+        "ok": True,
+        "reason": "community-ok",
+        "host": host,
+        "want": want_host or host,
+        "relay": card.get("relay") or "",
+    }
 
 
 def normalize_relay(url: str) -> str:
@@ -490,6 +649,164 @@ def l2_record_posted(
     out = dict(journal)
     out["posted"] = posted
     return out
+
+
+def normalize_l2_body(text: str) -> str:
+    """Collapse whitespace so bullet clones hash the same."""
+    return " ".join((text or "").split())
+
+
+def l2_body_hash(text: str) -> str:
+    return hashlib.sha256(normalize_l2_body(text).encode("utf-8")).hexdigest()
+
+
+def l2_round_key(text: str) -> str:
+    """Scope by COLLAB task when present; otherwise the body itself."""
+    env = parse_collab_envelope(text)
+    if env:
+        task = _norm(env.get("task") or "")
+        if task:
+            return f"task:{task}"
+    return "body"
+
+
+def l2_suppress_key(channel: str, text: str) -> str:
+    ch = _norm(channel)
+    if not ch:
+        return ""
+    return f"{ch}|{l2_round_key(text)}|{l2_body_hash(text)}"
+
+
+def l2_body_suppressed(journal: dict[str, Any], channel: str, text: str) -> bool:
+    key = l2_suppress_key(channel, text)
+    if not key:
+        return False
+    bodies = journal.get("bodies") or {}
+    if isinstance(bodies, dict) and key in bodies:
+        return True
+    inflight = journal.get("inflight") or {}
+    return isinstance(inflight, dict) and key in inflight
+
+
+def l2_inflight_begin(
+    journal: dict[str, Any],
+    channel: str,
+    text: str,
+    wake_id: str,
+    now_unix: int,
+) -> dict[str, Any]:
+    """Mark a send started so a timeout cannot send the same body again."""
+    key = l2_suppress_key(channel, text)
+    inflight = dict(journal.get("inflight") or {})
+    if key:
+        inflight[key] = {"wake": wake_id, "unix": int(now_unix)}
+    out = dict(journal)
+    out["inflight"] = inflight
+    return out
+
+
+def l2_inflight_clear(
+    journal: dict[str, Any], channel: str, text: str
+) -> dict[str, Any]:
+    key = l2_suppress_key(channel, text)
+    inflight = dict(journal.get("inflight") or {})
+    if key and key in inflight:
+        del inflight[key]
+    out = dict(journal)
+    out["inflight"] = inflight
+    return out
+
+
+def l2_record_body(
+    journal: dict[str, Any],
+    channel: str,
+    text: str,
+    event_id: str,
+    now_unix: int,
+    cap: int = DEFAULT_L2_BODY_CAP,
+) -> dict[str, Any]:
+    bodies: dict[str, Any] = dict(journal.get("bodies") or {})
+    key = l2_suppress_key(channel, text)
+    if key:
+        bodies[key] = {"event_id": event_id, "unix": int(now_unix)}
+    if cap > 0 and len(bodies) > cap:
+        ranked = sorted(
+            bodies.items(),
+            key=lambda kv: int((kv[1] or {}).get("unix") or 0)
+            if isinstance(kv[1], dict)
+            else 0,
+        )
+        bodies = dict(ranked[-cap:])
+    out = dict(journal)
+    out["bodies"] = bodies
+    return out
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def l2_lease_take(
+    state: dict[str, Any], pid: int, now_unix: int, ttl: int = DEFAULT_L2_LEASE_TTL_SECS
+) -> dict[str, Any]:
+    epoch = int(state.get("epoch") or 0) + 1
+    return {
+        "epoch": epoch,
+        "pid": int(pid),
+        "unix": int(now_unix),
+        "ttl": int(ttl),
+    }
+
+
+def l2_lease_heartbeat(
+    state: dict[str, Any], pid: int, epoch: int, now_unix: int
+) -> tuple[Optional[dict[str, Any]], str]:
+    if int(state.get("epoch") or 0) != int(epoch):
+        return None, "stale-epoch"
+    if int(state.get("pid") or 0) != int(pid):
+        return None, "stale-pid"
+    out = dict(state)
+    out["unix"] = int(now_unix)
+    return out, "ok"
+
+
+def l2_lease_check(
+    state: dict[str, Any],
+    pid: int,
+    epoch: int,
+    now_unix: int,
+    ttl: int = DEFAULT_L2_LEASE_TTL_SECS,
+    pid_alive: Callable[[int], bool] = _pid_alive,
+) -> tuple[bool, str]:
+    if int(state.get("epoch") or 0) != int(epoch):
+        return False, "stale-epoch"
+    if int(state.get("pid") or 0) != int(pid):
+        return False, "stale-pid"
+    age = int(now_unix) - int(state.get("unix") or 0)
+    if ttl > 0 and age > int(ttl):
+        return False, "lease-expired"
+    if not pid_alive(int(pid)):
+        return False, "pid-dead"
+    return True, "ok"
+
+
+def l2_lease_is_stale(
+    state: dict[str, Any],
+    now_unix: int,
+    ttl: int = DEFAULT_L2_LEASE_TTL_SECS,
+    pid_alive: Callable[[int], bool] = _pid_alive,
+) -> bool:
+    pid = int(state.get("pid") or 0)
+    if pid and pid_alive(pid):
+        age = int(now_unix) - int(state.get("unix") or 0)
+        return ttl > 0 and age > int(ttl)
+    return True
 
 
 def parse_wake_line(line: str) -> dict[str, str]:
@@ -812,6 +1129,127 @@ if __name__ == "__main__":
             raise SystemExit(0)
         raise SystemExit(2)
 
+    if len(sys.argv) > 1 and sys.argv[1] == "l2-body":
+        kw = _parse_kw(sys.argv[2:])
+        path = Path(kw.get("file") or "")
+        try:
+            journal = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            journal = {}
+        if not isinstance(journal, dict):
+            journal = {}
+        body_path = kw.get("body_file") or kw.get("body-file") or ""
+        text = Path(body_path).read_text(encoding="utf-8") if body_path else sys.stdin.read()
+        room = kw.get("room") or ""
+        action = kw.get("action") or "check"
+        if action == "check":
+            raise SystemExit(0 if l2_body_suppressed(journal, room, text) else 1)
+        if action == "record":
+            journal = l2_inflight_clear(journal, room, text)
+            journal = l2_record_body(
+                journal, room, text, kw.get("event") or "", int(time.time())
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(journal, indent=2) + "\n", encoding="utf-8")
+            raise SystemExit(0)
+        if action == "inflight-begin":
+            journal = l2_inflight_begin(
+                journal, room, text, kw.get("wake") or "", int(time.time())
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(journal, indent=2) + "\n", encoding="utf-8")
+            raise SystemExit(0)
+        raise SystemExit(2)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "l2-lease":
+        kw = _parse_kw(sys.argv[2:])
+        path = Path(kw.get("file") or "")
+        try:
+            state = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            state = {}
+        if not isinstance(state, dict):
+            state = {}
+        action = kw.get("action") or "check"
+        pid = int(kw.get("pid") or "0")
+        epoch = int(kw.get("epoch") or "0")
+        ttl = int(kw.get("ttl") or str(DEFAULT_L2_LEASE_TTL_SECS))
+        now = int(time.time())
+        if action == "take":
+            state = l2_lease_take(state, pid, now, ttl)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+            print(state["epoch"])
+            raise SystemExit(0)
+        if action == "heartbeat":
+            nxt, reason = l2_lease_heartbeat(state, pid, epoch, now)
+            if nxt is None:
+                print(reason)
+                raise SystemExit(1)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(nxt, indent=2) + "\n", encoding="utf-8")
+            print("ok")
+            raise SystemExit(0)
+        if action == "check":
+            ok, reason = l2_lease_check(state, pid, epoch, now, ttl)
+            print(reason)
+            raise SystemExit(0 if ok else 1)
+        if action == "stale":
+            stale = l2_lease_is_stale(state, now, ttl)
+            print("stale" if stale else "held")
+            raise SystemExit(0 if stale else 1)
+        raise SystemExit(2)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "redact-log":
+        kw = _parse_kw(sys.argv[2:])
+        path = Path(kw.get("file") or "")
+        if not path.is_file():
+            raise SystemExit(0)
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            raise SystemExit(0)
+        max_b = int(kw.get("max_bytes") or str(DEFAULT_L2_LOG_MAX_BYTES))
+        path.write_text(redact_auto_reply_log(raw, max_b), encoding="utf-8")
+        raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "l2-retry":
+        kw = _parse_kw(sys.argv[2:])
+        path = Path(kw.get("file") or "")
+        try:
+            journal = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            journal = {}
+        if not isinstance(journal, dict):
+            journal = {}
+        journal, ok, n = l2_retry_bump(journal, kw.get("wake") or "")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(journal, indent=2) + "\n", encoding="utf-8")
+        print(n)
+        raise SystemExit(0 if ok else 1)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "l2-noreply":
+        kw = _parse_kw(sys.argv[2:])
+        hist = sys.stdin.read()
+        blob = l2_wake_blob(kw.get("preview") or "", hist)
+        names = [x.strip() for x in (kw.get("names") or "").split(",") if x.strip()]
+        role = kw.get("role") or ""
+        if not names:
+            names = [role] if role else []
+        is_dm = _norm(kw.get("dm") or "") in ("1", "true", "yes")
+        allowed, reason = l2_noreply_allowed(
+            content=blob, seat_role=role, names=names, is_dm=is_dm
+        )
+        print(reason)
+        raise SystemExit(0 if allowed else 1)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "l2-hint":
+        kw = _parse_kw(sys.argv[2:])
+        hist = sys.stdin.read()
+        blob = l2_wake_blob(kw.get("preview") or "", hist)
+        print(l2_collab_hint(blob), end="")
+        raise SystemExit(0)
+
     if len(sys.argv) > 1 and sys.argv[1] == "parse-wake":
         parsed = parse_wake_line(sys.stdin.read())
         json.dump(parsed, sys.stdout)
@@ -823,6 +1261,13 @@ if __name__ == "__main__":
         json.dump(report, sys.stdout)
         sys.stdout.write("\n")
         raise SystemExit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "community-for-seat":
+        kw = _parse_kw(sys.argv[2:])
+        report = community_for_seat(kw.get("dir") or "", kw.get("want") or "")
+        json.dump(report, sys.stdout)
+        sys.stdout.write("\n")
+        raise SystemExit(0 if report["ok"] else 3)
 
     if len(sys.argv) > 1 and sys.argv[1] in ("public-env", "relay-from-dir", "last-room-bus"):
         kw = _parse_kw(sys.argv[2:])
