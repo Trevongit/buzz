@@ -23,8 +23,9 @@ pub(crate) use super::access_policy::{build_respond_to_env_with_policy, RespondT
 
 mod metadata;
 pub(crate) use metadata::{
-    apply_agent_display_env, apply_replay_floor_env, child_rust_log_filter, resolve_session_title,
-    runtime_metadata_env_vars, DISPLAY_NAME_ENV_VAR, REPLAY_FLOOR_ENV_VAR, SESSION_TITLE_ENV_VAR,
+    apply_agent_display_env, apply_replay_floor_env, child_rust_log_filter,
+    ember_publish_final_env, resolve_session_title, runtime_metadata_env_vars,
+    DISPLAY_NAME_ENV_VAR, REPLAY_FLOOR_ENV_VAR, SESSION_TITLE_ENV_VAR,
 };
 
 mod setup_payload;
@@ -765,6 +766,9 @@ pub fn spawn_agent_child(
     // BUZZ_ACP_REPLAY_FLOOR — the shadow `apply_replay_floor` strips from the
     // provider payload's `launch.env` tier for the same reason.
     apply_replay_floor_env(&mut command, replay_floor_unix);
+    if let Some((key, value)) = ember_publish_final_env(&record.name) {
+        command.env(key, value);
+    }
 
     // A1: for local claude agents, ANTHROPIC_MODEL is the single startup model authority.
     // BUZZ_ACP_MODEL is removed (live ACP switches only; two authorities in the same env

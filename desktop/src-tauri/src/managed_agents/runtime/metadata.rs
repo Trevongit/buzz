@@ -51,6 +51,16 @@ pub(crate) fn apply_agent_display_env(command: &mut std::process::Command, title
 /// place.
 pub(crate) const REPLAY_FLOOR_ENV_VAR: &str = "BUZZ_ACP_REPLAY_FLOOR";
 
+/// Extras-only: Ember (local Buzz Agent) skips `buzz messages send`; ACP
+/// posts Activity text when this is true. Helix/PATCH/Prism must not get it.
+pub(crate) const PUBLISH_FINAL_ENV_VAR: &str = "BUZZ_ACP_PUBLISH_FINAL_IF_UNSENT";
+
+/// Arm the publish-final fallback only for the Ember managed agent.
+pub(crate) fn ember_publish_final_env(name: &str) -> Option<(&'static str, &'static str)> {
+    name.eq_ignore_ascii_case("EMBER")
+        .then_some((PUBLISH_FINAL_ENV_VAR, "true"))
+}
+
 /// Apply the publish-first replay floor: inject [`REPLAY_FLOOR_ENV_VAR`] from
 /// `replay_floor_unix` (or leave the key untouched if `None`).
 ///
@@ -121,7 +131,25 @@ pub(crate) fn child_rust_log_filter() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_replay_floor_env, resolve_session_title, REPLAY_FLOOR_ENV_VAR};
+    use super::{
+        apply_replay_floor_env, ember_publish_final_env, resolve_session_title,
+        REPLAY_FLOOR_ENV_VAR,
+    };
+
+    #[test]
+    fn publish_final_env_is_ember_only() {
+        assert_eq!(
+            ember_publish_final_env("EMBER"),
+            Some(("BUZZ_ACP_PUBLISH_FINAL_IF_UNSENT", "true"))
+        );
+        assert_eq!(
+            ember_publish_final_env("ember"),
+            ember_publish_final_env("EMBER")
+        );
+        assert_eq!(ember_publish_final_env("Helix"), None);
+        assert_eq!(ember_publish_final_env("PATCH"), None);
+        assert_eq!(ember_publish_final_env("PRISM"), None);
+    }
 
     fn replay_floor_of(cmd: &std::process::Command) -> Option<String> {
         cmd.get_envs()

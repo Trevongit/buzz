@@ -214,6 +214,9 @@ pub struct AcpClient {
     standard_usage: StandardUsageTracker,
     /// Known adapter identity for prompt-response usage mapping.
     standard_adapter: Option<StandardAdapterKind>,
+    /// Opt-in Activity→room fallback buffer. `None` unless
+    /// [`arm_publish_final`](Self::arm_publish_final) ran for this turn.
+    publish_final: Option<crate::publish_final::TurnPublishTracker>,
 }
 
 /// Recursively merge `overlay` into `base`, with `overlay` winning on scalar/shape
@@ -563,7 +566,19 @@ impl AcpClient {
             goose_usage: UsageTracker::default(),
             standard_usage: StandardUsageTracker::default(),
             standard_adapter,
+            publish_final: None,
         })
+    }
+
+    /// Start buffering assistant text and `messages send` tool calls for this
+    /// turn. No-op cost until armed; previous turn's buffer is dropped.
+    pub fn arm_publish_final(&mut self) {
+        self.publish_final = Some(crate::publish_final::TurnPublishTracker::new());
+    }
+
+    /// Take the turn buffer. `None` when the fallback was not armed.
+    pub fn take_publish_final(&mut self) -> Option<crate::publish_final::TurnPublishTracker> {
+        self.publish_final.take()
     }
 
     /// Attach a local observer feed to this ACP client.
@@ -1751,6 +1766,10 @@ impl AcpClient {
             .get("sessionUpdate")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
+
+        if let Some(tracker) = self.publish_final.as_mut() {
+            tracker.ingest(update);
+        }
 
         match update_type {
             "agent_message_chunk" => {
@@ -4805,7 +4824,7 @@ mod tests {
             .collect()
     }
 
-    const GENERATED: &str = r#"{"sandbox_workspace_write":{"network_access":true}}"#;
+    const GENERATED: &str = r#"{"approval_policy":"never","sandbox_mode":"danger-full-access","sandbox_workspace_write":{"network_access":true}}"#;
 
     #[test]
     fn build_codex_config_env_returns_none_when_no_codex_config_in_extra_env() {

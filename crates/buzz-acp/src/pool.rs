@@ -806,6 +806,8 @@ pub struct PromptContext {
     /// the desktop keys per (agent, relay) pair, e.g. `session_config_captured`,
     /// mirroring the `managed_agent_runtime_lifecycle` frames.
     pub relay_url: String,
+    /// Opt-in Activity→room fallback. See `--publish-final-if-unsent`.
+    pub publish_final_if_unsent: bool,
 }
 
 impl AgentPool {
@@ -2775,6 +2777,10 @@ pub async fn run_prompt_task(
         prompt_label(&source)
     );
 
+    if ctx.publish_final_if_unsent {
+        agent.acp.arm_publish_final();
+    }
+
     // When control_rx is Some (channel tasks), wrap the prompt in select! so
     // the main loop can cancel, interrupt, or rotate it. Heartbeats
     // (control_rx=None) take the simple await path — they are not controllable.
@@ -2919,6 +2925,14 @@ pub async fn run_prompt_task(
                             );
                         }
                         log_stop_reason(&source, &StopReason::EndTurn);
+                        maybe_publish_final(
+                            ctx.as_ref(),
+                            &mut agent,
+                            &source,
+                            &StopReason::EndTurn,
+                            batch.as_ref(),
+                        )
+                        .await;
                         if let PromptSource::Channel(scope) = &source {
                             let standing_sent = !agent.has_system_prompt_support();
                             record_scope_delivery_success(
@@ -2961,6 +2975,14 @@ pub async fn run_prompt_task(
     match prompt_result {
         Ok(stop_reason) => {
             log_stop_reason(&source, &stop_reason);
+            maybe_publish_final(
+                ctx.as_ref(),
+                &mut agent,
+                &source,
+                &stop_reason,
+                batch.as_ref(),
+            )
+            .await;
 
             if let PromptSource::Channel(scope) = &source {
                 let standing_sent = !agent.has_system_prompt_support();
@@ -4964,6 +4986,116 @@ pub(crate) async fn reaction_add(rest: &crate::relay::RestClient, event_id: &str
         Ok(Ok(_)) => {}
         Ok(Err(e)) => tracing::debug!(event_id, emoji, "reaction add failed: {e}"),
         Err(_) => tracing::debug!(event_id, emoji, "reaction add timed out"),
+    }
+}
+
+/// If this channel turn ended cleanly with Activity text and no successful
+/// `messages send`, post that text as a kind:9. No-op when the flag is off.
+async fn maybe_publish_final(
+    ctx: &PromptContext,
+    agent: &mut OwnedAgent,
+    source: &PromptSource,
+    stop_reason: &StopReason,
+    batch: Option<&FlushBatch>,
+) {
+    let Some(tracker) = agent.acp.take_publish_final() else {
+        return;
+    };
+    let Some(batch) = batch else {
+        return;
+    };
+    let clean_end_turn = matches!(stop_reason, StopReason::EndTurn);
+    let channel_sourced = matches!(source, PromptSource::Channel(_));
+    let content = crate::publish_final::fallback_room_content(tracker.text());
+    if !crate::publish_final::should_publish_final(
+        ctx.publish_final_if_unsent,
+        clean_end_turn,
+        channel_sourced,
+        tracker.published_to(&batch.channel_id),
+        &content,
+    ) {
+        return;
+    }
+    let thread_tags = batch
+        .events
+        .last()
+        .map(|be| crate::queue::parse_thread_tags(&be.event))
+        .unwrap_or_default();
+    let trigger_id = batch.events.last().map(|be| be.event.id);
+    let channel_id = batch.channel_id;
+    tracing::info!(
+        target: "pool::publish_final",
+        channel = %channel_id,
+        chars = content.chars().count(),
+        "posting Activity text; agent skipped buzz messages send"
+    );
+    post_fallback_reply(
+        &ctx.rest_client,
+        channel_id,
+        &thread_tags,
+        trigger_id,
+        &content,
+    )
+    .await;
+}
+
+/// Best-effort kind:9 for the publish-final fallback. Threads onto existing
+/// NIP-10 ancestry when present; otherwise anchors a new thread on the
+/// triggering event so a top-level DM still gets a visible reply.
+async fn post_fallback_reply(
+    rest: &crate::relay::RestClient,
+    channel_id: Uuid,
+    thread_tags: &ThreadTags,
+    trigger_id: Option<nostr::EventId>,
+    content: &str,
+) {
+    let thread_ref = thread_tags
+        .root_event_id
+        .as_deref()
+        .and_then(|root| {
+            let root_id = nostr::EventId::from_hex(root).ok()?;
+            let parent_id = thread_tags
+                .parent_event_id
+                .as_deref()
+                .and_then(|p| nostr::EventId::from_hex(p).ok())
+                .unwrap_or(root_id);
+            Some(buzz_sdk::ThreadRef {
+                root_event_id: root_id,
+                parent_event_id: parent_id,
+            })
+        })
+        .or_else(|| {
+            trigger_id.map(|id| buzz_sdk::ThreadRef {
+                root_event_id: id,
+                parent_event_id: id,
+            })
+        });
+    let builder = match buzz_sdk::build_message(
+        channel_id,
+        content,
+        thread_ref.as_ref(),
+        &[],
+        false,
+        &[],
+        &[],
+    ) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(channel = %channel_id, "publish-final: build failed: {e}");
+            return;
+        }
+    };
+    let event = match builder.sign_with_keys(&rest.keys) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!(channel = %channel_id, "publish-final: sign failed: {e}");
+            return;
+        }
+    };
+    match tokio::time::timeout(Duration::from_secs(5), rest.submit_event(&event)).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => tracing::warn!(channel = %channel_id, "publish-final failed: {e}"),
+        Err(_) => tracing::warn!(channel = %channel_id, "publish-final timed out"),
     }
 }
 
@@ -8694,6 +8826,7 @@ printf '%s\n' '{{"jsonrpc":"2.0","id":0,"result":{{"stopReason":"end_turn"}}}}'"
             memory_enabled: false,
             harness_name: "goose".to_string(),
             relay_url: "ws://127.0.0.1:3000".to_string(),
+            publish_final_if_unsent: false,
         }
     }
 

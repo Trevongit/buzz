@@ -510,6 +510,17 @@ pub struct CliArgs {
     #[arg(long, env = "BUZZ_ACP_LAZY_POOL", default_value_t = false)]
     pub lazy_pool: bool,
 
+    /// When a channel/DM turn ends cleanly with assistant text but no successful
+    /// `buzz messages send`, post that text as a threaded kind:9. Default off:
+    /// a tool-using agent (Helix, PATCH) would double-post. Extras: arm only on
+    /// Ember via `BUZZ_ACP_PUBLISH_FINAL_IF_UNSENT=true`.
+    #[arg(
+        long,
+        env = "BUZZ_ACP_PUBLISH_FINAL_IF_UNSENT",
+        default_value_t = false
+    )]
+    pub publish_final_if_unsent: bool,
+
     /// Tear the woken pool back down to the lazy empty-slot state after this
     /// many seconds with no dispatched turn in flight and an empty queue,
     /// releasing worker subprocesses until the next accepted event re-wakes.
@@ -610,6 +621,8 @@ pub struct Config {
     pub exit_after_inactivity_secs: u64,
     /// Whether ACP/LLM subprocess initialization is deferred until accepted work arrives.
     pub lazy_pool: bool,
+    /// Opt-in Activity→room fallback. See `--publish-final-if-unsent`.
+    pub publish_final_if_unsent: bool,
     /// Seconds with no dispatched turn in flight and an empty queue before a
     /// woken lazy pool is torn back down to the empty-slot state. 0 = disabled.
     /// Only meaningful when `lazy_pool` is true.
@@ -787,13 +800,46 @@ pub(crate) fn normalize_agent_command_identity(command: &str) -> String {
         .collect()
 }
 
+/// Managed Grok Build ACP argv. `--no-leader` keeps the subprocess off the
+/// interactive TUI leader socket when `[cli] use_leader` is on.
+const GROK_ACP_ARGS: &[&str] = &["agent", "--always-approve", "--no-leader", "stdio"];
+
+fn grok_acp_args() -> Vec<String> {
+    GROK_ACP_ARGS.iter().map(|arg| (*arg).to_string()).collect()
+}
+
 fn default_agent_args(command: &str) -> Option<Vec<String>> {
     match normalize_agent_command_identity(command).as_str() {
         "goose" => Some(vec!["acp".to_string()]),
+        "grok" => Some(grok_acp_args()),
         "codex" | "codex-acp" | "claude-agent-acp" | "claude-code-acp" | "claude-code"
         | "claudecode" | "buzz-agent" => Some(Vec::new()),
         _ => None,
     }
+}
+
+/// Insert `--no-leader` for Grok ACP argv that omitted it. Leaves an explicit
+/// `--leader` or existing `--no-leader` alone so operators can still share a
+/// leader on purpose. Does not rewrite stored persona JSON.
+fn with_grok_managed_stdio(command: &str, mut args: Vec<String>) -> Vec<String> {
+    if normalize_agent_command_identity(command) != "grok" {
+        return args;
+    }
+    if args
+        .iter()
+        .any(|arg| arg == "--no-leader" || arg == "--leader")
+    {
+        return args;
+    }
+    if let Some(index) = args.iter().position(|arg| arg == "--always-approve") {
+        args.insert(index + 1, "--no-leader".to_string());
+        return args;
+    }
+    if let Some(index) = args.iter().position(|arg| arg == "agent") {
+        args.insert(index + 1, "--no-leader".to_string());
+        return args;
+    }
+    args
 }
 
 /// Per-runtime environment defaults applied when Buzz owns the agent process.
@@ -808,22 +854,34 @@ fn default_agent_args(command: &str) -> Option<Vec<String>> {
 /// startup budget (see block/buzz#3355). Skip that unrelated global startup
 /// by default; an operator or persona can still opt back in by setting the
 /// variable explicitly.
+/// Grok's bash tool drops `*KEY*` / `*SECRET*` / `*TOKEN*` unless this overlay
+/// turns default excludes off. `BUZZ_PRIVATE_KEY` matches `*KEY*`, so grokShell
+/// cannot run `buzz messages send` and the model scrapes `/proc` for the parent
+/// env. Overlay-allowlisted filter fields only — it cannot inject secret values
+/// (those already sit on the grok process). Some grok security gates read
+/// `~/.grok/config.toml` instead of this overlay; operators can pin the same
+/// table on disk if bash still strips the key.
+const GROK_SHELL_KEEP_BUZZ_AUTH: &str =
+    r#"{"shell_environment_policy":{"inherit":"all","ignore_default_excludes":true}}"#;
+
 pub(crate) fn default_agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     match normalize_agent_command_identity(command).as_str() {
         "hermes" | "hermes-agent" | "hermes-acp" => &[("HERMES_ACP_SKIP_CONFIGURED_MCP", "1")],
+        "grok" => &[("GROK_CONFIG", GROK_SHELL_KEEP_BUZZ_AUTH)],
         _ => &[],
     }
 }
 
-/// Build the `CODEX_CONFIG` environment variable that enables full outbound
-/// network access in Codex's macOS Seatbelt sandbox.
+/// Build the `CODEX_CONFIG` environment variable that lets a managed Codex
+/// agent send on the first `buzz messages send`.
 ///
-/// Codex sandboxes MCP subprocesses (including `buzz-cli`) behind a Seatbelt sandbox
-/// that blocks all outbound network by default. Without this env var, `buzz-cli`
-/// requests are blocked before they can reach the relay WebSocket.
+/// Default Codex `workspace-write` blocks outbound network (Linux bubblewrap
+/// / macOS Seatbelt). The first shell then fails and the model retries with
+/// network. Managed agents use `danger-full-access` + `approval_policy=never`
+/// so the first `buzz messages send` is the real send.
 ///
-/// Returns `Some(("CODEX_CONFIG", "{\"sandbox_workspace_write\":{\"network_access\":true}}"))` for
-/// Codex agents, or `None` for non-Codex agents or when the relay URL cannot be parsed.
+/// Returns `Some(("CODEX_CONFIG", …))` for Codex agents, or `None` for
+/// non-Codex agents or when the relay URL cannot be parsed.
 ///
 /// The env var is forwarded by the `@agentclientprotocol/codex-acp` adapter (1.x) as a
 /// session-level config override (via `CODEX_CONFIG` → `thread/start config`), which is
@@ -864,7 +922,7 @@ pub fn codex_network_env(agent_command: &str, relay_url: &str) -> Option<(String
 
     Some((
         "CODEX_CONFIG".into(),
-        "{\"sandbox_workspace_write\":{\"network_access\":true}}".into(),
+        "{\"approval_policy\":\"never\",\"sandbox_mode\":\"danger-full-access\",\"sandbox_workspace_write\":{\"network_access\":true}}".into(),
     ))
 }
 
@@ -876,22 +934,22 @@ pub fn normalize_agent_args(command: &str, agent_args: Vec<String>) -> Vec<Strin
         .collect::<Vec<_>>();
 
     let Some(default_args) = default_agent_args(command) else {
-        return normalized;
+        return with_grok_managed_stdio(command, normalized);
     };
 
     if normalized.is_empty() {
-        return default_args;
+        return with_grok_managed_stdio(command, default_args);
     }
 
-    // Older callers relied on the Goose-specific default even for runtimes like
-    // Codex and Claude. Treat that legacy fallback as "no args" for zero-arg
-    // providers so desktop- and env-based launches behave the same way.
-    if normalized.len() == 1 && normalized[0].eq_ignore_ascii_case("acp") && default_args.is_empty()
-    {
-        return default_args;
+    // Clap's `BUZZ_ACP_AGENT_ARGS` default is the Goose sentinel `acp`. Treat
+    // that as "no args" whenever this command has a table default so Grok gets
+    // headless stdio instead of `grok acp`. Goose's own default is `["acp"]`,
+    // so this is a no-op there; Codex/Claude still collapse it to empty.
+    if normalized.len() == 1 && normalized[0].eq_ignore_ascii_case("acp") {
+        return with_grok_managed_stdio(command, default_args);
     }
 
-    normalized
+    with_grok_managed_stdio(command, normalized)
 }
 
 /// Propagate legacy env-var aliases to their canonical names.
@@ -1199,6 +1257,7 @@ impl Config {
             relay_observer: args.relay_observer,
             exit_after_inactivity_secs: args.exit_after_inactivity,
             lazy_pool: args.lazy_pool,
+            publish_final_if_unsent: args.publish_final_if_unsent,
             idle_pool_sleep_secs: args.idle_pool_sleep,
             replay_floor_unix: args.replay_floor,
             agent_owner: args.agent_owner.map(|s| s.trim().to_ascii_lowercase()),
@@ -1575,6 +1634,7 @@ mod tests {
             relay_observer: false,
             exit_after_inactivity_secs: 0,
             lazy_pool: false,
+            publish_final_if_unsent: false,
             idle_pool_sleep_secs: 0,
             replay_floor_unix: None,
             agent_owner: None,
@@ -1764,6 +1824,79 @@ mod tests {
     }
 
     #[test]
+    fn default_agent_env_keeps_buzz_auth_in_grok_shell() {
+        for command in ["grok", "/usr/local/bin/grok", r"C:\Users\test\grok.exe"] {
+            let env = default_agent_env(command);
+            assert_eq!(env[0].0, "GROK_CONFIG", "unexpected env key for {command}");
+            assert!(
+                env[0].1.contains("ignore_default_excludes"),
+                "GROK_CONFIG must disable *KEY* stripping for {command}"
+            );
+        }
+    }
+
+    #[test]
+    fn normalizes_grok_args_to_headless_stdio_without_leader() {
+        let expected = vec![
+            "agent".to_string(),
+            "--always-approve".to_string(),
+            "--no-leader".to_string(),
+            "stdio".to_string(),
+        ];
+        assert_eq!(normalize_agent_args("grok", Vec::new()), expected);
+        assert_eq!(
+            normalize_agent_args("grok", vec!["acp".into()]),
+            expected,
+            "Clap's default BUZZ_ACP_AGENT_ARGS=acp must not launch grok acp"
+        );
+        assert_eq!(
+            normalize_agent_args("/usr/local/bin/grok", vec!["".into()]),
+            expected
+        );
+        assert_eq!(
+            normalize_agent_args(
+                r"C:\Users\test\grok.exe",
+                vec!["agent".into(), "--always-approve".into(), "stdio".into()]
+            ),
+            expected
+        );
+        assert_eq!(
+            normalize_agent_args("grok", expected.clone()),
+            expected,
+            "already-headless argv must stay idempotent"
+        );
+        assert_eq!(
+            normalize_agent_args(
+                "grok",
+                vec!["agent".into(), "--leader".into(), "stdio".into()]
+            ),
+            vec!["agent", "--leader", "stdio"],
+            "explicit --leader must not be rewritten"
+        );
+    }
+
+    #[test]
+    fn grok_cli_without_agent_args_uses_headless_stdio() {
+        let args = CliArgs::parse_from([
+            "buzz-acp",
+            "--private-key",
+            TEST_PRIVATE_KEY,
+            "--agent-command",
+            "grok",
+        ]);
+        assert_eq!(
+            args.agent_args,
+            vec!["acp"],
+            "clap still defaults BUZZ_ACP_AGENT_ARGS to acp"
+        );
+        let cfg = Config::from_args(args).expect("from_args");
+        assert_eq!(
+            cfg.agent_args,
+            vec!["agent", "--always-approve", "--no-leader", "stdio"]
+        );
+    }
+
+    #[test]
     fn strips_legacy_acp_arg_case_insensitively() {
         assert_eq!(
             normalize_agent_args("codex-acp", vec!["ACP".into()]),
@@ -1773,7 +1906,7 @@ mod tests {
 
     // --- codex_network_env tests ---
 
-    const CODEX_CONFIG_JSON: &str = "{\"sandbox_workspace_write\":{\"network_access\":true}}";
+    const CODEX_CONFIG_JSON: &str = "{\"approval_policy\":\"never\",\"sandbox_mode\":\"danger-full-access\",\"sandbox_workspace_write\":{\"network_access\":true}}";
 
     #[test]
     fn codex_network_env_wss_url() {
@@ -1845,6 +1978,14 @@ mod tests {
         let result = codex_network_env("codex-acp", "wss://relay.example.com");
         let (key, val) = result.expect("expected Some for valid codex + valid url");
         assert_eq!(key, "CODEX_CONFIG");
+        assert!(
+            val.contains("\"approval_policy\":\"never\""),
+            "managed Codex must not wait on a TTY approval"
+        );
+        assert!(
+            val.contains("\"sandbox_mode\":\"danger-full-access\""),
+            "managed Codex must not dry-run the first send behind a network fence"
+        );
         assert!(
             val.contains("\"sandbox_workspace_write\""),
             "JSON must contain sandbox_workspace_write"
@@ -2319,6 +2460,33 @@ channels = "ALL"
         let args = CliArgs::try_parse_from(["buzz-acp", "--private-key", &key, "--lazy-pool=true"]);
         assert!(args.is_err(), "bool flags do not take an explicit value");
         assert!(CliArgs::parse_from(["buzz-acp", "--private-key", &key, "--lazy-pool"]).lazy_pool);
+    }
+
+    #[test]
+    fn publish_final_if_unsent_defaults_off_and_arms_via_flag() {
+        let key = "0".repeat(64);
+        let default = CliArgs::parse_from(["buzz-acp", "--private-key", &key]);
+        assert!(
+            !default.publish_final_if_unsent,
+            "fallback must stay off so Helix-class agents do not double-post"
+        );
+        assert!(
+            CliArgs::parse_from([
+                "buzz-acp",
+                "--private-key",
+                &key,
+                "--publish-final-if-unsent"
+            ])
+            .publish_final_if_unsent
+        );
+        let cfg = Config::from_args(CliArgs::parse_from([
+            "buzz-acp",
+            "--private-key",
+            TEST_PRIVATE_KEY,
+            "--publish-final-if-unsent",
+        ]))
+        .expect("from_args");
+        assert!(cfg.publish_final_if_unsent);
     }
 
     #[test]

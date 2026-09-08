@@ -182,7 +182,7 @@ mod tests {
     fn policy_table() {
         let cap = super::OPENCLAW_MAX_PARALLELISM;
 
-        // harness_max_parallelism: openclaw variants → Some(cap); others → None.
+        // harness_max_parallelism: known internals are capped; goose stays open.
         assert_eq!(super::harness_max_parallelism("openclaw"), Some(cap));
         assert_eq!(
             super::harness_max_parallelism("/usr/local/bin/openclaw"),
@@ -194,7 +194,6 @@ mod tests {
             Some(cap)
         );
         assert_eq!(super::harness_max_parallelism("goose"), None);
-        assert_eq!(super::harness_max_parallelism("buzz-agent"), None);
         assert_eq!(super::harness_max_parallelism(""), None);
         assert_eq!(
             super::harness_max_parallelism("codex-acp"),
@@ -208,17 +207,25 @@ mod tests {
             super::harness_max_parallelism("grok"),
             Some(super::GROK_MAX_PARALLELISM)
         );
+        assert_eq!(
+            super::harness_max_parallelism("agy-acp"),
+            Some(super::AGY_MAX_PARALLELISM)
+        );
+        assert_eq!(
+            super::harness_max_parallelism("buzz-agent"),
+            Some(super::BUZZ_AGENT_MAX_PARALLELISM)
+        );
 
         // effective_parallelism: openclaw clamps above cap, honors at/below; goose passes through.
         assert_eq!(super::effective_parallelism("openclaw", cap + 5), cap);
         assert_eq!(super::effective_parallelism("openclaw", cap), cap);
         assert_eq!(super::effective_parallelism("openclaw", cap - 2), cap - 2);
         assert_eq!(super::effective_parallelism("goose", 99), 99);
-        assert_eq!(super::effective_parallelism("buzz-agent", 32), 32);
         assert_eq!(super::effective_parallelism("codex-acp", 10), 1);
         assert_eq!(super::effective_parallelism("grok", 10), 1);
         assert_eq!(super::effective_parallelism("agy-acp", 10), 1);
         assert_eq!(super::effective_parallelism("agy", 10), 1);
+        assert_eq!(super::effective_parallelism("buzz-agent", 32), 1);
         assert_eq!(super::effective_parallelism("buzz-agent", 10), 1);
     }
 

@@ -9,6 +9,7 @@ mod pool;
 mod pool_lifecycle;
 mod prompt_framing;
 mod prompt_project;
+mod publish_final;
 mod queue;
 mod relay;
 mod scope;
@@ -2798,6 +2799,7 @@ async fn tokio_main() -> Result<()> {
         memory_enabled: config.memory_enabled,
         harness_name: crate::config::normalize_agent_command_identity(&config.agent_command),
         relay_url: config.relay_url.clone(),
+        publish_final_if_unsent: config.publish_final_if_unsent,
     });
 
     if !config.memory_enabled {
@@ -8932,6 +8934,7 @@ mod build_mcp_servers_tests {
             relay_observer: false,
             exit_after_inactivity_secs: 0,
             lazy_pool: false,
+            publish_final_if_unsent: false,
             idle_pool_sleep_secs: 0,
             replay_floor_unix: None,
             agent_owner: None,
@@ -9158,6 +9161,7 @@ mod error_outcome_emission_tests {
             relay_observer: false,
             exit_after_inactivity_secs: 0,
             lazy_pool: false,
+            publish_final_if_unsent: false,
             idle_pool_sleep_secs: 0,
             replay_floor_unix: None,
             agent_owner: None,
