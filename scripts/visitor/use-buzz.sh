@@ -70,7 +70,8 @@ if ! python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).
   exit 3
 fi
 
-if ! timeout 8s visitor_run --format compact channels list >/dev/null 2>&1; then
+cli="$(visitor_find_cli)"
+if ! timeout 8s "$cli" --relay "${BUZZ_RELAY_URL}" --format compact channels list >/dev/null 2>&1; then
   echo "VISITOR_USE fail reason=community-unavailable host=$host seat=$SEAT" >&2
   echo "Tell Prime: community $host is not reachable right now."
   exit 3

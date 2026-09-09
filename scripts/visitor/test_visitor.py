@@ -553,6 +553,13 @@ class CommunityPortabilityTests(unittest.TestCase):
             )
             self.assertEqual(bad.returncode, 3, bad.stdout + bad.stderr)
 
+    def test_use_buzz_timeout_invokes_cli_binary_not_shell_function(self):
+        body = (ROOT / "use-buzz.sh").read_text()
+        self.assertNotIn("timeout 8s visitor_run", body)
+        self.assertIn("visitor_find_cli", body)
+        self.assertIn('timeout 8s "$cli"', body)
+        self.assertIn("--format compact channels list", body)
+
 
 class RelayAlignTests(unittest.TestCase):
     def test_wss_and_https_same_host(self):
