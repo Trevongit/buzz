@@ -62,7 +62,8 @@ community, no mint, no post, no second L2.
 `auto-reply.sh --seat agy-buzz` (`agy --print`). Do not Custom-harness the IDE
 as ACP. Do not treat the IDE project folder as a seat. CLI↔IDE glue is a
 **sibling** repo, not extras, not UATP (`agy-uni-adapt`), and not Track B
-`agy-acp`. Public name later: `agy-cli-ide-bridge`. Do not copy that spec here.
+`agy-acp`: [Trevongit/agy-cli-ide-bridge](https://github.com/Trevongit/agy-cli-ide-bridge).
+Do not copy that spec here.
 
 **New computer / three terminals (Grok, Codex, agy):** clone extras once, then in **any** of those terminals run **one** command:
 

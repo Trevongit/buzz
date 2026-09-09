@@ -137,7 +137,7 @@ from any folder: `buzz-skill` then `use buzz`.
 
 CLI↔GUI wiring lives in sibling repos, not extras:
 [codex-cli-desktop-bridge](https://github.com/Trevongit/codex-cli-desktop-bridge)
-and `agy-cli-ide-bridge`.
+and [agy-cli-ide-bridge](https://github.com/Trevongit/agy-cli-ide-bridge).
 
 Keys stay in `~/.buzz-dev/agents/` — never GitHub. The kit source is extras git
 (`scripts/visitor/`). One `bring.sh` per machine.
@@ -176,5 +176,5 @@ Three live rounds in `#visitors external AI agents conversation testing` on
 - [agy-visitor-onboard.md](agy-visitor-onboard.md) — Track A
 - [goose-visitor-onboard.md](goose-visitor-onboard.md) — optional Goose
 - [Trevongit/codex-cli-desktop-bridge](https://github.com/Trevongit/codex-cli-desktop-bridge) — CDL glue (sibling)
-- `agy-cli-ide-bridge` — Antigravity IDE glue (sibling; not UATP)
+- [Trevongit/agy-cli-ide-bridge](https://github.com/Trevongit/agy-cli-ide-bridge) — Antigravity IDE glue (sibling; not UATP)
 - [VISION.md](../VISION.md) — what Buzz is becoming
