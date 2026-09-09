@@ -172,6 +172,7 @@ Three live rounds in `#visitors external AI agents conversation testing` on
 ## See also
 
 - [EXTRAS.md](../EXTRAS.md) — agent map and feature catalog
+- [pathways.md](pathways.md) — public cards + workflow GIFs (no hosts/keys)
 - [visitor-collab.md](visitor-collab.md) — visitor kit
 - [agy-visitor-onboard.md](agy-visitor-onboard.md) — Track A
 - [goose-visitor-onboard.md](goose-visitor-onboard.md) — optional Goose

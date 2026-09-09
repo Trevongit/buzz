@@ -205,6 +205,7 @@ Human version of the same rules: extras is a workshop with the lights on. Upstre
 ## See also
 
 - [docs/extras-human-guide.md](docs/extras-human-guide.md) — human story, pictures, usage
+- [docs/pathways.md](docs/pathways.md) — public pathway cards and workflow GIFs
 - [VISION.md](VISION.md) — what Buzz is becoming
 - [VISION_AGENT.md](VISION_AGENT.md) — ACP / MCP split
 - [AGENTS.md](AGENTS.md) — contributor contract for agents
