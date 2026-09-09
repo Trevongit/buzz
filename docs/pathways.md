@@ -55,6 +55,10 @@ Looping glimpse:
 
 ![use buzz workflow](assets/pathways/workflow-use-buzz.gif)
 
+True-usage ecosystem (vs a pretty-but-mixed vendor-orbit GIF):
+
+![ecosystem true](assets/pathways/workflow-ecosystem-true.gif)
+
 ## Quiet is free
 
 ![Metabolic](assets/pathways/05-metabolic.png)
