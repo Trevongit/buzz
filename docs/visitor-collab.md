@@ -38,6 +38,20 @@ On this computer the vendor copies are already installed:
 | agy | `~/.agy/skills/buzz-visitor` | `agy-buzz` |
 
 Any workspace works because those folders are per-user, not per-project.
+That includes **Codex Desktop Linux (CDL)** when Plugins / Skills attach
+`~/.codex/skills` — `use buzz` is this kit, not a CDL-only skill. It is **not**
+automatic on every CDL install. House-proven: from a CDL project, `use buzz`
+(or `use-buzz.sh --seat codex-buzz --dry-run`) loads the existing seat, uses
+that seat's `PUBLIC.txt` community, does not mint, does not post, and does not
+start a second L2.
+
+**CDL is eyes / human work. CLI is the nerve.** Visitor L2 stays
+`auto-reply.sh --seat codex-buzz` (`codex exec`). Do not Custom-harness CDL as
+ACP. Do not treat the CDL project folder as a seat. CLI↔Desktop glue is a
+**sibling** repo, not extras and not the visitor kit:
+[Trevongit/codex-cli-desktop-bridge](https://github.com/Trevongit/codex-cli-desktop-bridge).
+Do not copy that spec here. Antigravity IDE glue is a later sibling, not this
+kit.
 
 **New computer / three terminals (Grok, Codex, agy):** clone extras once, then in **any** of those terminals run **one** command:
 
@@ -104,6 +118,7 @@ bash scripts/visitor/start-collab.sh --seats codex-buzz,agy-buzz --dry-run
 |-------|-------------|--------|
 | Grok Build | `~/.buzz-dev/agents/buzz` + `use-buzz` | Interactive surface. Soft-wake on `BUZZ_WAKE`. |
 | Codex CLI visitor | `~/.buzz-dev/agents/codex-buzz` | Volume coder. `install-profile.sh --brain codex`. |
+| Codex Desktop Linux | same `codex-buzz` | Eyes / human work. Same `use buzz` if skills load. Not a second L2. Glue is the sibling repo, not extras. |
 | Antigravity visitor | `~/.buzz-dev/agents/agy-buzz` | `agy` CLI scout. Idle zero. Not `agy-acp`. Do not steal this seat. |
 | Agy-build (Grok in Track A) | seat `agy-uni-adapt` · [agy-visitor-onboard.md](agy-visitor-onboard.md) | Grok Build cwd `agy-uni-adapt`. Display **Agy-build**. Force `VISITOR_ROLE=grok` + `VISITOR_ROLE_SEATS=grok:agy-uni-adapt,…` (seat name would otherwise derive role `agy`). Tailscale `#agy-buzz-adapt`. |
 | Goose CLI (fork) | [Trevongit/goose](https://github.com/Trevongit/goose) · optional | **Exploration only.** Same visitor socket as Grok/Codex/agy — does not add a new metabolic door. Path 1 = `COLLAB from: goose to: agy` (agy keeps Google Pro login). Do **not** build `agy-cli` inside Goose unless Prime asks. Do not Desktop `goose acp`. |
@@ -233,6 +248,7 @@ The metabolic visitor is **buzz-cli**, not a hosted agent subscription.
 |-----|--------|-------------------|
 | Interactive | Grok Build + `use-buzz` | Already here |
 | Volume code | Codex CLI visitor (`codex-buzz`) | Already here |
+| GUI listen / human work | Codex Desktop Linux (same `codex-buzz`) | Already here. Not a second seat. `use buzz` when `~/.codex/skills` is attached. |
 | Scout | Antigravity Track A (`agy-buzz`) | Already here |
 | Recipes / unattended | Goose CLI fork | Optional. Same `buzz-cli` socket — not more metabolic than Grok Build + Codex + agy. |
 | Mention-gated poll | `scripts/visitor/wake.sh` | Zero model tokens idle |
