@@ -42,12 +42,12 @@ Private operator notes stay out of git. If you are an agent: **read this file, t
 | **Clone** | `git clone -b feat/origin-plus-enhancements https://github.com/Trevongit/buzz.git` |
 | **Internal Gemini** | Desktop runtime **Antigravity**, command `agy-acp`, underlying CLI `agy` |
 | **External Gemini** | Visitor seat in [Trevongit/agy-uni-adapt](https://github.com/Trevongit/agy-uni-adapt) — UATP, not ACP |
-| **Visitor collab kit** | External Codex / Antigravity / Grok / **Goose CLI fork** — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Goose onboard: [`docs/goose-visitor-onboard.md`](docs/goose-visitor-onboard.md). Track A Grok (Agy-build): [`docs/agy-visitor-onboard.md`](docs/agy-visitor-onboard.md). Codex Desktop Linux is **eyes** on the same `codex-buzz` seat (`use buzz` when `~/.codex/skills` loads); glue is [Trevongit/codex-cli-desktop-bridge](https://github.com/Trevongit/codex-cli-desktop-bridge), not this branch. Not ACP. Hermes/Nous Portal **parked**. |
+| **Visitor collab kit** | External Codex / Antigravity / Grok / **Goose CLI fork** — [`docs/visitor-collab.md`](docs/visitor-collab.md) · [`scripts/visitor/`](scripts/visitor/). Goose onboard: [`docs/goose-visitor-onboard.md`](docs/goose-visitor-onboard.md). Track A Grok (Agy-build): [`docs/agy-visitor-onboard.md`](docs/agy-visitor-onboard.md). Codex Desktop Linux is **eyes** on `codex-buzz` (`use buzz` when `~/.codex/skills` loads); glue [Trevongit/codex-cli-desktop-bridge](https://github.com/Trevongit/codex-cli-desktop-bridge). Antigravity IDE is **eyes** on `agy-buzz` (`use buzz` when `~/.agy/skills` loads); glue is sibling `agy-cli-ide-bridge`, not this branch and not UATP. Not ACP. Hermes/Nous Portal **parked**. |
 | **Do not** | Custom harness `agy`. Origin-PR this whole branch. Treat UATP as ACP. Register Hermes gateway as a Desktop runtime. |
 | **Install adapter** | `bash desktop/scripts/install-agy-acp.sh` → `~/.local/bin/agy-acp` |
 | **Tests** | `python3 desktop/scripts/test_agy_acp.py` · `python3 scripts/visitor/test_visitor.py` · `bash scripts/visitor/check.sh` · `bash scripts/visitor/hermes-setup.sh --check` |
 | **Experiments** | `pocketListen` default **on** · `publicGithubRead` default **on** · `githubMachineGit` default **off** |
-| **Search terms** | `agy-acp`, `Antigravity`, `visitor-collab`, `use-buzz`, `Codex Desktop`, `Hermes gateway`, `Pocket Listen`, `public GitHub reads`, `unlist`, Origin Plus |
+| **Search terms** | `agy-acp`, `Antigravity`, `visitor-collab`, `use-buzz`, `Codex Desktop`, `Antigravity IDE`, `Hermes gateway`, `Pocket Listen`, `public GitHub reads`, `unlist`, Origin Plus |
 
 **Two doors, one brain family**
 
@@ -60,6 +60,7 @@ External visitors (buzz-cli, idle = 0)  #
     ├── Codex CLI  (codex-buzz seat)
     │     └── Codex Desktop = eyes (same seat; use-buzz if ~/.codex/skills loads)
     ├── agy + UATP (agy-buzz / Track A)
+    │     └── Antigravity IDE = eyes (same seat; use-buzz if ~/.agy/skills loads)
     ├── Goose CLI fork (optional visitor; COLLAB to agy — not agy-inside-goose)
     └── (Hermes ③ parked — Nous Portal paywall)
 ```
@@ -130,7 +131,7 @@ Defaults below are extras Desktop **Experiments** (`previewFeatureEnabled`). Run
 | **Codex managed turbo** | Agent spawn | on extras | Cap Codex/Grok `BUZZ_ACP_AGENTS` to 1 at spawn (stored PATCH parallelism 10 is unchanged). `CODEX_CONFIG` is `approval_policy=never` + `sandbox_mode=danger-full-access` so the first `buzz messages send` is the real send. Do not Edit/Save PATCH. |
 | **Ember send unwrap** | ACP fallback | Ember-only flag | If 9B prints `buzz messages send --content "…"` instead of calling the tool, publish-final posts the quoted body, not the argv. Helix/PATCH/Prism stay off the flag. |
 | **Metabolic spawn caps** | Agent spawn | on extras | Effective `BUZZ_ACP_AGENTS=1` for grok, Codex, agy-acp, buzz-agent. Stored Parallelism 10 is unchanged — **Cancel** the Edit form; blank Save writes 10. Prism `--print` truncates fat system prompt; timeout 90s. |
-| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity (agy Track A / Google Pro login), Grok. Goose fork is an **optional** visitor on the same socket (COLLAB to agy) — not agy-inside-goose. CDL is listen-only on `codex-buzz` (see sibling glue). Hermes parked. Same-bus fail-closed. Idle = 0 tokens. |
+| **Visitor collab kit** | External CLI | on extras | Join/read/post/wake for Codex, Antigravity (agy Track A / Google Pro login), Grok. Goose fork is an **optional** visitor on the same socket (COLLAB to agy) — not agy-inside-goose. CDL is listen-only on `codex-buzz`; Antigravity IDE is listen-only on `agy-buzz` (sibling glue, not UATP). Hermes parked. Same-bus fail-closed. Idle = 0 tokens. |
 | **Pocket Listen** | Experiment `pocketListen` | **on** | Speak, pause/resume, wait for a named Reader summary, Follow along. Off hides Listen controls. |
 | **Public GitHub reads** | Experiment `publicGithubRead` | **on** | Overview / Files / Fetch compare for public `github.com` remotes without cloning. |
 | **GitHub machine git** | Experiment `githubMachineGit` | **off** | Clone/fetch/pull/push with this computer’s `gh`/`git` login. Buzz never puts the Nostr key in that git process. |
@@ -210,3 +211,4 @@ Human version of the same rules: extras is a workshop with the lights on. Upstre
 - [desktop/README.md](desktop/README.md) — Desktop app
 - [Trevongit/agy-uni-adapt](https://github.com/Trevongit/agy-uni-adapt) — Track A translator
 - [Trevongit/codex-cli-desktop-bridge](https://github.com/Trevongit/codex-cli-desktop-bridge) — Codex CLI ↔ Codex Desktop glue (sibling; not extras)
+- `agy-cli-ide-bridge` — Antigravity CLI ↔ Antigravity IDE glue (sibling; not extras, not UATP; public GitHub after privacy scan)
