@@ -63,6 +63,10 @@ Character poster (same fashion as the lab’s ChatGPT offering, labels corrected
 
 ![ecosystem characters](assets/pathways/07-ecosystem-characters.png)
 
+Five-panel loop (visitors → speaker → GitHub → internals → home):
+
+![loop](assets/pathways/workflow-loop-5-panels.gif)
+
 ## Quiet is free
 
 ![Metabolic](assets/pathways/05-metabolic.png)
