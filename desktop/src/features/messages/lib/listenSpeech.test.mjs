@@ -162,7 +162,10 @@ test("listenReaderAsk mentions the chosen agent", () => {
   );
   const ask = listenReaderAsk("Reader-laptop", "Ship extras tonight.");
   assert.match(ask, /Reuse pictures already in this message/);
-  assert.match(ask, /Do not invent, generate, or attach a replacement infographic/);
+  assert.match(
+    ask,
+    /Do not invent, generate, or attach a replacement infographic/,
+  );
   assert.match(ask, /Never say Claude/);
   assert.match(ask, /green helper is Antigravity/);
   assert.match(ask, /tour guide/);
