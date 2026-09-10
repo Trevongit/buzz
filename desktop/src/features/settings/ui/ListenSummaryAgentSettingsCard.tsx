@@ -29,7 +29,7 @@ export function ListenSummaryAgentSettingsCard() {
   return (
     <SettingsOptionGroup
       data-testid="settings-listen-summary-agent"
-      description="Listen (summary) @-asks this managed agent in the thread. Pocket speaks when they post. Defaults to Reader-laptop when unset."
+      description="Listen (summary) @-asks this managed agent in the thread. They must already be a member of the channel or they cannot post. Pocket speaks when they post. Plain Listen does not need that. Defaults to Reader-laptop when unset."
       title="Listen summary"
     >
       <SettingsOptionRow>

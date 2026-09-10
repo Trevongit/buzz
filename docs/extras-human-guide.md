@@ -173,6 +173,8 @@ Three live rounds in `#visitors external AI agents conversation testing` on
 
 - [EXTRAS.md](../EXTRAS.md) — agent map and feature catalog
 - [pathways.md](pathways.md) — public cards + workflow GIFs (no hosts/keys)
+
+Pocket Listen: **Listen** speaks the message now. **Listen (summary)** @-asks Reader in the thread — they must already be in the channel, or the 4-minute wait times out with no post. Reuse the pictures already in the post; do not invent a second map.
 - [visitor-collab.md](visitor-collab.md) — visitor kit
 - [agy-visitor-onboard.md](agy-visitor-onboard.md) — Track A
 - [goose-visitor-onboard.md](goose-visitor-onboard.md) — optional Goose

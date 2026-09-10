@@ -162,7 +162,15 @@ test("listenReaderAsk mentions the chosen agent", () => {
   );
   assert.match(
     listenReaderAsk("Reader-laptop", "Ship extras tonight."),
-    /diagrams/,
+    /Reuse pictures already in this message/,
+  );
+  assert.match(
+    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
+    /Do not invent a new infographic/,
+  );
+  assert.match(
+    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
+    /Antigravity is not Claude/,
   );
 });
 

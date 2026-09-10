@@ -130,7 +130,7 @@ function waitForReaderReply(input: {
     const timeoutId = window.setTimeout(() => {
       failWait(
         new Error(
-          `${input.readerName} is still writing after 4 minutes. Wait for their post in this thread, then click Follow along.`,
+          `${input.readerName} is still writing after 4 minutes. They must be a member of this channel and post in this thread. Then click Follow along.`,
         ),
       );
     }, READER_REPLY_TIMEOUT_MS);

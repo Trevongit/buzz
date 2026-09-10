@@ -85,7 +85,7 @@ export function listenSummaryPrompt(text: string): string {
 /** Channel ask so the chosen Listen-summary agent writes Pocket prose. */
 export function listenReaderAsk(agentName: string, text: string): string {
   const mention = agentName.trim() || READER_AGENT_NAME;
-  return `@${mention} Summarize this message in this thread for follow-along. First: spoken prose for Pocket (complete sentences, finish the last sentence, no markdown). Then in the same reply: a read-along with phone-safe bullets and glimpse diagrams or pictures if they help understanding. Prime will click your post to hear Pocket and can keep talking in the thread for more clarity.\n\n${text}`;
+  return `@${mention} Summarize this message in this thread for follow-along. Audience is the human who clicked Listen — match their tone and keep vendor names exact (Antigravity is not Claude). First: spoken prose for Pocket (complete sentences, finish the last sentence, no markdown). Then in the same reply: a read-along with phone-safe bullets. Reuse pictures already in this message or thread. Do not invent a new infographic, do not rename the helpers, and do not attach a replacement diagram. Prime will click your post to hear Pocket and can keep talking in the thread for more clarity.\n\n${text}`;
 }
 
 /** Prefer the Spoken section when Reader also attached a read-along. */
