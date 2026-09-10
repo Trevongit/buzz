@@ -160,18 +160,13 @@ test("listenReaderAsk mentions the chosen agent", () => {
     listenReaderAsk("Reader-laptop", "Ship extras tonight."),
     /read-along/,
   );
-  assert.match(
-    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
-    /Reuse pictures already in this message/,
-  );
-  assert.match(
-    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
-    /Do not invent a new infographic/,
-  );
-  assert.match(
-    listenReaderAsk("Reader-laptop", "Ship extras tonight."),
-    /Antigravity is not Claude/,
-  );
+  const ask = listenReaderAsk("Reader-laptop", "Ship extras tonight.");
+  assert.match(ask, /Reuse pictures already in this message/);
+  assert.match(ask, /Do not invent, generate, or attach a replacement infographic/);
+  assert.match(ask, /Never say Claude/);
+  assert.match(ask, /green helper is Antigravity/);
+  assert.match(ask, /tour guide/);
+  assert.match(ask, /When a term is not obvious/);
 });
 
 test("isFollowAlongMessage matches a preferred Listen-summary agent", () => {

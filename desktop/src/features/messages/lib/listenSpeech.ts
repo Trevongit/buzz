@@ -85,7 +85,15 @@ export function listenSummaryPrompt(text: string): string {
 /** Channel ask so the chosen Listen-summary agent writes Pocket prose. */
 export function listenReaderAsk(agentName: string, text: string): string {
   const mention = agentName.trim() || READER_AGENT_NAME;
-  return `@${mention} Summarize this message in this thread for follow-along. Audience is the human who clicked Listen — match their tone and keep vendor names exact (Antigravity is not Claude). First: spoken prose for Pocket (complete sentences, finish the last sentence, no markdown). Then in the same reply: a read-along with phone-safe bullets. Reuse pictures already in this message or thread. Do not invent a new infographic, do not rename the helpers, and do not attach a replacement diagram. Prime will click your post to hear Pocket and can keep talking in the thread for more clarity.\n\n${text}`;
+  return `@${mention} Summarize this message in this thread for follow-along. You are a tour guide for the human who clicked Listen. Speak clearly. When a term is not obvious (L2, mint, ACP, visitor kit, glue, named visitor), say what it means in one short sentence the first time. Keep vendor names exact: green helper is Antigravity, teal is Codex, purple is Grok Build. Never say Claude.
+
+First: spoken prose for Pocket (complete sentences, finish the last sentence, no markdown). Point at the pictures already attached. Describe what those pictures show so ears and eyes match.
+
+Then in the same reply: a read-along with phone-safe bullets only. Reuse pictures already in this message or thread. Do not invent, generate, or attach a replacement infographic. If the original pictures are more informative, keep them. Do not add a weaker diagram.
+
+Prime will click your post to hear Pocket and can keep talking in the thread for more clarity.
+
+${text}`;
 }
 
 /** Prefer the Spoken section when Reader also attached a read-along. */
