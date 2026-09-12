@@ -354,12 +354,66 @@ def resolve_community_want(raw: str) -> str:
     return normalize_relay(raw) or s
 
 
-def community_for_seat(seat_dir: str, want: str = "") -> dict[str, Any]:
-    """Default community is PUBLIC.txt. Ask if missing; refuse a silent other bus."""
+def house_community_file() -> Path:
+    override = (os.environ.get("BUZZ_DEFAULT_COMMUNITY_FILE") or "").strip()
+    if override:
+        return Path(override)
+    return Path.home() / ".buzz-dev" / "default-community"
+
+
+def house_default_relay_url(path: str | None = None) -> str:
+    """This computer's regular community. Never Groundfeed unless the file says so.
+
+    File is ~/.buzz-dev/default-community (one URL or Desktop name per line).
+    wss:// and https:// are the same bus. Empty file / missing file → ask Prime.
+    """
+    p = Path(path) if path else house_community_file()
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        host = resolve_community_want(s)
+        if not host:
+            continue
+        if host.startswith("localhost") or host.startswith("127."):
+            return f"http://{host}"
+        return f"https://{host}"
+    return ""
+
+
+def community_for_seat(
+    seat_dir: str, want: str = "", house_file: str | None = None
+) -> dict[str, Any]:
+    """Default community is PUBLIC.txt, else this computer's regular community file.
+
+    Ask if both are missing. Refuse a silent other bus. Never invent Groundfeed.
+    """
     card = public_card_from_dir(seat_dir)
     host = normalize_relay(card.get("relay") or "")
     want_host = resolve_community_want(want)
     if not host:
+        house_url = house_default_relay_url(house_file)
+        house_host = normalize_relay(house_url)
+        if house_host:
+            if want_host and want_host != house_host:
+                return {
+                    "ok": False,
+                    "reason": "community-mismatch",
+                    "host": house_host,
+                    "want": want_host,
+                    "relay": house_url,
+                }
+            return {
+                "ok": True,
+                "reason": "community-house-default",
+                "host": house_host,
+                "want": want_host or house_host,
+                "relay": house_url,
+            }
         return {
             "ok": False,
             "reason": "community-missing",
@@ -1262,9 +1316,18 @@ if __name__ == "__main__":
         sys.stdout.write("\n")
         raise SystemExit(0)
 
+    if len(sys.argv) > 1 and sys.argv[1] == "house-default":
+        url = house_default_relay_url()
+        print(url, end="")
+        raise SystemExit(0 if url else 2)
+
     if len(sys.argv) > 1 and sys.argv[1] == "community-for-seat":
         kw = _parse_kw(sys.argv[2:])
-        report = community_for_seat(kw.get("dir") or "", kw.get("want") or "")
+        report = community_for_seat(
+            kw.get("dir") or "",
+            kw.get("want") or "",
+            house_file=kw.get("house-file") or None,
+        )
         json.dump(report, sys.stdout)
         sys.stdout.write("\n")
         raise SystemExit(0 if report["ok"] else 3)

@@ -19,6 +19,7 @@ from gate import (  # noqa: E402
     align_relays,
     collab_send_gate,
     community_for_seat,
+    house_default_relay_url,
     cooldown_blocks,
     filter_wakes,
     last_room_bus_ok,
@@ -514,9 +515,30 @@ class CommunityPortabilityTests(unittest.TestCase):
             self.assertEqual(miss["reason"], "community-mismatch")
             same = community_for_seat(tmp, "asus-g501vw")
             self.assertTrue(same["ok"])
-            empty = community_for_seat(tmp + "-nope", "")
+            empty = community_for_seat(
+                tmp + "-nope", "", house_file=str(Path(tmp) / "no-house")
+            )
             self.assertFalse(empty["ok"])
             self.assertEqual(empty["reason"], "community-missing")
+
+    def test_house_default_community_when_public_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            house = Path(tmp) / "default-community"
+            house.write_text(
+                "# laptop regular\nwss://asus-g501vw.tailb74de6.ts.net\n",
+                encoding="utf-8",
+            )
+            report = community_for_seat(
+                str(Path(tmp) / "no-seat"), "", house_file=str(house)
+            )
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["reason"], "community-house-default")
+            self.assertEqual(report["host"], "asus-g501vw.tailb74de6.ts.net")
+            self.assertEqual(
+                house_default_relay_url(str(house)),
+                "https://asus-g501vw.tailb74de6.ts.net",
+            )
+            self.assertEqual(house_default_relay_url(str(Path(tmp) / "missing")), "")
 
     def test_use_buzz_dry_run_reads_public_only(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -7,7 +7,12 @@ VISITOR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export VISITOR_ROOT
 
 visitor_default_relay() {
-  echo "${BUZZ_RELAY_URL:-https://groundfeed.communities.buzz.xyz}"
+  # Never Groundfeed unless the house file or env says so.
+  if [[ -n "${BUZZ_RELAY_URL:-}" ]]; then
+    echo "$BUZZ_RELAY_URL"
+    return
+  fi
+  python3 "${VISITOR_ROOT}/gate.py" house-default 2>/dev/null || true
 }
 
 visitor_resolve_seat() {

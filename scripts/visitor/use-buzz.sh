@@ -21,7 +21,8 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY=1; shift ;;
     -h|--help)
       echo "Usage: use-buzz.sh [--seat ID] [--community name|url] [--owner PUBKEY] [--arm] [--dry-run]"
-      echo "  Default community is PUBLIC.txt (portable). Ask Prime if missing."
+      echo "  Default community is PUBLIC.txt, else ~/.buzz-dev/default-community."
+      echo "  Ask Prime for the community URL if both missing. Do not guess Groundfeed."
       echo "  Other bus than PUBLIC.txt is community-mismatch (silent empty room)."
       echo "  --arm prints L2/watcher next-step; does not steal an existing lease."
       exit 0
@@ -58,7 +59,8 @@ if ! python3 -c 'import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).
   echo "VISITOR_USE fail reason=$reason host=$host want=$WANT seat=$SEAT" >&2
   case "$reason" in
     community-missing)
-      echo "Ask Prime: which Buzz community should this seat use? (name, URL, or invite)"
+      echo "Ask Prime: which Buzz community URL should this seat use? (https:// or wss:// — Desktop name open121 or asus-g501vw is also ok)"
+      echo "Do not guess Groundfeed. If this computer has a regular community, put it in ~/.buzz-dev/default-community"
       ;;
     community-mismatch)
       echo "Ask Prime: seat community is $host; requested $WANT is a different bus (silent empty room)."

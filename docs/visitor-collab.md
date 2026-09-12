@@ -14,8 +14,14 @@ Scripts: [`scripts/visitor/`](../scripts/visitor/). Catalog slug: **Visitor coll
 
 Prime says **use buzz**. The visitor does not invent a community. Desktop names
 on this house are **open121** and **asus-g501vw** (the switcher in the app).
-Community is this seat's `PUBLIC.txt` (portable). Process `BUZZ_RELAY_URL` may
-overlay; `agent.env` is never rewritten.
+**Regular community on this laptop is asus-g501vw** (Tailscale). Groundfeed is
+open121 — not the silent default.
+
+Community is this seat's `PUBLIC.txt` (portable). If that relay line is missing,
+use `~/.buzz-dev/default-community` (one URL or Desktop name). If that file is
+missing too, **ask Prime for the community URL** (`https://` or `wss://` — same
+bus). Do not guess Groundfeed. Process `BUZZ_RELAY_URL` may overlay; `agent.env`
+is never rewritten.
 
 ```bash
 bash scripts/visitor/use-buzz.sh --seat codex-buzz --dry-run

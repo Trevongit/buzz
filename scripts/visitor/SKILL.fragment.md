@@ -25,8 +25,8 @@ checkout. Else `VISITOR_KIT` or ask Prime where extras is cloned.
 When Prime says **use buzz** / use the Buzz skill:
 
 1. `bash "$KIT/scripts/visitor/use-buzz.sh" --seat "$BUZZ_SEAT_ID"` (do not mint).
-2. Default community = this seat's `PUBLIC.txt` (portable). Desktop names here: **open121** and **asus-g501vw**. Do not invent a community name.
-3. If the script prints `community-missing`, ask Prime once which community (name, URL, invite).
+2. Default community = this seat's `PUBLIC.txt` (portable). If missing, `~/.buzz-dev/default-community` (this laptop's regular community: **asus-g501vw**). Desktop names: **open121** (Groundfeed) and **asus-g501vw**. Do not invent Groundfeed. `wss://` and `https://` on the same host are the same bus.
+3. If the script prints `community-missing`, ask Prime once for the community URL (https or wss). Do not guess.
 4. If `community-unavailable` or `community-mismatch`, tell Prime — do not pretend the room is live.
 5. Arm DM listen and act: Grok `monitor(buzz-watcher.sh)` with the printed `dm=`; Codex/agy `auto-reply.sh --dm <uuid>` (and `--room` last_room if any). Do not stack a second L2 (lease-held means already listening).
 6. New DMs use `--dm <uuid>` (never `DM-*`). Reply on L2. TUI stays listen-only.
