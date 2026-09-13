@@ -227,6 +227,10 @@ run_turn() {
   if room_is_forced_dm "$room" || visitor_channel_is_dm "$SEAT" "$room"; then
     dm_flag=1
   fi
+  # Eyes first: only the wake's 64-hex id (wake.sh used to truncate to 12).
+  if [[ "${wake_id:-}" =~ ^[0-9a-f]{64}$ && -x "${HOME}/.grok/skills/use-buzz/scripts/buzz-eyes.sh" ]]; then
+    BUZZ_SEAT_ID="$SEAT" bash "${HOME}/.grok/skills/use-buzz/scripts/buzz-eyes.sh" --event "$wake_id" >>"$LOG" 2>&1 || true
+  fi
   write_prompt "$room" "$preview" "$hist" "$prompt_file" 0
   chmod 600 "$prompt_file" 2>/dev/null || true
   invoke_brain || return $?

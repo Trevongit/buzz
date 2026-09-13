@@ -852,6 +852,8 @@ class RoleFromSeatTests(unittest.TestCase):
         self.assertEqual(role_from_seat("buzz"), "grok")
         self.assertEqual(role_from_seat("goose"), "goose")
         self.assertEqual(role_from_seat("hermes-buzz"), "hermes")
+        self.assertEqual(role_from_seat("buzz-agy-agy-uni-adapt"), "agy")
+        self.assertEqual(role_from_seat("buzz-codex-librarian"), "codex")
 
     def test_unknown_is_not_grok(self):
         self.assertEqual(role_from_seat("buzz-origin-plus"), "")
@@ -1430,6 +1432,13 @@ class ParseWakeLineTests(unittest.TestCase):
         self.assertEqual(got.get("seat"), "agy-buzz")
         self.assertEqual(got.get("channel"), "d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed")
         self.assertEqual(got.get("reason"), "collab")
+        full = (
+            "VISITOR_WAKE match seat=agy-buzz room=d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed "
+            "channel=d8dc3f6e-de7d-42e9-a16f-5f7efa2247ed reason=collab from=b3ab103c8c9b "
+            "id=636117b84852aabbccddeeff00112233445566778899aabbccddeeff00112233 "
+            "preview=Opening #visitor-trio"
+        )
+        self.assertEqual(len(parse_wake_line(full).get("id") or ""), 64)
         proc = subprocess.run(
             ["python3", str(ROOT / "gate.py"), "parse-wake"],
             input=line,

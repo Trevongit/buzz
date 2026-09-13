@@ -130,7 +130,7 @@ for w in out.get("wakes") or []:
     print(
         f"VISITOR_WAKE match seat={seat} room={room} channel={cid} "
         f"reason={w.get('reason')} from={(w.get('from') or '')[:12]} "
-        f"id={(w.get('id') or '')[:12]} preview={w.get('preview')}"
+        f"id={w.get('id') or ''} preview={w.get('preview')}"
     )
 PY
 }

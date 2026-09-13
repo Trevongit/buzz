@@ -893,6 +893,10 @@ def role_from_seat(seat_id: str, mapping: dict[str, str] | None = None) -> str:
     for role in ROLES:
         if s == role or s.startswith(f"{role}-"):
             return role
+    # Infix token check (e.g. buzz-agy-agy-uni-adapt -> agy, buzz-codex-librarian -> codex)
+    for role in [r for r in ROLES if r != "grok"]:
+        if re.search(rf"(^|-){re.escape(role)}(-|$)", s):
+            return role
     return ""
 
 
