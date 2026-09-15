@@ -76,10 +76,18 @@ for w in blob.get("wakes") or []:
     if not isinstance(w, dict):
         continue
     cid = w.get("channel") or ""
+    frm = (w.get("from") or "")[:12]
+    eid = w.get("id") or ""
+    prev = w.get("preview") or ""
+    reason = w.get("reason") or ""
     print(
         f"VISITOR_WAKE match seat={seat} room={cid} channel={cid} "
-        f"reason={w.get('reason')} from={(w.get('from') or '')[:12]} "
-        f"id={w.get('id') or ''} preview={w.get('preview')}"
+        f"reason={reason} from={frm} id={eid} preview={prev}"
+    )
+    # Grok Build monitor() matches this prefix (same as buzz-watcher.sh).
+    print(
+        f"BUZZ_WAKE match seat={seat} room=feed channel={cid} "
+        f"since=0 from={frm} id={eid} preview={prev}"
     )
 PY
 }
@@ -93,6 +101,7 @@ Path(sys.argv[1]).write_text(json.dumps({"since": int(sys.argv[2]), "seen_ids": 
 PY
   echo "VISITOR_OK seeded-feed seat=$SEAT" >>"$LOG"
 fi
+echo "BUZZ_OK start seat=$SEAT ear=feed types=$TYPES tick=${TICK}s"
 
 if [[ "$ONCE" == "1" ]]; then
   poll_once
