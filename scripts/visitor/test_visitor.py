@@ -22,6 +22,8 @@ from gate import (  # noqa: E402
     house_default_relay_url,
     cooldown_blocks,
     filter_wakes,
+    feed_wakes,
+    channel_id_from_event,
     last_room_bus_ok,
     mention_names_from_card,
     normalize_relay,
@@ -1459,6 +1461,63 @@ class ParseWakeLineTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(proc.returncode, 1)
+
+
+class FeedWakesTests(unittest.TestCase):
+    def test_channel_from_h_tag(self):
+        cid = "9a5f248f-f013-4cd4-8179-9e4ddddbe3b4"
+        self.assertEqual(
+            channel_id_from_event({"tags": [["h", cid], ["p", "aa"]]}),
+            cid,
+        )
+        self.assertEqual(channel_id_from_event({"tags": []}), "")
+
+    def test_feed_wakes_mention_and_skips_unaddressed(self):
+        cid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        dm = "11111111-2222-3333-4444-555555555555"
+        hid = "a" * 64
+        did = "b" * 64
+        skip = "c" * 64
+        entries = [
+            {
+                "id": hid,
+                "pubkey": "aa",
+                "created_at": 100,
+                "content": "hey @codex-buzz look",
+                "tags": [["h", cid]],
+            },
+            {
+                "id": skip,
+                "pubkey": "aa",
+                "created_at": 101,
+                "content": "hello everyone",
+                "tags": [["h", cid]],
+            },
+            {
+                "id": did,
+                "pubkey": "aa",
+                "created_at": 102,
+                "content": "how's it going?",
+                "tags": [["h", dm]],
+            },
+        ]
+        out = feed_wakes(
+            entries,
+            state={"seen_ids": [], "since": 0, "last_wake": 0},
+            self_pk="bb",
+            names=["codex-buzz"],
+            pubkeys=["bb"],
+            seat_role="codex",
+            require_mention=True,
+            dm_ids=[dm],
+            now_unix=200,
+            cooldown_secs=0,
+        )
+        ids = {w.get("id") for w in out.get("wakes") or []}
+        self.assertIn(hid, ids)
+        self.assertIn(did, ids)
+        self.assertNotIn(skip, ids)
+        self.assertEqual(out["state"].get("ear"), "feed")
 
 
 class AutoReplyScriptTests(unittest.TestCase):

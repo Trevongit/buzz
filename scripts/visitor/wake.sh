@@ -12,17 +12,20 @@ LIMIT="${VISITOR_WATCH_LIMIT:-20}"
 ONCE="${VISITOR_WAKE_ONCE:-0}"
 LOG="${VISITOR_WATCHER_LOG:-/tmp/visitor-wake.log}"
 FORCE_DM=0
+FEED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --room) ROOM="$2"; shift 2 ;;
     --seat) SEAT="$2"; shift 2 ;;
     --dm) FORCE_DM=1; shift ;;
+    --feed) FEED=1; shift ;;
     --once) ONCE=1; shift ;;
     --secs) TICK="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: wake.sh [--room name|uuid] [--seat ID] [--dm] [--once] [--secs N]"
+      echo "Usage: wake.sh [--room name|uuid] [--seat ID] [--dm] [--feed] [--once] [--secs N]"
       echo "  --dm  this UUID is a DM: admit without @mention (rooms stay mention-gated)"
+      echo "  --feed  one inbox ear (buzz feed get). Do not also run extra_channels."
       echo "  VISITOR_REQUIRE_MENTION=1 (default)  VISITOR_ROLE=grok|codex|agy"
       exit 0
       ;;
@@ -34,6 +37,13 @@ visitor_load_seat_env "$SEAT"
 LIMIT="$(visitor_bound_limit "$LIMIT" 100)"
 TICK="$(visitor_bound_limit "$TICK" 300)"
 DIR="$(visitor_seat_dir "$SEAT")"
+if [[ "$FEED" == "1" ]]; then
+  feed_args=(--seat "$SEAT" --secs "$TICK")
+  if [[ "$ONCE" == "1" ]]; then
+    feed_args+=(--once)
+  fi
+  exec bash "${VISITOR_ROOT}/buzz-inbox.sh" "${feed_args[@]}"
+fi
 if [[ -z "$ROOM" ]]; then
   visitor_assert_last_room_bus "$DIR" || exit 3
   ROOM="$(visitor_last_room "$DIR" || true)"

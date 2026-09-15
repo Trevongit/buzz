@@ -25,7 +25,7 @@ flowchart TB
     F --> CD
     F --> AI
     K --> B[Buzz rooms]
-    L0[L0 detect<br/>zero tokens] --> B
+    L0[L0 inbox ear<br/>feed get · zero tokens] --> B
     L0 --> Q[Admitted wake]
     Q --> L2[L2 one post]
     L2 --> B

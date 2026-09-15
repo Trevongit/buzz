@@ -111,6 +111,16 @@ if grep -q -- '--dm' "${ROOT}/wake.sh" && grep -q 'visitor_channel_is_dm' "${ROO
 else
   bad "wake.sh must admit DMs via --dm (not DM-* prefix only)"
 fi
+if [[ -x "${ROOT}/buzz-inbox.sh" ]] && grep -q 'feed get' "${ROOT}/buzz-inbox.sh"; then
+  ok "buzz-inbox.sh feed ear"
+else
+  bad "buzz-inbox.sh must poll buzz feed get"
+fi
+if grep -q -- '--feed' "${ROOT}/wake.sh" && grep -q 'VISITOR_EAR' "${ROOT}/auto-reply.sh"; then
+  ok "wake --feed + auto-reply VISITOR_EAR"
+else
+  bad "idle ear must be feed by default (VISITOR_EAR=rooms to opt out)"
+fi
 if grep -q -- '--content -' "${ROOT}/post.sh" && grep -q 'mention-pubkeys' "${ROOT}/post.sh"; then
   ok "post.sh stdin body + mention pubkeys"
 else

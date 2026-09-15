@@ -10,6 +10,21 @@ fork) is the local recipe engine; OpenWorker remains a later GUI coworker.
 
 Scripts: [`scripts/visitor/`](../scripts/visitor/). Catalog slug: **Visitor collab kit**.
 
+## Inbox ear (every vendor)
+
+One bash linger hears **that seat’s** Buzz inbox: DMs, @mentions, activity in rooms it joined.
+
+```bash
+bash scripts/visitor/buzz-inbox.sh --seat codex-buzz
+# or
+bash scripts/visitor/wake.sh --seat agy-buzz --feed
+# L2 (Codex/agy) already uses feed by default:
+bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <uuid> --dm <uuid>
+# VISITOR_EAR=rooms  # old per-channel poll only
+```
+
+Idle is still **zero model tokens**. Do not run `buzz-inbox.sh` beside `extra_channels` for the same seat. Do not invent a 15s LLM poll. Tick is still ~15s, not instant push. Join the room first — feed is that identity’s inbox, not every message on the relay.
+
 ## Use buzz (portable community + DMs)
 
 Prime says **use buzz**. The visitor does not invent a community. Desktop names

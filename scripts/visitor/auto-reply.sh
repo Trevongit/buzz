@@ -30,7 +30,8 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: auto-reply.sh --seat ID --room UUID [--dm UUID] [--once] [--catch-up] [--dry-run]"
       echo "  --dm UUID  admit without @mention (Prime DMs). Rooms stay mention-gated."
-      echo "  Idle = wake.sh. On VISITOR_WAKE, kit posts one print-mode body."
+      echo "  Idle = wake.sh --feed (buzz feed inbox) unless VISITOR_EAR=rooms."
+      echo "  On VISITOR_WAKE, kit posts one print-mode body."
       echo "  Grok: use monitor(buzz-watcher.sh). Do not mint seats. Do not rewrite agent.env."
       exit 0
       ;;
@@ -384,6 +385,44 @@ poll_room() {
   return 1
 }
 
+poll_inbox() {
+  local wake line parsed preview hist eid room
+  if [[ "$DRY" == "1" ]]; then
+    return 0
+  fi
+  wake="$(
+    VISITOR_WAKE_ONCE=1 bash "${ROOT}/wake.sh" --seat "$SEAT" --feed --once 2>/dev/null || true
+  )"
+  while IFS= read -r line; do
+    [[ "$line" == VISITOR_WAKE* ]] || continue
+    parsed="$(printf '%s\n' "$line" | python3 "${ROOT}/gate.py" parse-wake || true)"
+    [[ -n "$parsed" && "$parsed" != "{}" ]] || continue
+    room="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1] or "{}"); print(d.get("channel") or d.get("room") or "")' "$parsed")"
+    [[ -n "$room" ]] || continue
+    preview="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("preview") or "")' "$parsed")"
+    eid="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1] or "{}").get("id") or "")' "$parsed")"
+    journal="${DIR}/l2-posted.json"
+    if python3 "${ROOT}/gate.py" l2-posted --action check --file "$journal" --wake "$eid"; then
+      echo "VISITOR_STATE state=posted seat=$SEAT room=$room reason=already"
+      continue
+    fi
+    hist="$(hist_for "$room")"
+    local rc=0
+    set +e
+    run_turn "$room" "$preview" "$hist" "$eid"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 4 ]]; then
+      echo "VISITOR_TURN fail seat=$SEAT room=$room reason=no-unsee-after-send" >&2
+    elif [[ "$rc" -ne 0 ]]; then
+      if python3 "${ROOT}/gate.py" l2-retry --file "$journal" --wake "$eid"; then
+        unsee_wake "$room" "$eid"
+      fi
+    fi
+    python3 "${ROOT}/gate.py" redact-log --file "$LOG" || true
+  done <<<"$wake"
+}
+
 drain_room() {
   local room="$1" n=0
   poll_room "$room" || return 0
@@ -414,10 +453,16 @@ fi
 # captures an empty head and misses the first mentions (19af73d3).
 join_rooms_before_seed
 
+EAR="${VISITOR_EAR:-feed}"
+
 if [[ "$ONCE" == "1" ]]; then
-  for r in "${ROOMS[@]}"; do
-    drain_room "$r" || true
-  done
+  if [[ "$EAR" == "rooms" ]]; then
+    for r in "${ROOMS[@]}"; do
+      drain_room "$r" || true
+    done
+  else
+    poll_inbox || true
+  fi
   exit 0
 fi
 
@@ -426,8 +471,12 @@ while true; do
     python3 "${ROOT}/gate.py" l2-lease --action heartbeat \
       --file "$LEASE_JSON" --pid "$$" --epoch "$LEASE_EPOCH" >/dev/null || true
   fi
-  for r in "${ROOMS[@]}"; do
-    drain_room "$r" || true
-  done
+  if [[ "$EAR" == "rooms" ]]; then
+    for r in "${ROOMS[@]}"; do
+      drain_room "$r" || true
+    done
+  else
+    poll_inbox || true
+  fi
   sleep "$TICK"
 done

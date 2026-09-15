@@ -1097,6 +1097,93 @@ def filter_wakes(
     }
 
 
+def channel_id_from_event(msg: dict[str, Any]) -> str:
+    """NIP-29 / Buzz channel id from event tags (`h`)."""
+    tags = msg.get("tags") if isinstance(msg, dict) else None
+    if not isinstance(tags, list):
+        return ""
+    for t in tags:
+        if isinstance(t, list) and t and str(t[0]) == "h" and len(t) > 1:
+            return str(t[1]).strip()
+    return ""
+
+
+def feed_wakes(
+    entries: list[Any],
+    *,
+    state: dict[str, Any],
+    self_pk: str,
+    names: list[str],
+    pubkeys: list[str],
+    seat_role: str,
+    require_mention: bool,
+    dm_ids: list[str],
+    now_unix: int,
+    cooldown_secs: int = DEFAULT_COOLDOWN_SECS,
+) -> dict[str, Any]:
+    """One inbox poll: mentions, DMs, and activity, mention-gated per room."""
+    by: dict[str, list[Any]] = {}
+    for m in entries:
+        if not isinstance(m, dict):
+            continue
+        cid = channel_id_from_event(m)
+        if not cid:
+            continue
+        by.setdefault(cid, []).append(m)
+    dm_set = {d.strip() for d in dm_ids if d and d.strip()}
+    seen = set(state.get("seen_ids") or [])
+    since = int(state.get("since") or 0)
+    last_wake = int(state.get("last_wake") or 0)
+    new_max = since
+    new_seen = set(seen)
+    all_wakes: list[dict[str, Any]] = []
+    overflow = False
+    cooldown = False
+    pending = 0
+    for cid, msgs in by.items():
+        st = {
+            "seen_ids": list(seen),
+            "since": since,
+            "last_wake": last_wake,
+            "channel_id": cid,
+        }
+        out = filter_wakes(
+            msgs,
+            state=st,
+            self_pk=self_pk,
+            names=names,
+            pubkeys=pubkeys,
+            seat_role=seat_role,
+            require_mention=require_mention,
+            is_dm=cid in dm_set,
+            now_unix=now_unix,
+            cooldown_secs=cooldown_secs,
+        )
+        new_max = max(new_max, int(out["state"].get("since") or 0))
+        new_seen.update(out["state"].get("seen_ids") or [])
+        pending += int(out.get("pending") or 0)
+        if out.get("overflow"):
+            overflow = True
+        if out.get("cooldown"):
+            cooldown = True
+        for w in out.get("wakes") or []:
+            if isinstance(w, dict):
+                w["channel"] = cid
+                all_wakes.append(w)
+    return {
+        "wakes": all_wakes,
+        "overflow": overflow,
+        "cooldown": cooldown,
+        "pending": pending,
+        "state": {
+            "seen_ids": list(new_seen)[-80:],
+            "since": new_max,
+            "last_wake": now_unix if all_wakes else last_wake,
+            "ear": "feed",
+        },
+    }
+
+
 def _parse_kw(args: list[str]) -> dict[str, str]:
     kw: dict[str, str] = {}
     i = 0
@@ -1300,6 +1387,41 @@ if __name__ == "__main__":
         )
         print(reason)
         raise SystemExit(0 if allowed else 1)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "feed-wakes":
+        kw = _parse_kw(sys.argv[2:])
+        try:
+            entries = json.loads(sys.stdin.read() or "[]")
+        except json.JSONDecodeError:
+            entries = []
+        if not isinstance(entries, list):
+            entries = []
+        state_path = Path(kw.get("state") or "")
+        try:
+            st = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            st = {}
+        if not isinstance(st, dict):
+            st = {}
+        names = [x.strip() for x in (kw.get("names") or "").split(",") if x.strip()]
+        dms = [x.strip() for x in (kw.get("dm_ids") or "").split(",") if x.strip()]
+        self_pk = kw.get("self") or ""
+        out = feed_wakes(
+            entries,
+            state=st,
+            self_pk=self_pk,
+            names=names,
+            pubkeys=[self_pk] if self_pk else [],
+            seat_role=kw.get("role") or "",
+            require_mention=_norm(kw.get("require") or "1") not in ("0", "false", "no"),
+            dm_ids=dms,
+            now_unix=int(kw.get("now") or "0") or int(time.time()),
+        )
+        if state_path:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(out["state"], indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(out, ensure_ascii=True))
+        raise SystemExit(0)
 
     if len(sys.argv) > 1 and sys.argv[1] == "l2-hint":
         kw = _parse_kw(sys.argv[2:])
