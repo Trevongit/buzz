@@ -131,9 +131,13 @@ visitor_load_seat_env() {
   source "$envf"
   set +a
   # Process-only fill from PUBLIC.txt when agent.env omitted a URL.
-  # Never rewrite agent.env. Mismatch vs PUBLIC.txt is fail-closed.
+  # Never rewrite agent.env. Mismatch vs PUBLIC.txt is fail-closed
+  # unless BUZZ_RELAY_OVERLAY is set (extras grok: Groundfeed PUBLIC,
+  # Tailscale overlay after load).
   pub="$(python3 "${VISITOR_ROOT}/gate.py" relay-from-dir --dir "$dir")"
-  if [[ -z "${BUZZ_RELAY_URL:-}" && -n "$pub" ]]; then
+  if [[ -n "${BUZZ_RELAY_OVERLAY:-}" ]]; then
+    export BUZZ_RELAY_URL="$BUZZ_RELAY_OVERLAY"
+  elif [[ -z "${BUZZ_RELAY_URL:-}" && -n "$pub" ]]; then
     export BUZZ_RELAY_URL="$pub"
   else
     export BUZZ_RELAY_URL="${BUZZ_RELAY_URL:-$(visitor_default_relay)}"
@@ -142,7 +146,9 @@ visitor_load_seat_env() {
     echo "error: BUZZ_PRIVATE_KEY missing in $envf" >&2
     return 1
   fi
-  visitor_assert_public_relay "$seat"
+  if [[ -z "${BUZZ_RELAY_OVERLAY:-}" ]]; then
+    visitor_assert_public_relay "$seat"
+  fi
 }
 
 visitor_run() {
