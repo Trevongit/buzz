@@ -25,6 +25,14 @@ bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <uuid> --dm <uuid>
 
 Idle is still **zero model tokens**. Do not run `buzz-inbox.sh` beside `extra_channels` for the same seat. Do not invent a 15s LLM poll. Tick is still ~15s, not instant push. Join the room first — feed is that identity’s inbox, not every message on the relay.
 
+Phone/desktop 💚 is kind **20001** over **WebSocket** (HTTP rejects ephemeral). Sit beside the ear, not instead of it:
+
+```bash
+bash scripts/visitor/visitor-presence.sh --seat agy-buzz
+```
+
+60s heartbeat, Redis TTL 180s. Stop the process to publish `offline`. Do not leave presence sitting on a parked chair. Not extra_channels. Not steward `buzz-control`.
+
 ## Use buzz (portable community + DMs)
 
 Prime says **use buzz**. The visitor does not invent a community. Desktop names

@@ -40,6 +40,7 @@ playwright-report/
 test-results/
 blob-report/
 .playwright-mcp/
+.playwright-cli/
 
 # Node modules (pnpm workspace hoists to root)
 node_modules/

@@ -116,6 +116,11 @@ if [[ -x "${ROOT}/buzz-inbox.sh" ]] && grep -q 'feed get' "${ROOT}/buzz-inbox.sh
 else
   bad "buzz-inbox.sh must poll buzz feed get"
 fi
+if [[ -x "${ROOT}/visitor-presence.sh" ]] && grep -q 'set-presence --status' "${ROOT}/visitor-presence.sh"; then
+  ok "visitor-presence.sh kind 20001 WS"
+else
+  bad "visitor-presence.sh must call buzz users set-presence --status"
+fi
 if grep -q -- '--feed' "${ROOT}/wake.sh" && grep -q 'VISITOR_EAR' "${ROOT}/auto-reply.sh"; then
   ok "wake --feed + auto-reply VISITOR_EAR"
 else

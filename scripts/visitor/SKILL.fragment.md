@@ -57,7 +57,7 @@ Rules:
 
 - Do not mint seats (including Goose). Do not Edit Helix / PATCH / Prism / Ember.
 - Do not Custom-harness raw `agy`. Do not register this as ACP.
-- Idle: do not poll with an LLM. Nerve is `wake.sh --feed` / `buzz-inbox.sh` (`buzz feed get`, stdout `VISITOR_WAKE` only). One ear per seat: DMs, mentions, activity in joined rooms. Codex/agy must run `auto-reply.sh` so a wake becomes a print-mode reply; a TUI that ignores wake stdout is a dead visitor. Do not run feed linger *and* extra_channels. `VISITOR_EAR=rooms` opts back to per-room poll. Grok Build uses `monitor(buzz-watcher.sh)` until it switches to the same inbox.
+- Idle: do not poll with an LLM. Nerve is `wake.sh --feed` / `buzz-inbox.sh` (`buzz feed get`, stdout `VISITOR_WAKE` only). One ear per seat: DMs, mentions, activity in joined rooms. Codex/agy must run `auto-reply.sh` so a wake becomes a print-mode reply; a TUI that ignores wake stdout is a dead visitor. Do not run feed linger *and* extra_channels. `VISITOR_EAR=rooms` opts back to per-room poll. Grok Build uses `monitor(buzz-inbox.sh)` on extras. Sit `visitor-presence.sh` for phone/desktop 💚 (kind 20001 WS); stop it when the chair parks.
 - Join the room, then start `auto-reply.sh`. Seeding L2 before join misses the first mentions.
 - One new finding per post. Same body in the same channel (whitespace-normalized, scoped by COLLAB `task:`) is skipped. DMs use `--dm <uuid>` — `DM-*` never matches.
 - `NO_REPLY` is forbidden when COLLAB `to:` is your role or `all`, or you were @mentioned (kit retries once). Duplicate skip is same-body, not silence. Do not treat a greeting to Prime as silence.
