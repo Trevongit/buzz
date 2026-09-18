@@ -1120,8 +1120,13 @@ def feed_wakes(
     dm_ids: list[str],
     now_unix: int,
     cooldown_secs: int = DEFAULT_COOLDOWN_SECS,
+    owned_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    """One inbox poll: mentions, DMs, and activity, mention-gated per room."""
+    """One inbox poll: mentions, DMs, and activity, mention-gated per room.
+
+    Channels this seat owns (`owned_ids`) are must-read: still the same feed
+    poll, no second listen. Unaddressed posts in those rooms wake.
+    """
     by: dict[str, list[Any]] = {}
     for m in entries:
         if not isinstance(m, dict):
@@ -1131,6 +1136,7 @@ def feed_wakes(
             continue
         by.setdefault(cid, []).append(m)
     dm_set = {d.strip() for d in dm_ids if d and d.strip()}
+    owned_set = {d.strip() for d in (owned_ids or []) if d and d.strip()}
     seen = set(state.get("seen_ids") or [])
     since = int(state.get("since") or 0)
     last_wake = int(state.get("last_wake") or 0)
@@ -1154,7 +1160,7 @@ def feed_wakes(
             names=names,
             pubkeys=pubkeys,
             seat_role=seat_role,
-            require_mention=require_mention,
+            require_mention=False if cid in owned_set else require_mention,
             is_dm=cid in dm_set,
             now_unix=now_unix,
             cooldown_secs=cooldown_secs,
@@ -1405,6 +1411,7 @@ if __name__ == "__main__":
             st = {}
         names = [x.strip() for x in (kw.get("names") or "").split(",") if x.strip()]
         dms = [x.strip() for x in (kw.get("dm_ids") or "").split(",") if x.strip()]
+        owned = [x.strip() for x in (kw.get("owned_ids") or "").split(",") if x.strip()]
         self_pk = kw.get("self") or ""
         out = feed_wakes(
             entries,
@@ -1415,6 +1422,7 @@ if __name__ == "__main__":
             seat_role=kw.get("role") or "",
             require_mention=_norm(kw.get("require") or "1") not in ("0", "false", "no"),
             dm_ids=dms,
+            owned_ids=owned,
             now_unix=int(kw.get("now") or "0") or int(time.time()),
         )
         if state_path:

@@ -46,6 +46,11 @@ dm_ids=""
 if [[ -f "$DM_FILE" ]]; then
   dm_ids="$(tr '\n' ',' <"$DM_FILE" | sed 's/,$//')"
 fi
+OWNED_FILE="${DIR}/owned-channels"
+owned_ids=""
+if [[ -f "$OWNED_FILE" ]]; then
+  owned_ids="$(tr '\n' ',' <"$OWNED_FILE" | sed 's/,$//')"
+fi
 
 poll_once() {
   local since json out
@@ -64,7 +69,7 @@ print(int(st.get("since") or 0))
   fi
   out="$(printf '%s\n' "$json" | python3 "${VISITOR_ROOT}/gate.py" feed-wakes \
       --state "$STATE" --self "$SELF" --names "$NAMES" --role "$ROLE" \
-      --require "$REQUIRE" --dm-ids "$dm_ids" 2>/dev/null || true)"
+      --require "$REQUIRE" --dm-ids "$dm_ids" --owned-ids "$owned_ids" 2>/dev/null || true)"
   python3 - "$out" "$SEAT" <<'PY'
 import json, sys
 try:

@@ -38,8 +38,51 @@ use buzz_core::kind::{
     KIND_FORUM_COMMENT, KIND_FORUM_POST, KIND_GIT_ISSUE, KIND_GIT_PR_UPDATE, KIND_GIT_PULL_REQUEST,
     KIND_GIT_STATUS_CLOSED, KIND_GIT_STATUS_DRAFT, KIND_GIT_STATUS_MERGED, KIND_GIT_STATUS_OPEN,
     KIND_JOB_PROGRESS, KIND_JOB_REQUEST, KIND_JOB_RESULT, KIND_STREAM_MESSAGE,
-    KIND_STREAM_MESSAGE_V2, KIND_STREAM_REMINDER, KIND_TEXT_NOTE, KIND_WORKFLOW_APPROVAL_REQUESTED,
+    KIND_STREAM_MESSAGE_EDIT, KIND_STREAM_MESSAGE_V2, KIND_STREAM_REMINDER, KIND_TEXT_NOTE,
+    KIND_WORKFLOW_APPROVAL_REQUESTED,
 };
+
+/// Kinds the Home Feed mentions query returns.
+///
+/// Stream **edits** (`KIND_STREAM_MESSAGE_EDIT`, 40003) must stay here. Adding an
+/// @ on edit writes `event_mentions` for the new event; dropping this kind made
+/// that mention invisible to Desktop Home Feed and `buzz feed get`.
+const FEED_MENTION_KINDS: &[u32] = &[
+    KIND_STREAM_MESSAGE,
+    KIND_STREAM_MESSAGE_V2,
+    KIND_STREAM_MESSAGE_EDIT,
+    KIND_TEXT_NOTE,
+    KIND_FORUM_POST,
+    KIND_FORUM_COMMENT,
+    KIND_GIT_PULL_REQUEST,
+    KIND_GIT_PR_UPDATE,
+    KIND_GIT_ISSUE,
+    KIND_GIT_STATUS_OPEN,
+    KIND_GIT_STATUS_MERGED,
+    KIND_GIT_STATUS_CLOSED,
+    KIND_GIT_STATUS_DRAFT,
+];
+
+/// Kinds the Home Feed activity query returns.
+///
+/// Edits are activity: a later @ on an existing card is a new event in the room.
+const FEED_ACTIVITY_KINDS: &[u32] = &[
+    KIND_STREAM_MESSAGE,
+    KIND_STREAM_MESSAGE_V2,
+    KIND_STREAM_MESSAGE_EDIT,
+    KIND_FORUM_POST,
+    KIND_JOB_REQUEST,
+    KIND_JOB_PROGRESS,
+    KIND_JOB_RESULT,
+];
+
+fn sql_kind_in_list(kinds: &[u32]) -> String {
+    kinds
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 use buzz_core::{CommunityId, StoredEvent};
 
 use crate::event::row_to_stored_event;
@@ -104,10 +147,8 @@ fn build_mentions_query(
     qb.push(" AND m.pubkey_hex = ").push_bind(pubkey_hex);
     qb.push(" AND e.deleted_at IS NULL");
     qb.push(format!(
-        " AND e.kind IN ({KIND_STREAM_MESSAGE}, {KIND_STREAM_MESSAGE_V2}, \
-         {KIND_TEXT_NOTE}, {KIND_FORUM_POST}, {KIND_FORUM_COMMENT}, {KIND_GIT_PULL_REQUEST}, \
-         {KIND_GIT_PR_UPDATE}, {KIND_GIT_ISSUE}, {KIND_GIT_STATUS_OPEN}, \
-         {KIND_GIT_STATUS_MERGED}, {KIND_GIT_STATUS_CLOSED}, {KIND_GIT_STATUS_DRAFT})"
+        " AND e.kind IN ({})",
+        sql_kind_in_list(FEED_MENTION_KINDS)
     ));
     push_visible_channel_filter(&mut qb, "e.channel_id", accessible_channel_ids);
     if let Some(s) = since {
@@ -271,8 +312,8 @@ fn build_activity_query(
     qb.push_bind(*community.as_uuid());
     qb.push(" AND deleted_at IS NULL");
     qb.push(format!(
-        " AND kind IN ({KIND_STREAM_MESSAGE}, {KIND_STREAM_MESSAGE_V2}, {KIND_FORUM_POST}, \
-         {KIND_JOB_REQUEST}, {KIND_JOB_PROGRESS}, {KIND_JOB_RESULT})"
+        " AND kind IN ({})",
+        sql_kind_in_list(FEED_ACTIVITY_KINDS)
     ));
     push_visible_channel_filter(&mut qb, "channel_id", accessible_channel_ids);
     if let Some(s) = since {
@@ -689,6 +730,51 @@ mod postgres_tests {
 
     #[tokio::test]
     #[ignore = "requires Postgres"]
+    async fn query_mentions_includes_stream_edit_that_adds_a_p_tag() {
+        let pool = setup_pool().await;
+        let community = CommunityId::from_uuid(make_test_community(&pool).await);
+        let channel = insert_test_channel(&pool, community).await;
+        let mentioned_pubkey = "04".repeat(32);
+        let mentioned_bytes = hex::decode(&mentioned_pubkey).expect("hex pubkey");
+
+        let original = store_feed_event(
+            &pool,
+            community,
+            KIND_STREAM_MESSAGE,
+            "no mention yet",
+            Some(channel),
+            vec![],
+        )
+        .await;
+        let edit = store_feed_event(
+            &pool,
+            community,
+            KIND_STREAM_MESSAGE_EDIT,
+            "now @summary after edit",
+            Some(channel),
+            vec![
+                Tag::parse(["e", &original.id.to_hex()]).unwrap(),
+                Tag::parse(["p", mentioned_pubkey.as_str()]).unwrap(),
+            ],
+        )
+        .await;
+
+        let rows = query_mentions(&pool, community, &mentioned_bytes, &[channel], None, 10)
+            .await
+            .expect("query mentions");
+
+        assert!(
+            rows.iter().any(|row| row.event.id == edit.id),
+            "kind 40003 that adds a p-tag must appear in mentions"
+        );
+        assert!(
+            rows.iter().all(|row| row.event.id != original.id),
+            "the un-mentioned original must not appear"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Postgres"]
     async fn query_needs_action_is_scoped_across_communities() {
         let pool = setup_pool().await;
         let community_a = CommunityId::from_uuid(make_test_community(&pool).await);
@@ -881,30 +967,24 @@ mod postgres_tests {
 
     #[test]
     fn mentions_query_includes_stream_message_kind() {
-        use buzz_core::kind::{
-            KIND_FORUM_COMMENT, KIND_FORUM_POST, KIND_STREAM_MESSAGE, KIND_STREAM_MESSAGE_V2,
-        };
-        let mention_kinds: &[u32] = &[
-            KIND_STREAM_MESSAGE,
-            KIND_STREAM_MESSAGE_V2,
-            KIND_FORUM_POST,
-            KIND_FORUM_COMMENT,
-        ];
-
         assert!(
-            mention_kinds.contains(&KIND_STREAM_MESSAGE),
+            FEED_MENTION_KINDS.contains(&KIND_STREAM_MESSAGE),
             "stream message kind must be in mentions"
         );
         assert!(
-            mention_kinds.contains(&KIND_STREAM_MESSAGE_V2),
+            FEED_MENTION_KINDS.contains(&KIND_STREAM_MESSAGE_V2),
             "stream message v2 kind must be in mentions"
         );
         assert!(
-            mention_kinds.contains(&KIND_FORUM_POST),
+            FEED_MENTION_KINDS.contains(&KIND_STREAM_MESSAGE_EDIT),
+            "adding an @ on edit is a kind 40003 event; mentions must include it"
+        );
+        assert!(
+            FEED_MENTION_KINDS.contains(&KIND_FORUM_POST),
             "forum post kind must be in mentions"
         );
         assert!(
-            mention_kinds.contains(&KIND_FORUM_COMMENT),
+            FEED_MENTION_KINDS.contains(&KIND_FORUM_COMMENT),
             "forum comment kind must be in mentions"
         );
     }
@@ -926,60 +1006,38 @@ mod postgres_tests {
 
     #[test]
     fn activity_query_includes_agent_job_kinds() {
-        use buzz_core::kind::{
-            KIND_FORUM_POST, KIND_JOB_PROGRESS, KIND_JOB_REQUEST, KIND_JOB_RESULT,
-            KIND_STREAM_MESSAGE, KIND_STREAM_MESSAGE_V2,
-        };
-        let activity_kinds: &[u32] = &[
-            KIND_STREAM_MESSAGE,
-            KIND_STREAM_MESSAGE_V2,
-            KIND_FORUM_POST,
-            KIND_JOB_REQUEST,
-            KIND_JOB_PROGRESS,
-            KIND_JOB_RESULT,
-        ];
-
         assert!(
-            activity_kinds.contains(&KIND_JOB_REQUEST),
+            FEED_ACTIVITY_KINDS.contains(&KIND_JOB_REQUEST),
             "job request kind must be in activity"
         );
         assert!(
-            activity_kinds.contains(&KIND_JOB_PROGRESS),
+            FEED_ACTIVITY_KINDS.contains(&KIND_JOB_PROGRESS),
             "job progress kind must be in activity"
         );
         assert!(
-            activity_kinds.contains(&KIND_JOB_RESULT),
+            FEED_ACTIVITY_KINDS.contains(&KIND_JOB_RESULT),
             "job result kind must be in activity"
         );
         assert!(
-            activity_kinds.contains(&KIND_STREAM_MESSAGE),
+            FEED_ACTIVITY_KINDS.contains(&KIND_STREAM_MESSAGE),
             "stream message kind must be in activity"
         );
         assert!(
-            activity_kinds.contains(&KIND_FORUM_POST),
+            FEED_ACTIVITY_KINDS.contains(&KIND_STREAM_MESSAGE_EDIT),
+            "edits are room activity"
+        );
+        assert!(
+            FEED_ACTIVITY_KINDS.contains(&KIND_FORUM_POST),
             "forum post kind must be in activity"
         );
     }
 
     #[test]
     fn activity_query_excludes_workflow_execution_kinds() {
-        use buzz_core::kind::{
-            KIND_FORUM_POST, KIND_JOB_PROGRESS, KIND_JOB_REQUEST, KIND_JOB_RESULT,
-            KIND_STREAM_MESSAGE, KIND_STREAM_MESSAGE_V2,
-        };
-        let activity_kinds: &[u32] = &[
-            KIND_STREAM_MESSAGE,
-            KIND_STREAM_MESSAGE_V2,
-            KIND_FORUM_POST,
-            KIND_JOB_REQUEST,
-            KIND_JOB_PROGRESS,
-            KIND_JOB_RESULT,
-        ];
-
         use buzz_core::kind::{KIND_WORKFLOW_APPROVAL_DENIED, KIND_WORKFLOW_TRIGGERED};
         for kind in KIND_WORKFLOW_TRIGGERED..=KIND_WORKFLOW_APPROVAL_DENIED {
             assert!(
-                !activity_kinds.contains(&kind),
+                !FEED_ACTIVITY_KINDS.contains(&kind),
                 "workflow execution kind {kind} must NOT be in activity"
             );
         }
@@ -987,24 +1045,11 @@ mod postgres_tests {
 
     #[test]
     fn needs_action_kinds_do_not_overlap_with_activity_kinds() {
-        use buzz_core::kind::{
-            KIND_FORUM_POST, KIND_JOB_PROGRESS, KIND_JOB_REQUEST, KIND_JOB_RESULT,
-            KIND_STREAM_MESSAGE, KIND_STREAM_MESSAGE_V2, KIND_STREAM_REMINDER,
-            KIND_WORKFLOW_APPROVAL_REQUESTED,
-        };
         let needs_action_kinds: &[u32] = &[KIND_WORKFLOW_APPROVAL_REQUESTED, KIND_STREAM_REMINDER];
-        let activity_kinds: &[u32] = &[
-            KIND_STREAM_MESSAGE,
-            KIND_STREAM_MESSAGE_V2,
-            KIND_FORUM_POST,
-            KIND_JOB_REQUEST,
-            KIND_JOB_PROGRESS,
-            KIND_JOB_RESULT,
-        ];
 
         for kind in needs_action_kinds {
             assert!(
-                !activity_kinds.contains(kind),
+                !FEED_ACTIVITY_KINDS.contains(kind),
                 "kind {kind} appears in both needs_action and activity -- check intent"
             );
         }
@@ -1060,6 +1105,10 @@ mod postgres_tests {
             !sql.contains("channel_id IN"),
             "empty accessible-channel list must not emit an IN filter: {sql}"
         );
+        assert!(
+            sql.contains(&KIND_STREAM_MESSAGE_EDIT.to_string()),
+            "activity feed must include stream edits (kind 40003): {sql}"
+        );
     }
 
     #[test]
@@ -1104,6 +1153,10 @@ mod postgres_tests {
                 && sql.contains(&KIND_GIT_ISSUE.to_string())
                 && sql.contains(&KIND_TEXT_NOTE.to_string()),
             "mentions feed must include Buzz Git roots and comments: {sql}"
+        );
+        assert!(
+            sql.contains(&KIND_STREAM_MESSAGE_EDIT.to_string()),
+            "mentions feed must include stream edits (kind 40003) so an @ added on edit wakes: {sql}"
         );
     }
 

@@ -25,6 +25,8 @@ bash scripts/visitor/auto-reply.sh --seat agy-buzz --room <uuid> --dm <uuid>
 
 Idle is still **zero model tokens**. Do not run `buzz-inbox.sh` beside `extra_channels` for the same seat. Do not invent a 15s LLM poll. Tick is still ~15s, not instant push. Join the room first — feed is that identity’s inbox, not every message on the relay.
 
+Rooms this seat **created** (a private `-sub` book, for example) are must-read on that same ear. Put one UUID per line in `~/.buzz-dev/agents/<seat>/owned-channels`. That is not a second listen. Other joined rooms still need an @ or a DM.
+
 Phone/desktop 💚 is kind **20001** over **WebSocket** (HTTP rejects ephemeral). Sit beside the ear, not instead of it:
 
 ```bash

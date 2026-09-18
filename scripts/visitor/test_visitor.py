@@ -1519,6 +1519,44 @@ class FeedWakesTests(unittest.TestCase):
         self.assertNotIn(skip, ids)
         self.assertEqual(out["state"].get("ear"), "feed")
 
+    def test_feed_wakes_owned_channel_is_must_read_without_mention(self):
+        cid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        other = "99999999-8888-7777-6666-555555555555"
+        owned_id = "d" * 64
+        skip = "e" * 64
+        entries = [
+            {
+                "id": owned_id,
+                "pubkey": "aa",
+                "created_at": 100,
+                "content": "no at-sign, but this is our private book",
+                "tags": [["h", cid]],
+            },
+            {
+                "id": skip,
+                "pubkey": "aa",
+                "created_at": 101,
+                "content": "noise in a room we do not own",
+                "tags": [["h", other]],
+            },
+        ]
+        out = feed_wakes(
+            entries,
+            state={"seen_ids": [], "since": 0, "last_wake": 0},
+            self_pk="bb",
+            names=["buzz-grok-summary"],
+            pubkeys=["bb"],
+            seat_role="summary",
+            require_mention=True,
+            dm_ids=[],
+            owned_ids=[cid],
+            now_unix=200,
+            cooldown_secs=0,
+        )
+        ids = {w.get("id") for w in out.get("wakes") or []}
+        self.assertIn(owned_id, ids)
+        self.assertNotIn(skip, ids)
+
 
 class AutoReplyScriptTests(unittest.TestCase):
     def test_dry_run_agy_print_mode(self):
