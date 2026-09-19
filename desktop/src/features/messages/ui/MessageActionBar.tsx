@@ -99,6 +99,7 @@ function MoreActionsMenu({
   open,
   isFollowingThread,
   isUnread,
+  hasActiveReminder,
   profiles,
 }: {
   /** Channel UUID for the "Copy link" action. When null/undefined, the
@@ -119,6 +120,7 @@ function MoreActionsMenu({
   open: boolean;
   isFollowingThread?: boolean;
   isUnread?: boolean;
+  hasActiveReminder?: boolean;
 }) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isReportDialogOpen, setIsReportDialogOpen] = React.useState(false);
@@ -252,7 +254,7 @@ function MoreActionsMenu({
               }}
             >
               <Clock className="h-4 w-4" />
-              Remind me later
+              {hasActiveReminder ? "Reminder set" : "Remind me later"}
             </DropdownMenuItem>
           ) : null}
 
@@ -412,6 +414,7 @@ export const MessageActionBar = React.memo(function MessageActionBar({
   reactions,
   isFollowingThread,
   isUnread,
+  hasActiveReminder,
   profiles,
 }: {
   /** Channel UUID — required for the "Copy link" action; when omitted the
@@ -435,6 +438,7 @@ export const MessageActionBar = React.memo(function MessageActionBar({
   /** Current read state of the clicked message, from the same predicate the
    *  unread badge uses. Drives the single mark-read/unread toggle label. */
   isUnread?: boolean;
+  hasActiveReminder?: boolean;
   /** Resolves the mention identities carried by "Copy message". */
   profiles?: UserProfileLookup;
 }) {
@@ -652,6 +656,7 @@ export const MessageActionBar = React.memo(function MessageActionBar({
               open={isDropdownOpen}
               isFollowingThread={isFollowingThread}
               isUnread={isUnread}
+              hasActiveReminder={hasActiveReminder}
               profiles={profiles}
             />
           ) : null}

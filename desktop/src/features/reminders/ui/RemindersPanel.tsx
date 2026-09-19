@@ -172,7 +172,7 @@ function ReminderRow({
       className={cn(
         "flex items-start gap-3 transition-colors",
         isInboxList
-          ? "border-b border-border/45 px-4 py-4 hover:bg-muted/40 focus-within:bg-muted/40"
+          ? "group border-b border-border/45 px-4 py-4 hover:bg-muted/40 focus-within:bg-muted/40"
           : "rounded-md border p-3",
         isInboxList && isSelected && "bg-muted/40",
       )}
@@ -229,10 +229,18 @@ function ReminderRow({
           </p>
         ) : null}
       </button>
-      {isDone || isInboxList ? null : (
-        <div className="flex shrink-0 items-center gap-1">
+      {isDone ? null : (
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-1",
+            isInboxList &&
+              "opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+            isInboxList && isSelected && "opacity-100",
+          )}
+        >
           <Button
             className="h-7 w-7 p-0"
+            data-testid={`home-reminder-complete-${reminder.id}`}
             disabled={isActing}
             onClick={handleComplete}
             size="sm"
@@ -246,6 +254,7 @@ function ReminderRow({
           <Button
             className="h-7 w-7 p-0"
             disabled={isActing}
+            data-testid={`home-reminder-cancel-${reminder.id}`}
             onClick={handleCancel}
             size="sm"
             title="Cancel"

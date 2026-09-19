@@ -23,6 +23,19 @@ export function countDue(
   return reminders.filter((r) => isDue(r, now)).length;
 }
 
+/** Pending reminder already attached to this message, if any. */
+export function pendingReminderForEvent(
+  reminders: readonly Reminder[],
+  eventId: string | undefined,
+): Reminder | undefined {
+  if (!eventId) return undefined;
+  return reminders.find(
+    (reminder) =>
+      reminder.content.status === "pending" &&
+      reminder.content.target?.eventId === eventId,
+  );
+}
+
 /**
  * Pending reminders that newly crossed `notBefore` since `watermark` — the
  * fire-on-due window. The strict `>` lower bound is deliberate: a reminder

@@ -2,7 +2,11 @@ import { CalendarClock, Clock, Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { useReminderMutations } from "@/features/reminders/hooks";
+import {
+  useReminderMutations,
+  useRemindersQuery,
+} from "@/features/reminders/hooks";
+import { pendingReminderForEvent } from "@/features/reminders/lib/reminderFilters";
 import {
   parseCustomDateTime,
   TIME_PRESETS,
@@ -32,14 +36,33 @@ export function RemindMeLaterDialog({
   target: ReminderTarget | null;
 }) {
   const pubkey = useIdentityQuery().data?.pubkey ?? "";
-  const { create } = useReminderMutations(pubkey);
+  const { create, snooze, cancel } = useReminderMutations(pubkey);
+  const remindersQuery = useRemindersQuery(pubkey);
+  const existing = pendingReminderForEvent(
+    remindersQuery.data ?? [],
+    target?.eventId,
+  );
   const [note, setNote] = React.useState("");
   const [customDate, setCustomDate] = React.useState(todayDateString);
   const [customTime, setCustomTime] = React.useState("09:00");
   const customTimestamp = parseCustomDateTime(customDate, customTime);
+  const busy = create.isPending || snooze.isPending || cancel.isPending;
 
   const submit = (notBefore: number) => {
-    if (!target || create.isPending) return;
+    if (!target || busy) return;
+    if (existing) {
+      snooze.mutate(
+        { reminder: existing, notBefore },
+        {
+          onSuccess: () => {
+            toast.success("Reminder updated");
+            onOpenChange(false);
+          },
+          onError: () => toast.error("Failed to update reminder"),
+        },
+      );
+      return;
+    }
     create.mutate(
       { target, notBefore, note: note || undefined },
       {
@@ -59,10 +82,12 @@ export function RemindMeLaterDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            Remind me later
+            {existing ? "Reminder set" : "Remind me later"}
           </DialogTitle>
           <DialogDescription>
-            Choose when you want to be reminded about this message.
+            {existing
+              ? "Change when you want to be reminded, or cancel this reminder."
+              : "Choose when you want to be reminded about this message."}
           </DialogDescription>
         </DialogHeader>
 
@@ -72,7 +97,7 @@ export function RemindMeLaterDialog({
               key={preset.label}
               variant="outline"
               className="justify-start"
-              disabled={create.isPending}
+              disabled={busy}
               onClick={() => submit(preset.getTimestamp())}
             >
               {preset.label}
@@ -104,34 +129,55 @@ export function RemindMeLaterDialog({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label
-            htmlFor="reminder-note"
-            className="text-sm font-medium text-muted-foreground"
-          >
-            Note (optional)
-          </label>
-          <Textarea
-            id="reminder-note"
-            placeholder="Add a note..."
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            rows={2}
-            className="resize-none"
-          />
-        </div>
+        {existing ? null : (
+          <div className="space-y-2">
+            <label
+              htmlFor="reminder-note"
+              className="text-sm font-medium text-muted-foreground"
+            >
+              Note (optional)
+            </label>
+            <Textarea
+              id="reminder-note"
+              placeholder="Add a note..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="resize-none"
+            />
+          </div>
+        )}
 
         <DialogFooter className="sm:justify-between">
-          <Button
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-            disabled={create.isPending}
-          >
-            Cancel
-          </Button>
+          {existing ? (
+            <Button
+              data-testid="reminder-dialog-cancel-existing"
+              disabled={busy}
+              onClick={() => {
+                cancel.mutate(existing, {
+                  onSuccess: () => {
+                    toast.success("Reminder cancelled");
+                    onOpenChange(false);
+                  },
+                  onError: () => toast.error("Failed to cancel reminder"),
+                });
+              }}
+              variant="ghost"
+            >
+              Cancel reminder
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+          )}
           <Button
             className="relative"
-            disabled={create.isPending || customTimestamp === null}
+            disabled={busy || customTimestamp === null}
             onClick={() => {
               if (customTimestamp === null) return;
               submit(customTimestamp);
@@ -140,10 +186,10 @@ export function RemindMeLaterDialog({
           >
             {/* The hidden label keeps the button width stable while the
                 spinner overlays it. */}
-            <span className={create.isPending ? "invisible" : undefined}>
-              Set reminder
+            <span className={busy ? "invisible" : undefined}>
+              {existing ? "Change reminder" : "Set reminder"}
             </span>
-            {create.isPending ? (
+            {busy ? (
               <span className="absolute inset-0 flex items-center justify-center">
                 <Loader2 className="animate-spin" />
               </span>

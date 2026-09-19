@@ -583,6 +583,7 @@ export const MessageRow = React.memo(
             canToggleReactions ? handleReactionSelect : undefined
           }
           onRemindLater={handleRemindLater}
+          hasActiveReminder={hasActiveReminder}
           onReply={onReply}
           onSendToChannel={
             onSendToChannel && sendToChannelAllowed

@@ -6,6 +6,7 @@ import {
   dueSince,
   groupReminders,
   isDue,
+  pendingReminderForEvent,
 } from "./reminderFilters.ts";
 
 /**
@@ -56,6 +57,28 @@ test("countDue_counts_only_due_pending_reminders", () => {
 
 test("countDue_empty_list_returns_zero", () => {
   assert.equal(countDue([], NOW), 0);
+});
+
+test("pendingReminderForEvent_finds_pending_on_that_message", () => {
+  const reminders = [
+    {
+      ...reminder({ id: "a", notBefore: NOW + 1 }),
+      content: {
+        status: "pending",
+        target: { eventId: "msg-1", channelId: "c", preview: "hi", authorPubkey: "p" },
+      },
+    },
+    {
+      ...reminder({ id: "b", notBefore: NOW + 1, status: "done" }),
+      content: {
+        status: "done",
+        target: { eventId: "msg-1", channelId: "c", preview: "hi", authorPubkey: "p" },
+      },
+    },
+  ];
+  const found = pendingReminderForEvent(reminders, "msg-1");
+  assert.equal(found?.id, "a");
+  assert.equal(pendingReminderForEvent(reminders, "msg-other"), undefined);
 });
 
 // dueSince — the watermark fire window. Strict lower bound `>`, inclusive `<=`.
