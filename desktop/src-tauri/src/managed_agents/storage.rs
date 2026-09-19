@@ -1,8 +1,9 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{Read as _, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
 };
 
 use tauri::{AppHandle, Manager};
@@ -317,6 +318,14 @@ fn hydrate_keys(records: &mut [ManagedAgentRecord]) {
     hydrate_keys_with(store, records);
 }
 
+fn should_log_missing_agent_key(pubkey: &str) -> bool {
+    static WARNED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    match WARNED.get_or_init(|| Mutex::new(HashSet::new())).lock() {
+        Ok(mut set) => set.insert(pubkey.to_string()),
+        Err(poisoned) => poisoned.into_inner().insert(pubkey.to_string()),
+    }
+}
+
 /// Testable core of [`hydrate_keys`], generic over the [`KeyStore`] seam.
 ///
 /// A keyring LOAD error (`Err`) is an OUTAGE — distinct from `Ok(None)`
@@ -336,10 +345,16 @@ fn hydrate_keys_with(store: &impl KeyStore, records: &mut [ManagedAgentRecord]) 
             match store.load(&agent_keyring_name(&record.pubkey)) {
                 Ok(Some(nsec)) => record.private_key_nsec = nsec,
                 Ok(None) => {
-                    eprintln!(
-                        "buzz-desktop: agent {} has no key in JSON or keyring",
-                        record.pubkey
-                    );
+                    // Settings → Agents hydrates on every list. Four leftover
+                    // empty-key records used to reprint this line tens of
+                    // thousands of times and freeze the webview. Once per
+                    // process is enough to diagnose.
+                    if should_log_missing_agent_key(&record.pubkey) {
+                        eprintln!(
+                            "buzz-desktop: agent {} has no key in JSON or keyring",
+                            record.pubkey
+                        );
+                    }
                 }
                 // Outage, NOT absence: the key may exist in the keyring but is
                 // unreadable this boot. Leave it empty so the spawn path

@@ -204,6 +204,24 @@ fn migrate_reports_nothing_for_empty_key() {
 }
 
 #[test]
+fn missing_key_log_fires_once_per_pubkey() {
+    let a = format!("missing-key-once-{}", std::process::id());
+    let b = format!("missing-key-once-{}-b", std::process::id());
+    assert!(
+        super::should_log_missing_agent_key(&a),
+        "first sighting must log"
+    );
+    assert!(
+        !super::should_log_missing_agent_key(&a),
+        "repeat must not flood Settings → Agents"
+    );
+    assert!(
+        super::should_log_missing_agent_key(&b),
+        "a different pubkey still logs once"
+    );
+}
+
+#[test]
 fn hydrate_fills_key_from_keyring_when_reachable() {
     // The normal keyring-backed case: an empty inline key is filled from
     // the keyring on load.
