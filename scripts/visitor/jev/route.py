@@ -91,18 +91,29 @@ def write_state(decision: dict[str, str], wake: dict[str, Any]) -> None:
     counts = prev.get("counts") if isinstance(prev.get("counts"), dict) else {}
     action = decision.get("action") or "stop"
     counts[action] = int(counts.get(action) or 0) + 1
+    last = {
+        "action": action,
+        "wall": decision.get("wall") or "private",
+        "reason": decision.get("reason") or "",
+        "error": decision.get("error") or "",
+        "from": (wake.get("from") or "")[:12],
+        "room": wake.get("channel") or "",
+        "id": wake.get("id") or "",
+        "preview": (wake.get("preview") or "")[:120],
+    }
+    # Control-room lamp reads top-level outcome (not last.action).
     record = {
         "updated_at": int(time.time()),
-        "last": {
-            "action": action,
-            "wall": decision.get("wall") or "private",
-            "reason": decision.get("reason") or "",
-            "error": decision.get("error") or "",
-            "from": (wake.get("from") or "")[:12],
-            "room": wake.get("channel") or "",
-            "id": wake.get("id") or "",
-            "preview": (wake.get("preview") or "")[:120],
-        },
+        "outcome": action,
+        "action": action,
+        "wall": last["wall"],
+        "reason": last["reason"],
+        "error": last["error"],
+        "from": last["from"],
+        "room": last["room"],
+        "id": last["id"],
+        "preview": last["preview"],
+        "last": last,
         "counts": counts,
         "live": True,
     }
