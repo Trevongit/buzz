@@ -2239,6 +2239,9 @@ class JevDraftTests(unittest.TestCase):
         self.assertIsNotNone(skip_jev("BUZZ_OK start seat=buzz ear=feed"))
         self.assertIsNotNone(skip_jev("VISITOR_WAKE match seat=buzz"))
         self.assertIsNotNone(skip_jev("COLLAB to: grok"))
+        self.assertIsNotNone(skip_jev("👀 extras — copy"))
+        self.assertIsNotNone(skip_jev("Copy. Honor extras ignore."))
+        self.assertIsNotNone(skip_jev("**copy.** Jev as cheap doorman"))
         self.assertIsNone(skip_jev("please patch the smoke script"))
 
     def test_compose_unsure_and_private(self):
