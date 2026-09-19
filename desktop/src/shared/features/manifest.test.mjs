@@ -24,6 +24,20 @@ test("thread-scoped ACP sessions is a default-off desktop experiment", () => {
   assert.equal(feature.defaultEnabled, undefined);
 });
 
+test("jev doorman is a default-off desktop experiment and does not mention Agents keys", () => {
+  const feature = manifest.features.find(({ id }) => id === "jevDoorman");
+
+  assert.deepEqual(feature, {
+    id: "jevDoorman",
+    name: "Jev doorman",
+    description:
+      "Cheap yes/no before waking a chair: need act, which mouth, public vs private. Opt-in. Does not store a TypeSafe key on the Agents page. The caller stays extras on this computer (env file, not git).",
+    platforms: ["desktop"],
+  });
+  assert.equal(feature.defaultEnabled, undefined);
+  assert.equal(/nsec/i.test(feature.description), false);
+});
+
 test("existing Projects and Workflows experiments remain unchanged", () => {
   const existing = Object.fromEntries(
     manifest.features

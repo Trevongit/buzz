@@ -46,7 +46,7 @@ Private operator notes stay out of git. If you are an agent: **read this file, t
 | **Do not** | Custom harness `agy`. Origin-PR this whole branch. Treat UATP as ACP. Register Hermes gateway as a Desktop runtime. |
 | **Install adapter** | `bash desktop/scripts/install-agy-acp.sh` → `~/.local/bin/agy-acp` |
 | **Tests** | `python3 desktop/scripts/test_agy_acp.py` · `python3 scripts/visitor/test_visitor.py` · `bash scripts/visitor/check.sh` · `bash scripts/visitor/hermes-setup.sh --check` |
-| **Experiments** | `pocketListen` default **on** · `publicGithubRead` default **on** · `githubMachineGit` default **off** |
+| **Experiments** | `pocketListen` default **on** · `publicGithubRead` default **on** · `githubMachineGit` default **off** · `jevDoorman` default **off** |
 | **Search terms** | `agy-acp`, `Antigravity`, `visitor-collab`, `use-buzz`, `Codex Desktop`, `Antigravity IDE`, `Hermes gateway`, `Pocket Listen`, `public GitHub reads`, `unlist`, Origin Plus |
 
 **Two doors, one brain family**

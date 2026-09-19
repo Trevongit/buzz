@@ -56,6 +56,12 @@
       "description": "Show Overview, Files, and Fetch compare for public github.com remotes without cloning. Private clone still needs GitHub machine git.",
       "defaultEnabled": true,
       "platforms": ["desktop"]
+    },
+    {
+      "id": "jevDoorman",
+      "name": "Jev doorman",
+      "description": "Cheap yes/no before waking a chair: need act, which mouth, public vs private. Opt-in. Does not store a TypeSafe key on the Agents page. The caller stays extras on this computer (env file, not git).",
+      "platforms": ["desktop"]
     }
   ]
 }

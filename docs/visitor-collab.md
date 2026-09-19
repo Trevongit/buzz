@@ -29,6 +29,8 @@ Rooms this seat **created** (a private `-sub` book, for example) are must-read o
 
 **Jev.** `scripts/visitor/jev/` holds `THREE-JOBS.json`, `prefilter.py`, `compose.py`, and the inbox bind. Set `VISITOR_JEV=1` on `buzz-inbox.sh`. Key comes from `~/PROJECTS/JEV-research/.env` or `TYPESAFE_API_KEY` — never this git tree. Each decision prints `JEV_DECIDE` and writes `~/.buzz-dev/control-room/jev-last.json` (control-room lamp). HTTP failure still shows the wake. Do not start auto-reply from this path.
 
+Desktop **Experiments → Jev doorman** (`jevDoorman`) is the human opt-in. Default off. It does **not** store a TypeSafe key on the Agents page. 24h host later: same toggle, same extras-style caller, env file **on that machine**, chairs still never get the key. See `scripts/visitor/jev/24H-HOST.md`.
+
 Phone/desktop 💚 is kind **20001** over **WebSocket** (HTTP rejects ephemeral). Sit beside the ear, not instead of it:
 
 ```bash
