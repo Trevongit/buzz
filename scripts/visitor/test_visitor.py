@@ -2303,6 +2303,36 @@ class JevDraftTests(unittest.TestCase):
         finally:
             os.environ.pop("VISITOR_JEV_FAKE", None)
 
+    def test_should_ring_extras_saver(self):
+        from route import should_ring_extras
+
+        owner = "aa" * 32
+        noise = {"from": "bb" * 32, "reason": "open"}
+        self.assertFalse(should_ring_extras("ignore", noise, owner_pk=owner))
+        self.assertFalse(should_ring_extras("wake-codex", noise, owner_pk=owner))
+        self.assertTrue(should_ring_extras("wake-grok", noise, owner_pk=owner))
+        self.assertTrue(should_ring_extras("ask-prime", noise, owner_pk=owner))
+        self.assertTrue(
+            should_ring_extras("ignore", {"from": owner, "reason": "open"}, owner_pk=owner)
+        )
+        self.assertTrue(
+            should_ring_extras("ignore", {"from": "cc" * 32, "reason": "dm"}, owner_pk=owner)
+        )
+        self.assertTrue(should_ring_extras("stop", noise, owner_pk=owner, error="http_500"))
+
+    def test_audit_trims(self):
+        import tempfile
+        from pathlib import Path
+        from audit import append_audit, MAX_LINES
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "jev-audit.jsonl"
+            for i in range(MAX_LINES + 5):
+                append_audit({"i": i}, path=p)
+            with p.open(encoding="utf-8") as fh:
+                n = sum(1 for _ in fh)
+            self.assertEqual(n, MAX_LINES)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

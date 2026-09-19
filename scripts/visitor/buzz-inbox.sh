@@ -70,7 +70,7 @@ print(int(st.get("since") or 0))
   out="$(printf '%s\n' "$json" | python3 "${VISITOR_ROOT}/gate.py" feed-wakes \
       --state "$STATE" --self "$SELF" --names "$NAMES" --role "$ROLE" \
       --require "$REQUIRE" --dm-ids "$dm_ids" --owned-ids "$owned_ids" 2>/dev/null || true)"
-  python3 - "$out" "$SEAT" "${VISITOR_JEV:-0}" "${VISITOR_ROOT}" <<'PY'
+  python3 - "$out" "$SEAT" "${VISITOR_JEV:-0}" "${VISITOR_ROOT}" "${VISITOR_OWNER_PK:-}" <<'PY'
 import json, sys
 from pathlib import Path
 try:
@@ -80,16 +80,19 @@ except json.JSONDecodeError:
 seat = sys.argv[2]
 jev_on = (sys.argv[3] or "0").strip().lower() in ("1", "true", "yes", "on")
 jev_root = Path(sys.argv[4]) / "jev"
+owner_pk = sys.argv[5] if len(sys.argv) > 5 else ""
 if jev_on:
     sys.path.insert(0, str(jev_root))
     try:
-        from route import route_wake, write_state
+        from route import route_wake, write_state, should_ring_extras
     except Exception:
         route_wake = None
         write_state = None
+        should_ring_extras = None
 else:
     route_wake = None
     write_state = None
+    should_ring_extras = None
 for w in blob.get("wakes") or []:
     if not isinstance(w, dict):
         continue
@@ -98,6 +101,39 @@ for w in blob.get("wakes") or []:
     eid = w.get("id") or ""
     prev = w.get("preview") or ""
     reason = w.get("reason") or ""
+    ring = True
+    d = None
+    if jev_on:
+        if route_wake is None:
+            print(f"JEV_FAIL seat={seat} id={eid} error=import")
+        else:
+            try:
+                d = route_wake(w)
+                if write_state is not None:
+                    write_state(d, w)
+                err = d.get("error") or ""
+                if err:
+                    print(f"JEV_FAIL seat={seat} id={eid} error={err}")
+                print(
+                    f"JEV_DECIDE seat={seat} id={eid} action={d.get('action')} "
+                    f"wall={d.get('wall')} reason={d.get('reason')}"
+                )
+                if should_ring_extras is not None:
+                    ring = should_ring_extras(
+                        d.get("action") or "stop",
+                        w,
+                        owner_pk=owner_pk,
+                        error=err,
+                    )
+            except Exception as exc:
+                print(f"JEV_FAIL seat={seat} id={eid} error={type(exc).__name__}")
+                ring = True
+    if not ring:
+        print(
+            f"JEV_QUIET seat={seat} id={eid} action={(d or {}).get('action')} "
+            f"(extras did not spend a turn)"
+        )
+        continue
     print(
         f"VISITOR_WAKE match seat={seat} room={cid} channel={cid} "
         f"reason={reason} from={frm} id={eid} preview={prev}"
@@ -107,25 +143,6 @@ for w in blob.get("wakes") or []:
         f"BUZZ_WAKE match seat={seat} room=feed channel={cid} "
         f"since=0 from={frm} id={eid} preview={prev}"
     )
-    if not jev_on:
-        continue
-    if route_wake is None:
-        print(f"JEV_FAIL seat={seat} id={eid} error=import")
-        continue
-    try:
-        d = route_wake(w)
-        if write_state is not None:
-            write_state(d, w)
-        err = d.get("error") or ""
-        line = (
-            f"JEV_DECIDE seat={seat} id={eid} action={d.get('action')} "
-            f"wall={d.get('wall')} reason={d.get('reason')}"
-        )
-        if err:
-            print(f"JEV_FAIL seat={seat} id={eid} error={err}")
-        print(line)
-    except Exception as exc:
-        print(f"JEV_FAIL seat={seat} id={eid} error={type(exc).__name__}")
 PY
 }
 

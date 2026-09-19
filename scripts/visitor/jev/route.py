@@ -7,11 +7,33 @@ import time
 from pathlib import Path
 from typing import Any
 
+from audit import append_audit
 from call import post_systemone
 from compose import decide, load_jobs
 from prefilter import skip_jev
 
 STATE_PATH = Path.home() / ".buzz-dev" / "control-room" / "jev-last.json"
+
+
+def should_ring_extras(
+    action: str,
+    wake: dict[str, Any],
+    owner_pk: str = "",
+    error: str = "",
+) -> bool:
+    """Whether extras Grok should spend a turn on this wake."""
+    if error or action in ("stop", "ask-prime", "wake-grok"):
+        return True
+    reason = (wake.get("reason") or "").strip().lower()
+    if reason == "dm":
+        return True
+    frm = (wake.get("from") or "").strip().lower()
+    own = (owner_pk or "").strip().lower()
+    if own and frm.startswith(own[:12]):
+        return True
+    # Codex/agy: lamp + audit only. Extras must not steal their job.
+    # ignore: saver — extras stays quiet.
+    return False
 
 
 def _noul(answers: dict[str, Any], name: str) -> float | None:
@@ -118,3 +140,15 @@ def write_state(decision: dict[str, str], wake: dict[str, Any]) -> None:
         "live": True,
     }
     STATE_PATH.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    append_audit(
+        {
+            "outcome": action,
+            "wall": last["wall"],
+            "reason": last["reason"],
+            "error": last["error"],
+            "from": last["from"],
+            "room": last["room"],
+            "id": last["id"],
+            "preview": last["preview"],
+        }
+    )

@@ -15,7 +15,12 @@ Never put the key in this tree.
 
 Each decision prints `JEV_DECIDE` and writes
 `~/.buzz-dev/control-room/jev-last.json` for the control-room lamp.
-HTTP failure prints `JEV_FAIL` and still shows the wake (do not hide
-Prime). Ignore still prints the wake in v1 so you can see the working.
+HTTP failure prints `JEV_FAIL` and still rings extras (do not hide
+Prime). `ignore` and `wake-codex` / `wake-agy` print `JEV_QUIET` instead
+of `VISITOR_WAKE` so extras does not spend a turn. Owner pings and DMs
+always ring extras (`VISITOR_OWNER_PK`).
+
+Each decision also appends `~/.buzz-dev/control-room/jev-audit.jsonl`
+(capped at 2000 lines) so we can see value over time.
 
 Do not start auto-reply from this path.
