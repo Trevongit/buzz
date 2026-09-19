@@ -27,6 +27,8 @@ Idle is still **zero model tokens**. Do not run `buzz-inbox.sh` beside `extra_ch
 
 Rooms this seat **created** (a private `-sub` book, for example) are must-read on that same ear. Put one UUID per line in `~/.buzz-dev/agents/<seat>/owned-channels`. That is not a second listen. Other joined rooms still need an @ or a DM.
 
+**Jev (draft only).** `scripts/visitor/jev/` holds the three-question file (`THREE-JOBS.json`) plus `prefilter.py` and `compose.py`. Copied from JEV-research. Not wired to `buzz-inbox.sh`. No API key in this tree. Prime must say go before any live call.
+
 Phone/desktop 💚 is kind **20001** over **WebSocket** (HTTP rejects ephemeral). Sit beside the ear, not instead of it:
 
 ```bash

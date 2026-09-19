@@ -1,0 +1,49 @@
+{
+  "purpose": "Draft questions for extras' three Buzz jobs. Not a live hook. Cutoffs are starting points to review, not proven. Copied into extras visitor kit from JEV-research.",
+  "source": "JEV-research/docs/THREE-JOBS.json",
+  "model": "jev-latest",
+  "state_shape": {
+    "from": "display name or pubkey prefix of the author",
+    "room": "channel name or DM",
+    "is_dm": "boolean",
+    "text": "first ~500 characters of the message"
+  },
+  "cutoffs": {
+    "needs_chair_unsure_low": 0.30,
+    "needs_chair_unsure_high": 0.70,
+    "who_min_confidence": 0.75,
+    "public_ok_yes": 0.70,
+    "public_ok_no": 0.30
+  },
+  "questions": {
+    "needs_chair": {
+      "type": "noul",
+      "instructions": "Does this Buzz wake need a house agent to act (reply, edit, or run a tool), rather than only to be read?"
+    },
+    "who": {
+      "type": "choice",
+      "instructions": "Which house chair should act on this wake, if any?",
+      "criteria": {
+        "grok": "Grok Build should research, write, or use tools.",
+        "codex": "Codex should write or review code.",
+        "agy": "Antigravity should scout or try a cheap pass.",
+        "ignore": "No chair should act. Log or drop it.",
+        "other": "None of these chairs fit. Do not guess."
+      }
+    },
+    "public_ok": {
+      "type": "noul",
+      "instructions": "Is it okay to put this content on a public Buzz wall, rather than a private book or a DM to Prime?"
+    }
+  },
+  "prefilter": "scripts/visitor/jev/prefilter.py — skip BUZZ_OK / VISITOR_WAKE / empty text before any HTTP call",
+  "compose_in_code": [
+    "Run prefilter first. Skip Jev on watcher/control lines.",
+    "If needs_chair is between unsure_low and unsure_high inclusive: DM Prime. Do not pick a chair.",
+    "If needs_chair is below unsure_low: ignore. Do not wake a mouth.",
+    "If who.confidence is below who_min_confidence or who.choice is other: DM Prime.",
+    "If who.choice is ignore: ignore.",
+    "If public_ok is below public_ok_yes: keep private. Never dump a recap on the public wall.",
+    "If the API call errors: stop. Do not let the action through."
+  ]
+}

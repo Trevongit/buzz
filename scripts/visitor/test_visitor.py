@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "jev"))
 from gate import (  # noqa: E402
     admit_budget,
     addressed_to,
@@ -2217,6 +2218,70 @@ class GooseCliTests(unittest.TestCase):
             self.assertNotRegex(combined.lower(), r"curl\s+\S+\s*\|\s*bash")
             self.assertIn("do not", combined.lower())
             self.assertNotIn("/usr/bin/goose", proc.stdout.splitlines()[-1] if proc.stdout else "")
+
+
+class JevDraftTests(unittest.TestCase):
+    """THREE-JOBS.json + prefilter + compose. No HTTP. Not a live hook."""
+
+    def test_jobs_file_has_other_and_three_questions(self):
+        from compose import load_jobs
+
+        jobs = load_jobs()
+        q = jobs["questions"]
+        self.assertEqual(q["needs_chair"]["type"], "noul")
+        self.assertEqual(q["who"]["type"], "choice")
+        self.assertEqual(q["public_ok"]["type"], "noul")
+        self.assertIn("other", q["who"]["criteria"])
+
+    def test_prefilter_skips_watcher_lines(self):
+        from prefilter import skip_jev
+
+        self.assertIsNotNone(skip_jev("BUZZ_OK start seat=buzz ear=feed"))
+        self.assertIsNotNone(skip_jev("VISITOR_WAKE match seat=buzz"))
+        self.assertIsNotNone(skip_jev("COLLAB to: grok"))
+        self.assertIsNone(skip_jev("please patch the smoke script"))
+
+    def test_compose_unsure_and_private(self):
+        from compose import decide, load_jobs
+
+        jobs = load_jobs()
+        thanks = decide(
+            text="thanks",
+            needs_chair=0.12,
+            who_choice="ignore",
+            who_confidence=0.9,
+            public_ok=0.8,
+            jobs=jobs,
+        )
+        self.assertEqual(thanks["action"], "ignore")
+        secret = decide(
+            text="here is the api key sk-test",
+            needs_chair=0.9,
+            who_choice="grok",
+            who_confidence=0.9,
+            public_ok=0.06,
+            jobs=jobs,
+        )
+        self.assertEqual(secret["action"], "wake-grok")
+        self.assertEqual(secret["wall"], "private")
+        other = decide(
+            text="weird request",
+            needs_chair=0.9,
+            who_choice="other",
+            who_confidence=0.99,
+            public_ok=0.8,
+            jobs=jobs,
+        )
+        self.assertEqual(other["action"], "ask-prime")
+        mid = decide(
+            text="maybe?",
+            needs_chair=0.5,
+            who_choice="grok",
+            who_confidence=0.9,
+            public_ok=0.8,
+            jobs=jobs,
+        )
+        self.assertEqual(mid["action"], "ask-prime")
 
 
 if __name__ == "__main__":
