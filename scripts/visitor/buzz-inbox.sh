@@ -70,13 +70,26 @@ print(int(st.get("since") or 0))
   out="$(printf '%s\n' "$json" | python3 "${VISITOR_ROOT}/gate.py" feed-wakes \
       --state "$STATE" --self "$SELF" --names "$NAMES" --role "$ROLE" \
       --require "$REQUIRE" --dm-ids "$dm_ids" --owned-ids "$owned_ids" 2>/dev/null || true)"
-  python3 - "$out" "$SEAT" <<'PY'
+  python3 - "$out" "$SEAT" "${VISITOR_JEV:-0}" "${VISITOR_ROOT}" <<'PY'
 import json, sys
+from pathlib import Path
 try:
     blob = json.loads(sys.argv[1] or "{}")
 except json.JSONDecodeError:
     blob = {}
 seat = sys.argv[2]
+jev_on = (sys.argv[3] or "0").strip().lower() in ("1", "true", "yes", "on")
+jev_root = Path(sys.argv[4]) / "jev"
+if jev_on:
+    sys.path.insert(0, str(jev_root))
+    try:
+        from route import route_wake, write_state
+    except Exception:
+        route_wake = None
+        write_state = None
+else:
+    route_wake = None
+    write_state = None
 for w in blob.get("wakes") or []:
     if not isinstance(w, dict):
         continue
@@ -94,6 +107,25 @@ for w in blob.get("wakes") or []:
         f"BUZZ_WAKE match seat={seat} room=feed channel={cid} "
         f"since=0 from={frm} id={eid} preview={prev}"
     )
+    if not jev_on:
+        continue
+    if route_wake is None:
+        print(f"JEV_FAIL seat={seat} id={eid} error=import")
+        continue
+    try:
+        d = route_wake(w)
+        if write_state is not None:
+            write_state(d, w)
+        err = d.get("error") or ""
+        line = (
+            f"JEV_DECIDE seat={seat} id={eid} action={d.get('action')} "
+            f"wall={d.get('wall')} reason={d.get('reason')}"
+        )
+        if err:
+            print(f"JEV_FAIL seat={seat} id={eid} error={err}")
+        print(line)
+    except Exception as exc:
+        print(f"JEV_FAIL seat={seat} id={eid} error={type(exc).__name__}")
 PY
 }
 
@@ -106,7 +138,11 @@ Path(sys.argv[1]).write_text(json.dumps({"since": int(sys.argv[2]), "seen_ids": 
 PY
   echo "VISITOR_OK seeded-feed seat=$SEAT" >>"$LOG"
 fi
-echo "BUZZ_OK start seat=$SEAT ear=feed types=$TYPES tick=${TICK}s"
+JEV_FLAG=0
+if [[ "${VISITOR_JEV:-0}" == "1" || "${VISITOR_JEV:-}" == "on" || "${VISITOR_JEV:-}" == "true" ]]; then
+  JEV_FLAG=1
+fi
+echo "BUZZ_OK start seat=$SEAT ear=feed types=$TYPES tick=${TICK}s jev=${JEV_FLAG}"
 
 if [[ "$ONCE" == "1" ]]; then
   poll_once

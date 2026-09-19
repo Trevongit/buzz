@@ -9,5 +9,13 @@ This copy is what extras will read on a later bind.
 - `prefilter.py` — skip watcher lines before any HTTP
 - `compose.py` — apply cutoffs in code (no API)
 
-Do not put `TYPESAFE_API_KEY` in this tree. Do not call Jev from
-`buzz-inbox.sh` until Prime says go.
+Set `VISITOR_JEV=1` on `buzz-inbox.sh` to call Jev after each wake.
+Key is read from `~/PROJECTS/JEV-research/.env` or `TYPESAFE_API_KEY`.
+Never put the key in this tree.
+
+Each decision prints `JEV_DECIDE` and writes
+`~/.buzz-dev/control-room/jev-last.json` for the control-room lamp.
+HTTP failure prints `JEV_FAIL` and still shows the wake (do not hide
+Prime). Ignore still prints the wake in v1 so you can see the working.
+
+Do not start auto-reply from this path.

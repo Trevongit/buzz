@@ -2283,6 +2283,26 @@ class JevDraftTests(unittest.TestCase):
         )
         self.assertEqual(mid["action"], "ask-prime")
 
+    def test_route_fake_and_skip(self):
+        import os
+        from route import route_wake
+
+        skip = route_wake({"preview": "BUZZ_OK start seat=buzz"})
+        self.assertEqual(skip["action"], "ignore")
+        os.environ["VISITOR_JEV_FAKE"] = json.dumps(
+            {
+                "needs_chair": {"noul": 0.9},
+                "who": {"choice": "codex", "confidence": 0.9},
+                "public_ok": {"noul": 0.2},
+            }
+        )
+        try:
+            d = route_wake({"preview": "please patch the smoke script", "reason": "open"})
+            self.assertEqual(d["action"], "wake-codex")
+            self.assertEqual(d["wall"], "private")
+        finally:
+            os.environ.pop("VISITOR_JEV_FAKE", None)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
