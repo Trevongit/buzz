@@ -65,14 +65,24 @@ test("pendingReminderForEvent_finds_pending_on_that_message", () => {
       ...reminder({ id: "a", notBefore: NOW + 1 }),
       content: {
         status: "pending",
-        target: { eventId: "msg-1", channelId: "c", preview: "hi", authorPubkey: "p" },
+        target: {
+          eventId: "msg-1",
+          channelId: "c",
+          preview: "hi",
+          authorPubkey: "p",
+        },
       },
     },
     {
       ...reminder({ id: "b", notBefore: NOW + 1, status: "done" }),
       content: {
         status: "done",
-        target: { eventId: "msg-1", channelId: "c", preview: "hi", authorPubkey: "p" },
+        target: {
+          eventId: "msg-1",
+          channelId: "c",
+          preview: "hi",
+          authorPubkey: "p",
+        },
       },
     },
   ];
