@@ -1289,4 +1289,6 @@ pub fn managed_agent_avatar_url(command: &str) -> Option<String> {
 #[cfg(test)]
 mod antigravity_tests;
 #[cfg(test)]
+mod catalog_publish_tests;
+#[cfg(test)]
 mod tests;
