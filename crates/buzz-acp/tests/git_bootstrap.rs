@@ -16,7 +16,25 @@ fn task_native_git_and_startup_shutdown_cleanup() {
     check_native_git_and_startup_shutdown_cleanup(true);
 }
 
+fn git_version() -> Option<(u32, u32)> {
+    let out = Command::new("git").arg("--version").output().ok()?;
+    let text = String::from_utf8(out.stdout).ok()?;
+    let mut parts = text.split_whitespace().nth(2)?.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    Some((major, minor))
+}
+
 fn check_native_git_and_startup_shutdown_cleanup(task: bool) {
+    // `git credential fill` only forwards capability[]=authtype to helpers on
+    // git 2.46+. Older git prompts for a username and this probe fails closed.
+    if git_version().is_none_or(|(major, minor)| (major, minor) < (2, 46)) {
+        eprintln!(
+            "skip: git credential authtype needs git 2.46+ (have {:?})",
+            git_version()
+        );
+        return;
+    }
     let temp = tempfile::tempdir().unwrap();
     let workspace = temp.path();
     let adapter = workspace.join("adapter");
