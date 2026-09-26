@@ -112,19 +112,24 @@ for w in blob.get("wakes") or []:
                 if write_state is not None:
                     write_state(d, w)
                 err = d.get("error") or ""
-                if err:
-                    print(f"JEV_FAIL seat={seat} id={eid} error={err}")
-                print(
-                    f"JEV_DECIDE seat={seat} id={eid} action={d.get('action')} "
-                    f"wall={d.get('wall')} reason={d.get('reason')}"
-                )
                 if should_ring_extras is not None:
                     ring = should_ring_extras(
                         d.get("action") or "stop",
                         w,
                         owner_pk=owner_pk,
                         error=err,
+                        ring=d.get("ring"),
                     )
+                else:
+                    ring = d.get("ring", True)
+                if d.get("ring") is False and err:
+                    continue
+                if err:
+                    print(f"JEV_FAIL seat={seat} id={eid} error={err}")
+                print(
+                    f"JEV_DECIDE seat={seat} id={eid} action={d.get('action')} "
+                    f"wall={d.get('wall')} reason={d.get('reason')}"
+                )
             except Exception as exc:
                 print(f"JEV_FAIL seat={seat} id={eid} error={type(exc).__name__}")
                 ring = True

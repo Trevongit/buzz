@@ -15,8 +15,11 @@ Never put the key in this tree.
 
 Each decision prints `JEV_DECIDE` and writes
 `~/.buzz-dev/control-room/jev-last.json` for the control-room lamp.
-HTTP failure prints `JEV_FAIL` and still rings extras (do not hide
-Prime). `ignore` and `wake-codex` / `wake-agy` print `JEV_QUIET` instead
+HTTP failure prints **one** `JEV_FAIL` and rings extras once, then opens a
+10-minute breaker (`jev-breaker.json`) so a 403 cannot replay the whole
+feed into `VISITOR_WAKE`. Later events in that window skip HTTP and stay
+quiet. Copy/👀 still skip before any call. `ignore` and `wake-codex` /
+`wake-agy` print `JEV_QUIET` instead
 of `VISITOR_WAKE` so extras does not spend a turn. Owner pings and DMs
 always ring extras (`VISITOR_OWNER_PK`).
 

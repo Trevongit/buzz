@@ -2322,6 +2322,30 @@ class JevDraftTests(unittest.TestCase):
             should_ring_extras("ignore", {"from": "cc" * 32, "reason": "dm"}, owner_pk=owner)
         )
         self.assertTrue(should_ring_extras("stop", noise, owner_pk=owner, error="http_500"))
+        self.assertFalse(
+            should_ring_extras("stop", noise, owner_pk=owner, error="http_403", ring=False)
+        )
+
+    def test_jev_http_breaker_rings_once(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        from route import breaker_active, route_wake, trip_breaker
+
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["VISITOR_JEV_BREAKER_PATH"] = str(Path(tmp) / "breaker.json")
+            os.environ["VISITOR_JEV_BREAKER_SECS"] = "600"
+            try:
+                self.assertTrue(trip_breaker("http_403"))
+                self.assertTrue(breaker_active())
+                self.assertFalse(trip_breaker("http_403"))
+                d = route_wake({"preview": "please patch extras inbox", "reason": "open"})
+                self.assertEqual(d.get("reason"), "jev breaker")
+                self.assertFalse(d.get("ring"))
+                self.assertTrue(d.get("skipped"))
+            finally:
+                os.environ.pop("VISITOR_JEV_BREAKER_PATH", None)
+                os.environ.pop("VISITOR_JEV_BREAKER_SECS", None)
 
     def test_audit_trims(self):
         import tempfile

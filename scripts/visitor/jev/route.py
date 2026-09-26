@@ -13,6 +13,59 @@ from compose import decide, load_jobs
 from prefilter import skip_jev
 
 STATE_PATH = Path.home() / ".buzz-dev" / "control-room" / "jev-last.json"
+def _breaker_path() -> Path:
+    return Path(
+        os.environ.get("VISITOR_JEV_BREAKER_PATH")
+        or (Path.home() / ".buzz-dev" / "control-room" / "jev-breaker.json")
+    )
+
+
+def _breaker_secs() -> int:
+    try:
+        return int(os.environ.get("VISITOR_JEV_BREAKER_SECS") or "600")
+    except ValueError:
+        return 600
+
+
+def _breaker_record() -> dict[str, Any]:
+    path = _breaker_path()
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def breaker_active() -> bool:
+    try:
+        until = int(_breaker_record().get("until") or 0)
+    except (TypeError, ValueError):
+        return False
+    return until > int(time.time())
+
+
+def trip_breaker(error: str) -> bool:
+    """Open the HTTP breaker. True only on the first trip (ring extras once)."""
+    now = int(time.time())
+    if breaker_active():
+        return False
+    path = _breaker_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "until": now + max(_breaker_secs(), 30),
+                "error": error,
+                "tripped_at": now,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return True
 
 
 def should_ring_extras(
@@ -20,8 +73,12 @@ def should_ring_extras(
     wake: dict[str, Any],
     owner_pk: str = "",
     error: str = "",
+    *,
+    ring: bool | None = None,
 ) -> bool:
     """Whether extras Grok should spend a turn on this wake."""
+    if ring is False:
+        return False
     if error or action in ("stop", "ask-prime", "wake-grok"):
         return True
     reason = (wake.get("reason") or "").strip().lower()
@@ -66,8 +123,20 @@ def route_wake(wake: dict[str, Any], jobs: dict[str, Any] | None = None) -> dict
             "reason": skip,
             "error": "",
             "skipped": True,
+            "ring": False,
             "input_tokens": 0,
             "output_tokens": 0,
+        }
+
+    if breaker_active():
+        err = str(_breaker_record().get("error") or "breaker")
+        return {
+            "action": "stop",
+            "wall": "private",
+            "reason": "jev breaker",
+            "error": err,
+            "skipped": True,
+            "ring": False,
         }
 
     fake = os.environ.get("VISITOR_JEV_FAKE")
@@ -92,7 +161,14 @@ def route_wake(wake: dict[str, Any], jobs: dict[str, Any] | None = None) -> dict
         )
         if not payload.get("ok"):
             err = str(payload.get("error") or "call_failed")
-            return {"action": "stop", "wall": "private", "reason": "jev error", "error": err}
+            first = trip_breaker(err)
+            return {
+                "action": "stop",
+                "wall": "private",
+                "reason": "jev error",
+                "error": err,
+                "ring": first,
+            }
         answers = payload.get("answers") or {}
     ms = round((time.perf_counter() - started) * 1000)
 
