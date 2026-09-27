@@ -17,7 +17,8 @@ function loadPhrases(): string[] {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [...SEED];
     const phrases = parsed.filter(
-      (item): item is string => typeof item === "string" && item.trim().length > 1,
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 1,
     );
     return [...new Set([...SEED, ...phrases])];
   } catch {

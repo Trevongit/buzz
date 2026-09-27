@@ -27,7 +27,10 @@ export function createGhostCompleteExtension(options: {
                 const t1 = key.getState(next.state)?.suffix ?? "";
                 if (t1) return;
                 const $from = next.state.selection.$from;
-                if (!next.state.selection.empty || !$from.parent.inlineContent) {
+                if (
+                  !next.state.selection.empty ||
+                  !$from.parent.inlineContent
+                ) {
                   return;
                 }
                 const before = next.state.doc.textBetween(

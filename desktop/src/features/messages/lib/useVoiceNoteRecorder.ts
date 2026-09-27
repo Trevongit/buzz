@@ -208,11 +208,9 @@ export function useVoiceNoteRecorder() {
                 new Uint8Array(wavBuffer).set(wav);
                 recording = {
                   duration: decoded.duration,
-                  file: new File(
-                    [wavBuffer],
-                    `voice-note-${Date.now()}.wav`,
-                    { type: "audio/wav" },
-                  ),
+                  file: new File([wavBuffer], `voice-note-${Date.now()}.wav`, {
+                    type: "audio/wav",
+                  }),
                 };
               }
             }
