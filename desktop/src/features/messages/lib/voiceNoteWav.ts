@@ -65,3 +65,41 @@ export function encodeVoiceNoteWav(
 
   return bytes;
 }
+
+/** Peak we aim for after auto-boost. Leaves a little headroom. */
+export const VOICE_NOTE_TARGET_PEAK = 0.89;
+/** Cap so a near-silent room is not slammed into hiss. About +21 dB. */
+export const VOICE_NOTE_MAX_BOOST = 12;
+
+export function peakOfPcm(pcm: Float32Array): number {
+  let peak = 0;
+  for (const sample of pcm) {
+    const magnitude = Math.abs(sample);
+    if (magnitude > peak) peak = magnitude;
+  }
+  return peak;
+}
+
+/**
+ * Lift quiet speech toward a strong recording level without clipping.
+ * Returns a new buffer. Silence stays silence.
+ */
+export function autoBoostPcm(
+  pcm: Float32Array,
+  targetPeak = VOICE_NOTE_TARGET_PEAK,
+  maxGain = VOICE_NOTE_MAX_BOOST,
+): { pcm: Float32Array; gain: number } {
+  const peak = peakOfPcm(pcm);
+  if (peak < 1e-4) {
+    return { pcm, gain: 1 };
+  }
+  const gain = Math.min(maxGain, Math.max(1, targetPeak / peak));
+  if (gain <= 1.01) {
+    return { pcm, gain: 1 };
+  }
+  const boosted = new Float32Array(pcm.length);
+  for (let index = 0; index < pcm.length; index += 1) {
+    boosted[index] = Math.max(-1, Math.min(1, pcm[index] * gain));
+  }
+  return { pcm: boosted, gain };
+}

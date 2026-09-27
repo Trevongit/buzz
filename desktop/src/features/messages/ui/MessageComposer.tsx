@@ -5,6 +5,7 @@ import {
   type ChannelSuggestion,
 } from "@/features/messages/lib/useChannelLinks";
 import { useComposerAutofocus } from "@/features/messages/lib/useComposerAutofocus";
+import { rememberComposerGhostPhrase } from "@/features/messages/lib/composerGhostComplete";
 import { useDrafts } from "@/features/messages/lib/useDrafts";
 import { resolveSentDraftKey } from "@/features/messages/ui/draftSubmitKey";
 import {
@@ -553,6 +554,7 @@ function MessageComposerImpl({
   });
   const submitMessage = React.useCallback(async () => {
     const trimmed = syncComposerContentFromEditor().trim();
+    if (trimmed) rememberComposerGhostPhrase(trimmed);
     // Edit mode
     if (editTargetRef.current && onEditSaveRef.current) {
       // A live recording must be finished or discarded explicitly; never let an

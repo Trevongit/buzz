@@ -36,6 +36,7 @@ import {
 import type { MentionIdentity } from "./mentionClipboard";
 import { CUSTOM_EMOJI_NODE_NAME } from "./customEmojiNode";
 import { useFeatureEnabled } from "@/shared/features/useFeatureEnabled";
+import { createGhostCompleteExtension } from "./ghostCompleteExtension";
 import { useComposerCustomEmoji } from "./useComposerCustomEmoji";
 import { buildPlainTextProjection } from "./plainTextProjection";
 import { parseSnapshotClipboardHtml } from "./agentSnapshotClipboard";
@@ -184,6 +185,9 @@ export function useRichTextEditor({
   // Custom-emoji atom node wiring (config + src re-resolve). Kept in a sibling
   // hook so this file stays focused on generic editor setup.
   const composerSpellcheck = useFeatureEnabled("composerSpellcheck");
+  const composerGhostComplete = useFeatureEnabled("composerGhostComplete");
+  const ghostCompleteEnabledRef = React.useRef(composerGhostComplete);
+  ghostCompleteEnabledRef.current = composerGhostComplete;
   const customEmojiWiring = useComposerCustomEmoji(customEmoji);
   const messageLinkWiring = useComposerMessageLinks(messageLinkChannels);
 
@@ -335,6 +339,10 @@ export function useRichTextEditor({
         // Lets a pasted mention's identity check, which can outlive the paste,
         // tell the text it inserted from whatever the user typed next.
         PastedMentionOccurrencesExtension,
+        createGhostCompleteExtension({
+          isEnabled: () => ghostCompleteEnabledRef.current,
+          isAutocompleteOpen: () => Boolean(isAutocompleteOpen?.current),
+        }),
         customEmojiWiring.extension,
         messageLinkWiring.extension,
         Placeholder.configure({

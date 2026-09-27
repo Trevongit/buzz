@@ -17,18 +17,34 @@ type WaveformSample = {
   recorded: boolean;
 };
 
+function formatBoost(gain: number): string {
+  const db = 20 * Math.log10(Math.max(1, gain));
+  if (db < 0.5) return "0 dB";
+  return `+${db.toFixed(0)} dB`;
+}
+
 export function VoiceNoteRecorder({
+  autoBoost,
   elapsedSeconds,
   levels,
+  liveBoost,
+  manualGain,
   maxDurationSeconds,
+  onAutoBoostChange,
   onCancel,
+  onManualGainChange,
   processing,
   requesting,
 }: {
+  autoBoost: boolean;
   elapsedSeconds: number;
   levels: number[];
+  liveBoost: number;
+  manualGain: number;
   maxDurationSeconds: number;
+  onAutoBoostChange: (enabled: boolean) => void;
   onCancel: () => void;
+  onManualGainChange: (gain: number) => void;
   processing: boolean;
   requesting: boolean;
 }) {
@@ -166,6 +182,38 @@ export function VoiceNoteRecorder({
           ))}
         </div>
       </div>
+      <div className="mx-1 h-5 w-px shrink-0 bg-border/60" />
+      <Button
+        aria-pressed={autoBoost}
+        className="shrink-0 px-2 text-xs"
+        data-testid="voice-note-auto-boost"
+        onClick={() => onAutoBoostChange(!autoBoost)}
+        size="sm"
+        type="button"
+        variant={autoBoost ? "secondary" : "ghost"}
+      >
+        Auto {formatBoost(liveBoost)}
+      </Button>
+      {autoBoost ? null : (
+        <label className="flex min-w-16 max-w-24 shrink-0 items-center gap-1">
+          <span className="sr-only">Microphone boost</span>
+          <input
+            aria-valuemax={12}
+            aria-valuemin={1}
+            aria-valuenow={manualGain}
+            className="h-1 w-full accent-primary"
+            data-testid="voice-note-gain"
+            max={12}
+            min={1}
+            onChange={(event) =>
+              onManualGainChange(Number(event.currentTarget.value))
+            }
+            step={0.5}
+            type="range"
+            value={manualGain}
+          />
+        </label>
+      )}
     </fieldset>
   );
 }

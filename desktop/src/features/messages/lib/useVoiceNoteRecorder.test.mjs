@@ -43,8 +43,14 @@ class FakeRecorder extends dom.window.EventTarget {
 }
 
 const decodeResolvers = [];
+const processors = [];
 class FakeAudioContext {
+  sampleRate = 8_000;
+  state = "running";
   close() {
+    return Promise.resolve();
+  }
+  resume() {
     return Promise.resolve();
   }
   createAnalyser() {
@@ -54,8 +60,16 @@ class FakeAudioContext {
       getByteTimeDomainData() {},
     };
   }
+  createGain() {
+    return { gain: { value: 0 }, connect() {}, disconnect() {} };
+  }
   createMediaStreamSource() {
     return { connect() {} };
+  }
+  createScriptProcessor() {
+    const node = { connect() {}, disconnect() {}, onaudioprocess: null };
+    processors.push(node);
+    return node;
   }
   decodeAudioData() {
     return new Promise((resolve) => decodeResolvers.push(resolve));
@@ -179,6 +193,39 @@ test("a cancelled decode cannot stop or attach over a newer recording", async ()
     assert.equal(secondTrack.stopped, false);
     assert.equal(result.current.status, "recording");
   } finally {
+    unmount();
+    cleanup();
+  }
+});
+
+test("records a wav from pcm when MediaRecorder fails to start", async () => {
+  const { act, cleanup, renderHook } = await import("@testing-library/react");
+  class ThrowingRecorder extends FakeRecorder {
+    start() {
+      throw new Error("MediaRecorder unavailable");
+    }
+  }
+  globalThis.MediaRecorder = ThrowingRecorder;
+  dom.window.MediaRecorder = ThrowingRecorder;
+  const { useVoiceNoteRecorder } = await import("./useVoiceNoteRecorder.ts");
+  const { result, unmount } = renderHook(() => useVoiceNoteRecorder());
+
+  try {
+    await act(() => result.current.start());
+    assert.equal(result.current.status, "recording");
+    const processor = processors.at(-1);
+    processor.onaudioprocess({
+      inputBuffer: { getChannelData: () => new Float32Array([0.2, -0.1]) },
+    });
+    let recording;
+    await act(async () => {
+      recording = await result.current.stop();
+    });
+    assert.equal(recording.file.type, "audio/wav");
+    assert.ok(recording.file.size > 44);
+  } finally {
+    globalThis.MediaRecorder = FakeRecorder;
+    dom.window.MediaRecorder = FakeRecorder;
     unmount();
     cleanup();
   }

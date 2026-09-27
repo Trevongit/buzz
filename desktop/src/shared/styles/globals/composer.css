@@ -319,3 +319,10 @@
   overflow: visible;
   opacity: 1;
 }
+
+.composer-ghost-complete {
+  color: var(--muted-foreground, #8b8d7e);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}

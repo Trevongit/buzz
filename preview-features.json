@@ -52,6 +52,12 @@
       "platforms": ["desktop"]
     },
     {
+      "id": "composerGhostComplete",
+      "name": "Ghost complete",
+      "description": "Dim suggestions as you type in the composer. Tab takes the guess, Escape drops it. Local phrases only, not a cloud model. Off until you turn it on.",
+      "platforms": ["desktop"]
+    },
+    {
       "id": "composerSpellcheck",
       "name": "Spelling suggestions",
       "description": "Underline words and offer suggestions as you type in the composer. Off until you turn it on. Code in a message is left alone.",

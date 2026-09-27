@@ -150,10 +150,15 @@ export function useComposerVoiceNote({
     recorderElement:
       recorder.status === "idle" ? null : (
         <VoiceNoteRecorder
+          autoBoost={recorder.autoBoost}
           elapsedSeconds={recorder.elapsedSeconds}
           levels={recorder.levels}
+          liveBoost={recorder.liveBoost}
+          manualGain={recorder.manualGain}
           maxDurationSeconds={VOICE_NOTE_MAX_DURATION_SECONDS}
+          onAutoBoostChange={recorder.setAutoBoost}
           onCancel={cancel}
+          onManualGainChange={recorder.setManualGain}
           processing={recorder.status === "processing"}
           requesting={recorder.status === "requesting"}
         />

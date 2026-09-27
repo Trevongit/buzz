@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { encodeVoiceNoteWav } from "./voiceNoteWav.ts";
+import {
+  autoBoostPcm,
+  encodeVoiceNoteWav,
+  VOICE_NOTE_TARGET_PEAK,
+} from "./voiceNoteWav.ts";
 
 test("encodeVoiceNoteWav emits canonical mono PCM with no metadata chunks", () => {
   const bytes = encodeVoiceNoteWav(
@@ -37,3 +41,33 @@ test("encodeVoiceNoteWav mixes stereo into mono", () => {
 test("encodeVoiceNoteWav rejects empty recordings", () => {
   assert.throws(() => encodeVoiceNoteWav([], 48_000), /empty voice note/);
 });
+
+test("autoBoostPcm lifts quiet speech toward the target peak", () => {
+  const quiet = new Float32Array([0.05, -0.04, 0.03]);
+  const { pcm, gain } = autoBoostPcm(quiet);
+  assert.ok(gain > 8);
+  assert.ok(Math.abs(pcm[0]) > 0.4);
+  assert.ok(peakOfBoosted(pcm) <= VOICE_NOTE_TARGET_PEAK + 0.001);
+});
+
+test("autoBoostPcm leaves already-loud speech alone", () => {
+  const loud = new Float32Array([0.9, -0.85]);
+  const { pcm, gain } = autoBoostPcm(loud);
+  assert.equal(gain, 1);
+  assert.equal(pcm, loud);
+});
+
+test("autoBoostPcm does not invent sound from silence", () => {
+  const silent = new Float32Array([0, 0, 0]);
+  const { pcm, gain } = autoBoostPcm(silent);
+  assert.equal(gain, 1);
+  assert.equal(pcm, silent);
+});
+
+function peakOfBoosted(pcm) {
+  let peak = 0;
+  for (const sample of pcm) {
+    peak = Math.max(peak, Math.abs(sample));
+  }
+  return peak;
+}

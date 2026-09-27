@@ -9,6 +9,16 @@ const manifest = JSON.parse(
   ),
 );
 
+test("ghost complete is a default-off desktop experiment", () => {
+  const feature = manifest.features.find(
+    ({ id }) => id === "composerGhostComplete",
+  );
+
+  assert.equal(feature.name, "Ghost complete");
+  assert.deepEqual(feature.platforms, ["desktop"]);
+  assert.equal(feature.defaultEnabled, undefined);
+});
+
 test("spelling suggestions is a default-off desktop experiment", () => {
   const feature = manifest.features.find(
     ({ id }) => id === "composerSpellcheck",
