@@ -318,6 +318,30 @@ fn hydrate_keys(records: &mut [ManagedAgentRecord]) {
     hydrate_keys_with(store, records);
 }
 
+fn missing_agent_keys() -> &'static Mutex<HashSet<String>> {
+    static KNOWN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    KNOWN.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn known_missing_agent_key(pubkey: &str) -> bool {
+    missing_agent_keys()
+        .lock()
+        .map(|set| set.contains(pubkey))
+        .unwrap_or(false)
+}
+
+fn remember_missing_agent_key(pubkey: &str) {
+    if let Ok(mut set) = missing_agent_keys().lock() {
+        set.insert(pubkey.to_string());
+    }
+}
+
+fn forget_missing_agent_key(pubkey: &str) {
+    if let Ok(mut set) = missing_agent_keys().lock() {
+        set.remove(pubkey);
+    }
+}
+
 fn should_log_missing_agent_key(pubkey: &str) -> bool {
     static WARNED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
     match WARNED.get_or_init(|| Mutex::new(HashSet::new())).lock() {
@@ -342,9 +366,18 @@ fn hydrate_keys_with(store: &impl KeyStore, records: &mut [ManagedAgentRecord]) 
             continue;
         }
         if record.private_key_nsec.is_empty() {
+            // A later list must not touch the keyring again for a leftover
+            // that already came back empty. That hydrate was freezing Agents.
+            if known_missing_agent_key(&record.pubkey) {
+                continue;
+            }
             match store.load(&agent_keyring_name(&record.pubkey)) {
-                Ok(Some(nsec)) => record.private_key_nsec = nsec,
+                Ok(Some(nsec)) => {
+                    forget_missing_agent_key(&record.pubkey);
+                    record.private_key_nsec = nsec;
+                }
                 Ok(None) => {
+                    remember_missing_agent_key(&record.pubkey);
                     // Settings → Agents hydrates on every list. Four leftover
                     // empty-key records used to reprint this line tens of
                     // thousands of times and freeze the webview. Once per
@@ -464,6 +497,7 @@ fn persist_agent_keys_with(store: &impl KeyStore, records: &mut [ManagedAgentRec
         // there is no verified entry to claim. This is a save-local clone, so
         // callers keep their keys regardless.
         if migrate_inline_key(store, record) == KeyMigration::Persisted {
+            forget_missing_agent_key(&record.pubkey);
             record.private_key_nsec.clear();
         }
     }

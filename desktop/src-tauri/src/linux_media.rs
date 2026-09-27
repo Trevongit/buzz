@@ -113,6 +113,29 @@ pub fn enable_media_capture<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
 #[cfg(not(target_os = "linux"))]
 pub fn enable_media_capture<R: tauri::Runtime>(_webview: &tauri::Webview<R>) {}
 
+/// Turn on WebKitGTK spell checking so a contenteditable composer with
+/// `spellcheck="true"` can draw underlines. The HTML attribute stays the
+/// opt-in; this only unlocks the engine, which is off by default on Linux.
+#[cfg(target_os = "linux")]
+pub fn enable_spell_checking<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
+    use webkit2gtk::{WebContextExt, WebViewExt};
+
+    let result = webview.with_webview(|platform_webview| {
+        let webview = platform_webview.inner();
+        if let Some(ctx) = WebViewExt::context(&webview) {
+            ctx.set_spell_checking_enabled(true);
+            ctx.set_spell_checking_languages(&["en_US"]);
+        }
+    });
+
+    if let Err(error) = result {
+        eprintln!("buzz-desktop: could not enable WebKitGTK spell checking: {error}");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn enable_spell_checking<R: tauri::Runtime>(_webview: &tauri::Webview<R>) {}
+
 #[cfg(test)]
 mod tests {
     use super::is_trusted_media_origin;

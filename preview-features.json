@@ -52,6 +52,12 @@
       "platforms": ["desktop"]
     },
     {
+      "id": "composerSpellcheck",
+      "name": "Spelling suggestions",
+      "description": "Underline words and offer suggestions as you type in the composer. Off until you turn it on. Code in a message is left alone.",
+      "platforms": ["desktop"]
+    },
+    {
       "id": "jevDoorman",
       "name": "Jev doorman",
       "description": "Cheap yes/no before waking a chair: need act, which mouth, public vs private. Opt-in. Does not store a TypeSafe key on the Agents page. The caller stays extras on this computer (env file, not git).",

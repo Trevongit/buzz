@@ -2156,9 +2156,25 @@ async fn run(cli: Cli) -> Result<(), CliError> {
 
     // Auth: private key is required for all relay operations.
     // The keypair IS the identity — no tokens, no other auth.
-    let private_key_str = cli.private_key.ok_or_else(|| {
-        CliError::Auth("BUZZ_PRIVATE_KEY is required (use --private-key or set env var)".into())
-    })?;
+    let private_key_str = if let Some(key) = cli.private_key {
+        key
+    } else if let Ok(path) = std::env::var("BUZZ_PRIVATE_KEY_FILE") {
+        std::fs::read_to_string(&path)
+            .map_err(|e| {
+                CliError::Auth(format!("could not read BUZZ_PRIVATE_KEY_FILE: {e}"))
+            })?
+            .trim()
+            .to_string()
+    } else {
+        return Err(CliError::Auth(
+            "BUZZ_PRIVATE_KEY is required (use --private-key, set the env var, or set BUZZ_PRIVATE_KEY_FILE)".into(),
+        ));
+    };
+    if private_key_str.is_empty() {
+        return Err(CliError::Auth(
+            "BUZZ_PRIVATE_KEY is required (use --private-key, set the env var, or set BUZZ_PRIVATE_KEY_FILE)".into(),
+        ));
+    }
     let keys = Keys::parse(&private_key_str)
         .map_err(|e| CliError::Key(format!("invalid BUZZ_PRIVATE_KEY: {e}")))?;
 

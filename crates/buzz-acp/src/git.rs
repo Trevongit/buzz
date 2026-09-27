@@ -74,8 +74,10 @@ impl GitEnvironment {
                 .map_err(|_| anyhow::anyhow!("Git PATH is not UTF-8"))?,
         ));
         env.push(("GIT_TERMINAL_PROMPT".into(), "0".into()));
-        // CLI flags must work even when the caller did not export these variables.
-        env.push(("BUZZ_PRIVATE_KEY".into(), secret.to_string()));
+        // The CLI reads BUZZ_PRIVATE_KEY_FILE (a path). The same secret is
+        // already in nostr.keyfile. A raw BUZZ_PRIVATE_KEY would be visible
+        // to any shell tool via /proc/self/environ.
+        env.push(("BUZZ_PRIVATE_KEY_FILE".into(), info.keyfile_path.clone()));
         env.push(("BUZZ_RELAY_URL".into(), relay_url.to_owned()));
         Ok(Self { _dir: dir, env })
     }
@@ -270,7 +272,11 @@ pub(crate) fn is_managed_env(name: &str) -> bool {
     name.starts_with("GIT_CONFIG_")
         || matches!(
             name,
-            "PATH" | "GIT_TERMINAL_PROMPT" | "BUZZ_PRIVATE_KEY" | "BUZZ_RELAY_URL"
+            "PATH"
+                | "GIT_TERMINAL_PROMPT"
+                | "BUZZ_PRIVATE_KEY"
+                | "BUZZ_PRIVATE_KEY_FILE"
+                | "BUZZ_RELAY_URL"
         )
 }
 

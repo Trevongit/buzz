@@ -153,7 +153,9 @@ export function SettingsView({
     });
   }, [myMembershipQuery.data, featureState]);
 
-  const [isLoaded, setIsLoaded] = React.useState(false);
+  // Start visible. A starved animation frame used to leave Voice and the
+  // rest of Settings at opacity 0 for the whole visit.
+  const [isLoaded, setIsLoaded] = React.useState(true);
   const [appVersion, setAppVersion] = React.useState<string | null>(null);
 
   React.useEffect(() => {

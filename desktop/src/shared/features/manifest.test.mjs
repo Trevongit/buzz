@@ -9,6 +9,16 @@ const manifest = JSON.parse(
   ),
 );
 
+test("spelling suggestions is a default-off desktop experiment", () => {
+  const feature = manifest.features.find(
+    ({ id }) => id === "composerSpellcheck",
+  );
+
+  assert.equal(feature.name, "Spelling suggestions");
+  assert.deepEqual(feature.platforms, ["desktop"]);
+  assert.equal(feature.defaultEnabled, undefined);
+});
+
 test("jev doorman is a default-off desktop experiment and does not mention Agents keys", () => {
   const feature = manifest.features.find(({ id }) => id === "jevDoorman");
 

@@ -35,6 +35,7 @@ import {
 } from "./macEmacsTextShortcuts";
 import type { MentionIdentity } from "./mentionClipboard";
 import { CUSTOM_EMOJI_NODE_NAME } from "./customEmojiNode";
+import { useFeatureEnabled } from "@/shared/features/useFeatureEnabled";
 import { useComposerCustomEmoji } from "./useComposerCustomEmoji";
 import { buildPlainTextProjection } from "./plainTextProjection";
 import { parseSnapshotClipboardHtml } from "./agentSnapshotClipboard";
@@ -182,6 +183,7 @@ export function useRichTextEditor({
 
   // Custom-emoji atom node wiring (config + src re-resolve). Kept in a sibling
   // hook so this file stays focused on generic editor setup.
+  const composerSpellcheck = useFeatureEnabled("composerSpellcheck");
   const customEmojiWiring = useComposerCustomEmoji(customEmoji);
   const messageLinkWiring = useComposerMessageLinks(messageLinkChannels);
 
@@ -405,7 +407,7 @@ export function useRichTextEditor({
           autocorrect: "off",
           class: `${MESSAGE_MARKDOWN_CLASS} min-h-0 resize-none overflow-y-hidden border-0 bg-transparent px-0 py-0 text-message font-normal tracking-normal text-foreground shadow-none focus-visible:ring-0 caret-foreground outline-hidden max-w-none`,
           "data-testid": "message-input",
-          spellcheck: "true",
+          spellcheck: composerSpellcheck ? "true" : "false",
         },
         // ArrowUp in an empty composer → edit your last message (Slack
         // parity). Handled here in ProseMirror's own DOM `keydown` hook —
@@ -870,6 +872,13 @@ export function useRichTextEditor({
     },
     [editor],
   );
+
+  React.useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    dom.setAttribute("spellcheck", composerSpellcheck ? "true" : "false");
+    dom.spellcheck = composerSpellcheck;
+  }, [composerSpellcheck, editor]);
 
   return {
     editor,

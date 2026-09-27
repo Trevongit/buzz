@@ -99,6 +99,9 @@ export function useObservedUnreadPersistence(
   const nativeFailedRef = React.useRef(false);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const queueRef = React.useRef<QueuedObservedUnreadEvent[]>([]);
+  // Relay replay can deliver the same event again. Remember ids so the
+  // native store is not written twice.
+  const seenNativeEventIdsRef = React.useRef(new Set<string>());
   const pendingMarkersRef = React.useRef(
     new Map<
       string,
@@ -547,6 +550,9 @@ export function useObservedUnreadPersistence(
     (scope: string, channelId?: string, event?: ObservedUnreadEvent) => {
       if (scopeLoadedRef.current !== scope) return;
       if (nativeRef.current && channelId && event) {
+        const seenKey = `${scope}:${event.id}`;
+        if (event.id && seenNativeEventIdsRef.current.has(seenKey)) return;
+        if (event.id) seenNativeEventIdsRef.current.add(seenKey);
         queueRef.current.push({ scope, event: { channelId, ...event } });
         if (timerRef.current !== null) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => {
