@@ -75,8 +75,9 @@ impl GitEnvironment {
         ));
         env.push(("GIT_TERMINAL_PROMPT".into(), "0".into()));
         // The CLI reads BUZZ_PRIVATE_KEY_FILE (a path). The same secret is
-        // already in nostr.keyfile. A raw BUZZ_PRIVATE_KEY would be visible
-        // to any shell tool via /proc/self/environ.
+        // already in nostr.keyfile. Wipe an inherited raw key so a parent
+        // BUZZ_PRIVATE_KEY cannot leak into the child.
+        env.push(("BUZZ_PRIVATE_KEY".into(), String::new()));
         env.push(("BUZZ_PRIVATE_KEY_FILE".into(), info.keyfile_path.clone()));
         env.push(("BUZZ_RELAY_URL".into(), relay_url.to_owned()));
         Ok(Self { _dir: dir, env })

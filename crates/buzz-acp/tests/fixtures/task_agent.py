@@ -7,8 +7,19 @@ import time
 
 mode = os.environ.get("TASK_AGENT_MODE", "normal")
 log = open(os.environ["TASK_AGENT_LOG"], "a", buffering=1)
+def resolved_key():
+    path = os.environ.get("BUZZ_PRIVATE_KEY_FILE")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read().strip()
+        except OSError:
+            pass
+    return os.environ.get("BUZZ_PRIVATE_KEY")
+
+
 log.write(json.dumps({"pid": os.getpid(), "relay": os.environ.get("BUZZ_RELAY_URL"),
-                      "key": os.environ.get("BUZZ_PRIVATE_KEY"),
+                      "key": resolved_key(),
                       "gitKeyfile": subprocess.check_output(["git", "config", "nostr.keyfile"], text=True).strip()}) + "\n")
 if mode.startswith("descendant"):
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])

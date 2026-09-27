@@ -9240,9 +9240,15 @@ mod build_mcp_servers_tests {
             names.contains(&"BUZZ_PRIVATE_KEY_FILE"),
             "missing BUZZ_PRIVATE_KEY_FILE; got {names:?}"
         );
+        let raw = server
+            .env
+            .iter()
+            .find(|e| e.name == "BUZZ_PRIVATE_KEY")
+            .map(|e| e.value.as_str())
+            .unwrap_or("");
         assert!(
-            !names.contains(&"BUZZ_PRIVATE_KEY"),
-            "raw BUZZ_PRIVATE_KEY must not reach the MCP server; got {names:?}"
+            raw.is_empty(),
+            "raw BUZZ_PRIVATE_KEY must stay empty; got {raw:?}"
         );
     }
 

@@ -2156,7 +2156,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
 
     // Auth: private key is required for all relay operations.
     // The keypair IS the identity — no tokens, no other auth.
-    let private_key_str = if let Some(key) = cli.private_key {
+    let private_key_str = if let Some(key) = cli.private_key.filter(|k| !k.is_empty()) {
         key
     } else if let Ok(path) = std::env::var("BUZZ_PRIVATE_KEY_FILE") {
         std::fs::read_to_string(&path)
