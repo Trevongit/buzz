@@ -14,6 +14,57 @@ EVENT, REQ, REST, media, git, search, workflow, or pub/sub handling. Unknown
 hosts fail closed, and NIP-98/API-token stamps must agree with the host-derived
 community rather than overriding it.
 
+Deployment-root community management uses operator-signed NIP-98 HTTP requests.
+`POST /operator/communities/delete` accepts only an exact normalized, archived
+community whose asserted pubkey is its sole current owner. The caller supplies the
+request UUID as the stable correlation/idempotency identity; the durable row
+records operator-attested owner intent, mediating operator, and acknowledgement
+version. Admission returns `202` at the `submitted` stage and performs no
+inventory, approval,
+quiescing, object-store access, or deletion execution synchronously. While that
+non-aborted request exists, unarchive and ownership transfer conflict and owner
+management lists suppress the archived row. Replaying the same UUID converges
+to its current stage; a different UUID conflicts with the existing one-active-
+request invariant until that request is aborted.
+
+Owner consent on this path is asserted, not proven. The mediating operator
+authenticates the owner and collects the deletion acknowledgement out of band,
+upstream of the relay; the request itself carries only the operator's NIP-98
+signature. The relay verifies operator authority and that the asserted pubkey
+is the community's sole current owner, then records the owner pubkey, mediating
+operator pubkey, and acknowledgement version as durable provenance for that
+upstream ceremony. No owner-signed attestation is required or checked, and
+owners have no self-service cancellation. Recovery is a privileged abort,
+which stays open across the reversible `submitted`, `inventoried`, `approved`,
+and `fenced` stages — releasing the request fence while leaving the community
+archived — and closes from `drained` onward, when tenant-state destruction may
+have begun.
+
+Manual operator handoff converges on an admitted owner request only when
+`buzz-admin deletions submit --requested-by` repeats the owner pubkey recorded
+on the row. Owner provenance pins `requested_by` to `owner_pubkey`, so passing
+the operator's own pubkey does not converge — it conflicts with the existing
+one-active-request invariant instead.
+
+The privileged one-shot `buzz-admin deletions drain` process gives already-
+approved work priority. When none is ready, it may claim only an
+operator-attested owner-origin `submitted` request under the same durable
+generation lease used for execution, inventory it with lease-loss cancellation,
+and atomically freeze the inventory plus a digest-bound `owner_automatic`
+approval. The mediating operator remains the approval actor; the owner
+acknowledgement is pre-inventory
+intent, not a claim that the owner reviewed the digest. The retained lease then
+enters the unchanged approved-request executor. Operator-origin requests never
+auto-progress and still require explicit inventory and approval. Owner
+admission still has no owner-facing cancellation or grace period; the
+privileged abort described above remains the recovery path.
+
+Ownership is mutable only while a community is active. Archiving freezes the
+current owner. Normal transfer and deployment-root legacy convergence take the
+same community-row lock as owner-deletion admission, then reject archived,
+quiescing, deleted, or deletion-pending rotation without changing membership.
+Initial owner bootstrap for a newly created community remains supported.
+
 Buzz is a Rust monorepo, licensed Apache 2.0 under Block, Inc.
 
 ---
@@ -263,6 +314,8 @@ Presence events skip membership checks and use local-only fan-out. Multi-node pr
 5. LOCAL FAN-OUT     — sub_registry.fan_out → conn_manager.send_to
 ```
 
+Typing indicators (kind 20002) are also accepted through HTTP `POST /events`, for clients that sign events but hold no WebSocket, such as app-hosted agents. The HTTP route requires an `h` tag, checks bans/timeouts and the community write fence, then runs steps 1–5 above.
+
 Ephemeral events are never stored in Postgres and never appear in REQ historical queries.
 
 ### Handler Semaphore
@@ -411,7 +464,7 @@ All database access. Uses `sqlx::query()` (runtime, not compile-time macros) —
 | `channel.rs` | Channel CRUD, membership management, role enforcement (transactional) |
 | `feed.rs` | `query_mentions` (INNER JOIN event_mentions), `query_needs_action`, `query_activity` |
 | `workflow.rs` | Full workflow/run/approval CRUD; SHA-256 hashed approval tokens |
-| `partition.rs` | Monthly range partitioning for `events` and `delivery_log` tables |
+| `partition.rs` | Monthly range partitioning for `events` and `delivery_log` tables: read-only catalog audit plus advisory-locked, time-bounded maintenance that creates uncovered months and advances an empty catch-all (`partition/maintenance.rs`) |
 | `dm.rs` | DM channel management |
 | `reaction.rs` | Reaction storage and retrieval |
 | `thread.rs` | Thread/reply tracking |
@@ -432,6 +485,40 @@ All database access. Uses `sqlx::query()` (runtime, not compile-time macros) —
 - `query_mentions` uses `INNER JOIN event_mentions` — normalized table with composite index on `(pubkey_hex, created_at)`.
 - Approval tokens: `create_approval` receives the raw token and hashes it internally with SHA-256.
 - DDL injection protection in partition manager: allowlist of table names + strict suffix/date validators.
+
+### Supported Writer Contract (transition state)
+
+The repository is moving toward a **supported-writer contract** where relay-owned
+write APIs provide the only supported mutation path for tenant data. The current
+shape is an explicit transition, not a flag day:
+
+- **Trajectory:** converge from trigger/function/FK-enforced fencing toward
+  application-owned transaction protocols, while keeping existing DB backstops
+  in place until coverage and fleet gates are proven.
+- **Community fence (transition foundation):** runtime admission APIs now offer
+  one shared community deletion lock per transaction, while deletion lifecycle
+  transitions take the matching exclusive lock. A supported serving transaction
+  never spans communities; unmigrated paths still rely on trigger/function
+  backstops.
+- **Replica floor (transition foundation):** runtime now provides a shared
+  replica-floor lock helper for compliant channel-event writers, and the writer
+  probe handshake takes the exclusive counterpart before sampling `S`, scanning
+  activity, and committing the heartbeat token last. `probe_once` remains the
+  sole token/fence-wall publication path; there is no separately persisted active
+  floor cutoff. Commit-time trigger+GUC enforcement remains authoritative for all
+  paths.
+- **Dual enforcement (current):** application-owned lock+precheck paths run in
+  front of the existing trigger/function enforcement; commit-time trigger checks
+  remain authoritative during this phase. Removing those backstops is a separate
+  gated migration, not part of the lock foundation.
+- **Role separation:** relay/runtime code owns admission and lock protocols;
+  operator maintenance/backfill workflows must either use those protocols or run
+  under explicit reviewed procedures that keep routing fences closed.
+- **Unsupported shape:** direct owner SQL that bypasses supported transaction and
+  lock protocols is not a supported write path.
+- **Fleet gates and reconciliation:** startup/fence probes verify guard catalog +
+  behavior, pgschema bootstraps run reconciliation, and lock/pool metrics remain
+  the operational evidence path for rollout safety.
 
 **Does NOT:** cache queries, implement connection pooling logic (delegated to sqlx), or make network calls outside Postgres.
 
@@ -644,7 +731,7 @@ pub enum AuthState { Pending { challenge: String }, Authenticated(AuthContext), 
 | GET | `/.well-known/nostr.json` | NIP-05 identity |
 | GET | `/health` | Health check |
 | GET | `/_liveness` | Liveness probe |
-| GET | `/_readiness` | Readiness probe |
+| GET | `/_readiness` | Readiness probe — local process lifecycle only |
 | POST | `/events` | Submit a signed Nostr event over HTTP (same ingest path as WebSocket `EVENT`) |
 | POST | `/query` | Query Nostr events over HTTP with NIP-01 filters |
 | POST | `/count` | Count Nostr events over HTTP with NIP-45 filters |
@@ -713,9 +800,22 @@ Subcommands:
 | `remove-member` | Remove a pubkey from the relay membership list (`--pubkey`, optional `--role` guard); publishes kind:13534 roster |
 | `list-members` | List all relay members |
 | `generate-key` | Generate a new Nostr keypair (for bootstrapping) |
+| `deletions` | Submit, inspect, approve, abort, unblock, run, or drain durable whole-community deletion requests |
+| `storage-snapshot` | Run one isolated S3 accounting scan and publish its complete Postgres snapshot |
 | `reconcile-channels` | Emit kind:39000/39002 discovery events for channels missing them (idempotent) |
 
 The `buzz-admin` binary is shipped in the relay Docker image (`/usr/local/bin/buzz-admin`) and is the recommended way to manage relay membership in production. Use `./run.sh add-member`, `./run.sh remove-member`, and `./run.sh list-members` in Docker Compose deployments.
+
+Kubernetes deployments may schedule the typed one-shot
+`buzz-admin deletions drain` command directly. The pod owns its bounded
+Postgres/Redis clients and S3 client; it does not call relay HTTP. Durable
+requests, leases, retry timing, and checkpoints in Postgres are the handoff and
+execution authority, so Kubernetes uses `Forbid` concurrency and zero Job
+retries rather than introducing a second retry system.
+The same drain first claims runnable approved work and, only when none exists,
+may prepare one owner-origin submission. Inventory, automatic approval, and
+execution share one generation lease and the existing retry/block/checkpoint
+records; there is no preparation worker, command, queue, or retry authority.
 
 ---
 
@@ -802,7 +902,7 @@ Docker Compose provides the full local development stack. All services include h
 | Postgres | `postgres:17-alpine` | 5432 | Primary event store — events, channels, tokens, workflows, audit; full-text search (`search_tsv` GIN) |
 | Redis | `redis:7-alpine` | 6379 | Pub/sub fan-out, presence (SET EX), typing (sorted sets) |
 | Adminer | `adminer` | 8082 | DB web UI (dev only) |
-| MinIO | `quay.io/minio/minio` | 9000 (API), 9001 (console) | S3-compatible object storage (media) |
+| Silo (MinIO fork) | `pgsty/silo` | 9000 (API), 9001 (console) | S3-compatible object storage (media) |
 | Prometheus | `prom/prometheus` | 9090 | Metrics collection |
 
 ### Postgres Schema (key tables)

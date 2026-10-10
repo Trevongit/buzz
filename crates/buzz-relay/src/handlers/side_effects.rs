@@ -231,41 +231,42 @@ async fn disable_departed_member_workflows(
 }
 
 /// Close every live channel-scoped subscription on `conn_id`, removing them from
-/// the connection's local map and sending `CLOSED restricted` for each.
-async fn evict_conn_channel_subscriptions(
+/// the connection's local map and sending `CLOSED restricted` for each. Runs
+/// under the connection's lifecycle lock so a concurrent same-ID claim is
+/// either fully before (and revoked) or fully after (and untouched).
+pub(crate) async fn evict_conn_channel_subscriptions(
     tenant: &TenantContext,
     state: &Arc<AppState>,
     channel_id: Uuid,
     conn_id: uuid::Uuid,
 ) {
+    // No map means the connection already ran its final cleanup, which
+    // removed its registry entries under this same lock.
+    let Some(subscriptions) = state.conn_manager.subscriptions_for(conn_id) else {
+        return;
+    };
+    let mut conn_subscriptions = subscriptions.lock().await;
     let removed = state.sub_registry.remove_channel_subscriptions_scoped(
         tenant.community(),
         conn_id,
         channel_id,
     );
-    if removed.is_empty() {
-        return;
-    }
-
-    if let Some(subscriptions) = state.conn_manager.subscriptions_for(conn_id) {
-        let mut conn_subscriptions = subscriptions.lock().await;
-        for update in &removed {
-            if update.removed {
-                conn_subscriptions.remove(&update.sub_id);
-            }
-        }
-    }
-
     for update in removed {
+        // A multi-channel sub keeps its other channels (and its map token).
         state
             .pubsub
             .release_topic(tenant, buzz_pubsub::EventTopic::Channel(channel_id))
             .await;
         if update.removed {
-            let _ = state.conn_manager.send_to(
+            conn_subscriptions.remove(&update.sub_id);
+            if !state.conn_manager.send_to(
                 conn_id,
                 RelayMessage::closed(&update.sub_id, "restricted: channel access revoked"),
-            );
+            ) {
+                // Terminal frame lost — cancel so the subscription is not
+                // silently orphaned on a congested connection.
+                state.conn_manager.cancel_conn(conn_id);
+            }
         }
     }
 }
@@ -402,6 +403,11 @@ pub async fn validate_standard_deletion_event(
             .await?
             .ok_or_else(|| anyhow::anyhow!("target event not found"))?;
 
+        if matches!(target_event.event.kind.as_u16(), 45010 | 45011) {
+            anyhow::bail!(
+                "artifacts cannot be deleted with kind 5; use op=delete or kind 9005 redaction"
+            );
+        }
         let target_author =
             effective_message_author(&target_event.event, &state.relay_keypair.public_key());
         if target_author != actor_bytes
@@ -737,6 +743,11 @@ pub async fn validate_admin_event(
                     return Err(anyhow::anyhow!("target event has no channel"));
                 }
                 _ => {} // Same channel — OK
+            }
+            if target_event.event.kind.as_u16() == 45011 {
+                return Err(anyhow::anyhow!(
+                    "artifact removal markers cannot be deleted"
+                ));
             }
 
             // Check if actor is the event author.
@@ -1116,20 +1127,17 @@ fn group_members_tags(group_id: &str, members: &[MemberRecord]) -> anyhow::Resul
 }
 
 async fn store_group_members_event(
-    tenant: &TenantContext,
     state: &Arc<AppState>,
-    channel_id: Uuid,
     member_snapshot: &mut buzz_db::channel::LockedMemberSnapshot,
 ) -> anyhow::Result<Option<buzz_core::StoredEvent>> {
-    let group_id = channel_id.to_string();
+    let group_id = member_snapshot.channel_id().to_string();
     let tags = group_members_tags(&group_id, &member_snapshot.members)?;
-    let relay_pubkey = state.relay_keypair.public_key().to_bytes();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
     let ts = member_snapshot
-        .latest_member_event_timestamp(tenant.community(), channel_id, &relay_pubkey)
+        .latest_member_event_timestamp()
         .await?
         .map(|timestamp| timestamp + 1)
         .unwrap_or(now)
@@ -1147,9 +1155,7 @@ async fn store_group_members_event(
         .custom_created_at(nostr::Timestamp::from(ts))
         .sign_with_keys(&state.relay_keypair)
         .map_err(|error| anyhow::anyhow!("failed to sign member snapshot: {error}"))?;
-    let (stored, inserted) = member_snapshot
-        .replace_member_event(tenant.community(), channel_id, &event)
-        .await?;
+    let (stored, inserted) = member_snapshot.replace_member_event(&event).await?;
     Ok(inserted.then_some(stored))
 }
 
@@ -1288,8 +1294,7 @@ pub async fn emit_group_discovery_events(
         .db
         .lock_member_snapshot(tenant.community(), channel_id, &relay_pubkey)
         .await?;
-    let stored_members =
-        store_group_members_event(tenant, state, channel_id, &mut member_snapshot).await?;
+    let stored_members = store_group_members_event(state, &mut member_snapshot).await?;
     member_snapshot.release().await?;
     dispatch_group_members_event(tenant, state, stored_members, &relay_pubkey_hex).await;
 
@@ -3101,6 +3106,15 @@ pub enum Nip43ReconciliationPurpose {
     Maintenance,
 }
 
+/// Per-item counts from one snapshot reconciliation sweep.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReconcileSummary {
+    /// Snapshots rebuilt and republished.
+    pub repaired: usize,
+    /// Items whose reconciliation failed; each was logged and counted.
+    pub failed: usize,
+}
+
 /// Preserve the original maintenance reconciliation API for downstream callers.
 #[deprecated(note = "use reconcile_nip43_membership_snapshots_with_purpose")]
 pub async fn reconcile_nip43_membership_snapshots(state: &Arc<AppState>) -> anyhow::Result<usize> {
@@ -3109,20 +3123,34 @@ pub async fn reconcile_nip43_membership_snapshots(state: &Arc<AppState>) -> anyh
         Nip43ReconciliationPurpose::Maintenance,
     )
     .await
+    .map(|summary| summary.repaired)
 }
 
 /// Reconcile NIP-43 snapshots with explicit startup or maintenance attribution.
 pub async fn reconcile_nip43_membership_snapshots_with_purpose(
     state: &Arc<AppState>,
     purpose: Nip43ReconciliationPurpose,
-) -> anyhow::Result<usize> {
+) -> anyhow::Result<ReconcileSummary> {
     let communities = match purpose {
         Nip43ReconciliationPurpose::Bootstrap => state.db.bootstrap_community_hosts().await?,
-        Nip43ReconciliationPurpose::Maintenance => state.db.usage_community_hosts().await?,
+        Nip43ReconciliationPurpose::Maintenance => state.db.active_community_hosts().await?,
     };
     let mut reconciled = 0usize;
+    let mut failed = 0usize;
+    let total = communities.len();
+    let started = std::time::Instant::now();
 
-    for community in communities {
+    for (index, community) in communities.into_iter().enumerate() {
+        if nip43_progress_due(purpose, index, total) {
+            info!(
+                done = index,
+                total,
+                republished = reconciled,
+                failed,
+                elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                "NIP-43 startup reconciliation progress"
+            );
+        }
         let community_id = buzz_core::CommunityId::from_uuid(community.id);
         let host = community.host;
         let result = async {
@@ -3160,6 +3188,7 @@ pub async fn reconcile_nip43_membership_snapshots_with_purpose(
             Ok(true) => reconciled += 1,
             Ok(false) => {}
             Err(error) => {
+                failed += 1;
                 metrics::counter!("buzz_nip43_membership_reconciliation_failures_total")
                     .increment(1);
                 warn!(%community_id, %host, %error, "NIP-43 membership reconciliation failed");
@@ -3168,7 +3197,24 @@ pub async fn reconcile_nip43_membership_snapshots_with_purpose(
     }
 
     metrics::counter!("buzz_nip43_membership_reconciliations_total").increment(reconciled as u64);
-    Ok(reconciled)
+    Ok(ReconcileSummary {
+        repaired: reconciled,
+        failed,
+    })
+}
+
+/// Communities between startup NIP-43 reconciliation progress logs.
+const NIP43_BOOTSTRAP_PROGRESS_INTERVAL: usize = 5_000;
+
+/// Whether a sweep logs progress before processing community `done` of
+/// `total`. Only the startup sweep logs (the 60 s maintenance sweep stays
+/// quiet): every [`NIP43_BOOTSTRAP_PROGRESS_INTERVAL`] communities, never at
+/// the start (nothing done yet) and never past the end.
+fn nip43_progress_due(purpose: Nip43ReconciliationPurpose, done: usize, total: usize) -> bool {
+    matches!(purpose, Nip43ReconciliationPurpose::Bootstrap)
+        && done > 0
+        && done < total
+        && done.is_multiple_of(NIP43_BOOTSTRAP_PROGRESS_INTERVAL)
 }
 
 /// Publish a kind:13534 relay membership list event (NIP-43).
@@ -3304,7 +3350,7 @@ pub async fn publish_nip43_member_removed(
 /// never resolves a channel against a neighboring tenant.
 pub async fn reconcile_large_channel_member_snapshots(
     state: &Arc<AppState>,
-) -> anyhow::Result<usize> {
+) -> anyhow::Result<ReconcileSummary> {
     const LEGACY_ROSTER_LIMIT: i64 = 1_000;
 
     let relay_pubkey = state.relay_keypair.public_key();
@@ -3317,6 +3363,7 @@ pub async fn reconcile_large_channel_member_snapshots(
         .await?;
     let relay_pubkey_hex = relay_pubkey.to_hex();
     let mut reconciled = 0usize;
+    let mut failed = 0usize;
 
     for candidate in candidates {
         let result = async {
@@ -3329,8 +3376,7 @@ pub async fn reconcile_large_channel_member_snapshots(
                 .lock_member_snapshot(candidate.community_id, channel_id, &relay_pubkey.to_bytes())
                 .await?;
             let tenant = TenantContext::resolved(candidate.community_id, candidate.host.clone());
-            let stored_members =
-                store_group_members_event(&tenant, state, channel_id, &mut member_snapshot).await?;
+            let stored_members = store_group_members_event(state, &mut member_snapshot).await?;
             member_snapshot.release().await?;
             dispatch_group_members_event(&tenant, state, stored_members, &relay_pubkey_hex).await;
             Ok::<bool, anyhow::Error>(true)
@@ -3341,6 +3387,7 @@ pub async fn reconcile_large_channel_member_snapshots(
             Ok(true) => reconciled += 1,
             Ok(false) => {}
             Err(error) => {
+                failed += 1;
                 metrics::counter!("buzz_channel_roster_reconciliation_failures_total").increment(1);
                 warn!(
                     community_id = %candidate.community_id,
@@ -3354,7 +3401,10 @@ pub async fn reconcile_large_channel_member_snapshots(
     }
 
     metrics::counter!("buzz_channel_roster_reconciliations_total").increment(reconciled as u64);
-    Ok(reconciled)
+    Ok(ReconcileSummary {
+        repaired: reconciled,
+        failed,
+    })
 }
 
 /// Reconcile channels that exist in the DB but don't have kind:39000 events.
@@ -3789,6 +3839,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn nip43_progress_logs_every_interval_inside_the_startup_sweep_only() {
+        use Nip43ReconciliationPurpose::{Bootstrap, Maintenance};
+        const STEP: usize = NIP43_BOOTSTRAP_PROGRESS_INTERVAL;
+        let total = 79_942;
+        let due: Vec<usize> = (0..total)
+            .filter(|&done| nip43_progress_due(Bootstrap, done, total))
+            .collect();
+        assert_eq!(due.first(), Some(&STEP));
+        assert_eq!(due.len(), total / STEP);
+        assert!(due.iter().all(|done| done.is_multiple_of(STEP)));
+
+        // (purpose, done, total, expected)
+        for (purpose, done, total, expected) in [
+            (Bootstrap, STEP, total, true),
+            (Maintenance, STEP, total, false),
+            (Bootstrap, 0, total, false),
+            (Bootstrap, STEP - 1, total, false),
+            (Bootstrap, STEP, STEP, false),
+            (Bootstrap, STEP, STEP + 1, true),
+        ] {
+            assert_eq!(
+                nip43_progress_due(purpose, done, total),
+                expected,
+                "done={done} total={total} bootstrap={}",
+                matches!(purpose, Bootstrap)
+            );
+        }
+        assert!(!(0..total).any(|done| nip43_progress_due(Maintenance, done, total)));
+    }
+
+    #[test]
     fn workflow_deletion_retry_matches_authorized_dispatch() {
         let keys = nostr::Keys::generate();
         let workflow = format!("30620:{}:workflow", keys.public_key());
@@ -3948,5 +4029,137 @@ mod tests {
         }];
 
         assert!(actor_is_channel_owner_or_admin(&members, &actor));
+    }
+
+    mod postgres_tests {
+        use super::*;
+        use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+
+        async fn insert_community(pool: &sqlx::PgPool) -> Uuid {
+            let id = Uuid::new_v4();
+            sqlx::query("INSERT INTO communities (id, host) VALUES ($1, $2)")
+                .bind(id)
+                .bind(format!("nip43-sweep-{}.example", id.simple()))
+                .execute(pool)
+                .await
+                .expect("insert community fixture");
+            id
+        }
+
+        async fn set_deletion_state(pool: &sqlx::PgPool, id: Uuid, state: &str) {
+            let mut tx = pool.begin().await.expect("begin lifecycle fixture");
+            sqlx::query(
+                "SELECT set_config('buzz.deletion_executor_community', $1, true), \
+                        set_config('buzz.deletion_fence_generation', '0', true)",
+            )
+            .bind(id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("authorize lifecycle fixture");
+            sqlx::query(
+                "UPDATE communities SET deletion_state = $2, \
+                        deleted_at = CASE WHEN $2 = 'tombstone' THEN now() END \
+                 WHERE id = $1",
+            )
+            .bind(id)
+            .bind(state)
+            .execute(&mut *tx)
+            .await
+            .expect("set lifecycle state");
+            tx.commit().await.expect("commit lifecycle fixture");
+        }
+
+        async fn membership_snapshots(pool: &sqlx::PgPool, id: Uuid) -> i64 {
+            sqlx::query_scalar("SELECT count(*) FROM events WHERE community_id = $1 AND kind = $2")
+                .bind(id)
+                .bind(KIND_NIP43_MEMBERSHIP_LIST as i32)
+                .fetch_one(pool)
+                .await
+                .expect("count membership snapshots")
+        }
+
+        fn reconciliation_failures(recorder: &DebuggingRecorder) -> u64 {
+            recorder
+                .snapshotter()
+                .snapshot()
+                .into_vec()
+                .into_iter()
+                .filter(|(key, _, _, _)| {
+                    key.key().name() == "buzz_nip43_membership_reconciliation_failures_total"
+                })
+                .map(|(_, _, _, value)| match value {
+                    DebugValue::Counter(value) => value,
+                    other => panic!("reconciliation failures must be a counter: {other:?}"),
+                })
+                .sum()
+        }
+
+        /// Regression for #7558 on the worker path: repeated NIP-43
+        /// maintenance sweeps reconcile the active community once and never
+        /// hand archived, quiescing, fenced, or tombstoned communities to the
+        /// publisher, so the fence never rejects a write and nothing warns.
+        #[tokio::test]
+        #[ignore = "requires Postgres"]
+        async fn maintenance_sweep_skips_archived_and_deleted_communities() {
+            let pool = sqlx::PgPool::connect(&crate::test_support::database_url())
+                .await
+                .expect("connect to test DB");
+            let state = crate::state::tests::test_state_with_database_pool(pool.clone()).await;
+
+            let active = insert_community(&pool).await;
+            let archived = insert_community(&pool).await;
+            let quiescing = insert_community(&pool).await;
+            let fenced = insert_community(&pool).await;
+            let tombstone = insert_community(&pool).await;
+            sqlx::query("UPDATE communities SET archived_at = now() WHERE id = $1")
+                .bind(archived)
+                .execute(&pool)
+                .await
+                .expect("archive fixture");
+            set_deletion_state(&pool, quiescing, "quiescing").await;
+            set_deletion_state(&pool, fenced, "fenced").await;
+            set_deletion_state(&pool, tombstone, "tombstone").await;
+
+            let recorder = DebuggingRecorder::new();
+            let _guard = metrics::set_default_local_recorder(&recorder);
+            for sweep in 0..3 {
+                reconcile_nip43_membership_snapshots_with_purpose(
+                    &state,
+                    Nip43ReconciliationPurpose::Maintenance,
+                )
+                .await
+                .unwrap_or_else(|e| panic!("maintenance sweep {sweep}: {e}"));
+            }
+
+            assert_eq!(
+                reconciliation_failures(&recorder),
+                0,
+                "no community may fail reconciliation on any sweep"
+            );
+            assert_eq!(
+                membership_snapshots(&pool, active).await,
+                1,
+                "the active community is reconciled once and then left alone"
+            );
+            for (label, id) in [
+                ("archived", archived),
+                ("quiescing", quiescing),
+                ("fenced", fenced),
+                ("tombstone", tombstone),
+            ] {
+                assert_eq!(
+                    membership_snapshots(&pool, id).await,
+                    0,
+                    "{label} community must not receive a maintenance write"
+                );
+            }
+            let tombstone_state: String =
+                sqlx::query_scalar("SELECT deletion_state FROM communities WHERE id = $1")
+                    .bind(tombstone)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("tombstone row is retained");
+            assert_eq!(tombstone_state, "tombstone");
+        }
     }
 }
