@@ -27,6 +27,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# A chosen Off is remembered. A timeout or a crash leaves no row, so this start proceeds.
+if [[ -n "$SEAT" ]] && python3 /home/trev/PROJECTS/buzz-control-room/scripts/watcher_hold.py held inbox "$SEAT"; then
+  echo "Buzz inbox held. You turned this off. It stays off until you turn it on."
+  exit 0
+fi
+
 visitor_load_seat_env "$SEAT"
 LIMIT="$(visitor_bound_limit "$LIMIT" 100)"
 TICK="$(visitor_bound_limit "$TICK" 300)"
@@ -42,26 +48,32 @@ REQUIRE="${VISITOR_REQUIRE_MENTION:-1}"
 COOLDOWN="${VISITOR_COOLDOWN_SECS:-30}"
 STATE="${DIR}/visitor-feed.json"
 DM_FILE="$(visitor_dm_list "$SEAT")"
-dm_ids=""
-if [[ -f "$DM_FILE" ]]; then
-  dm_ids="$(tr '\n' ',' <"$DM_FILE" | sed 's/,$//')"
-fi
 OWNED_FILE="${DIR}/owned-channels"
-owned_ids=""
-if [[ -f "$OWNED_FILE" ]]; then
-  owned_ids="$(tr '\n' ',' <"$OWNED_FILE" | sed 's/,$//')"
-fi
+
+id_list() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  tr '\n' ',' <"$f" | sed 's/,$//'
+}
 
 poll_once() {
-  local since json out
+  local since json out dm_ids owned_ids
+  # Reread every tick. A list written after the ear starts must still count.
+  dm_ids="$(id_list "$DM_FILE")"
+  owned_ids="$(id_list "$OWNED_FILE")"
   since="$(python3 -c 'import json,sys; from pathlib import Path
-p=Path(sys.argv[1])
-st={}
-if p.is_file():
-    try: st=json.loads(p.read_text())
-    except Exception: st={}
-print(int(st.get("since") or 0))
-' "$STATE")"
+p=Path(sys.argv[1]); now=int(sys.argv[2])
+if not p.is_file():
+    print(now); raise SystemExit
+try:
+    st=json.loads(p.read_text())
+    if not isinstance(st, dict):
+        raise ValueError("not a dict")
+except Exception:
+    st={"since": now, "seen_ids": [], "ear": "feed", "last_wake": 0}
+    p.write_text(json.dumps(st, indent=2)+"\n")
+print(int(st.get("since") or now))
+' "$STATE" "$(date -u +%s)")"
   json="$(visitor_run feed get --since "$since" --limit "$LIMIT" --types "$TYPES" 2>/dev/null || true)"
   json="${json#"${json%%[![:space:]]*}"}"
   if [[ -z "$json" || "${json:0:1}" != '[' ]]; then
@@ -69,7 +81,8 @@ print(int(st.get("since") or 0))
   fi
   out="$(printf '%s\n' "$json" | python3 "${VISITOR_ROOT}/gate.py" feed-wakes \
       --state "$STATE" --self "$SELF" --names "$NAMES" --role "$ROLE" \
-      --require "$REQUIRE" --dm-ids "$dm_ids" --owned-ids "$owned_ids" 2>/dev/null || true)"
+      --require "$REQUIRE" --dm-ids "$dm_ids" --owned-ids "$owned_ids" \
+      --cooldown "${VISITOR_COOLDOWN_SECS:-30}" 2>/dev/null || true)"
   python3 - "$out" "$SEAT" "${VISITOR_JEV:-0}" "${VISITOR_ROOT}" "${VISITOR_OWNER_PK:-}" <<'PY'
 import json, sys
 from pathlib import Path
@@ -78,6 +91,11 @@ try:
 except json.JSONDecodeError:
     blob = {}
 seat = sys.argv[2]
+sys.path.insert(0, sys.argv[4])
+try:
+    from wake_log import note_wake
+except Exception:
+    note_wake = None
 jev_on = (sys.argv[3] or "0").strip().lower() in ("1", "true", "yes", "on")
 jev_root = Path(sys.argv[4]) / "jev"
 owner_pk = sys.argv[5] if len(sys.argv) > 5 else ""
@@ -139,9 +157,17 @@ for w in blob.get("wakes") or []:
             f"(extras did not spend a turn)"
         )
         continue
+    replay = ""
+    if note_wake is not None and eid:
+        try:
+            mark = note_wake(seat, eid)
+        except Exception:
+            mark = {}
+        if mark.get("kind") == "replay" and mark.get("reply_id"):
+            replay = f" replay=1 answered={mark['reply_id']}"
     print(
         f"VISITOR_WAKE match seat={seat} room={cid} channel={cid} "
-        f"reason={reason} from={frm} id={eid} preview={prev}"
+        f"reason={reason} from={frm} id={eid}{replay} preview={prev}"
     )
     # Grok Build monitor() matches this prefix (same as buzz-watcher.sh).
     print(

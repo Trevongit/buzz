@@ -6,6 +6,21 @@ export async function suggestGhostFromLocalModel(
 ): Promise<string> {
   const prompt = beforeCursor.trim();
   if (prompt.length < 8) return "";
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const bridged = await invoke<string>("ghost_complete_local", {
+      before: prompt,
+    });
+    if (bridged?.trim()) {
+      const text = bridged.replace(/\s+/g, " ").trim();
+      if (text && text.length <= 80) {
+        return text.startsWith(" ") ? text : ` ${text}`;
+      }
+    }
+  } catch {
+    // Fall through to Ollama if the Desktop bridge is missing.
+  }
+  if (signal.aborted) return "";
   const tags = await fetch(`${OLLAMA}/api/tags`, { signal });
   if (!tags.ok) return "";
   const body = (await tags.json()) as { models?: { name?: string }[] };
@@ -17,7 +32,7 @@ export async function suggestGhostFromLocalModel(
     signal,
     body: JSON.stringify({
       model,
-      prompt: `Continue this chat draft with at most eight words. Output only the continuation, no quotes.\n\n${prompt}`,
+      prompt: `Finish the same sentence with at most eight words. Do not comment. Do not reply. Do not explain. Output only the missing words.\n\n${prompt}`,
       stream: false,
       options: { num_predict: 16, temperature: 0.1 },
     }),

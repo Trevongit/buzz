@@ -38,6 +38,7 @@ import {
   type LinkSelectionInfo,
   useRichTextEditor,
 } from "@/features/messages/lib/useRichTextEditor";
+import { getMountedEditorDom } from "@/features/messages/ui/selectionFormattingTrayEditorDom";
 import { useLinkEditor } from "@/features/messages/lib/useLinkEditor";
 import { useComposerSpoilerParticles } from "@/features/messages/lib/useComposerSpoilerParticles";
 import { useTypingBroadcast } from "@/features/messages/useTypingBroadcast";
@@ -1000,7 +1001,7 @@ function MessageComposerImpl({
             effectiveDraftKeyRef.current === effectiveDraftKey &&
             richText.editor &&
             !richText.editor.isDestroyed &&
-            richText.editor.view.dom.isConnected
+            getMountedEditorDom(richText.editor)
           ) {
             richText.focus();
           }

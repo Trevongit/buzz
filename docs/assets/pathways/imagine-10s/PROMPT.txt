@@ -1,0 +1,39 @@
+10-SECOND LOOP — attach the 5 JPEGs in order 01, 02, 03, 04, 05.
+01-start and 05-end are THE SAME PICTURE on purpose so the loop does not jump.
+
+You are Grok Imagine. Animate THIS storyboard. Do not redesign the layout.
+Keep the four character seats locked: Antigravity top-left, Human bottom-left,
+Codex top-right, Grok Build bottom-right, Buzz glass dome center.
+Characters MAY move (point, nod, type, put on headphones, sit back) but
+cards do not swap places. No stacked titles. No extra watermarks.
+No hosts, keys, room IDs, ChatGPT logos.
+
+TOTAL LENGTH: 10 seconds. 2 seconds per beat. Then loop.
+
+0:00–0:02  FRAME 01 / 05 — How we use Buzz
+Human says “use buzz”. Yellow named-visitor arrow pulses ONCE into the dome.
+Vendors idle-listen (soft glow). Caption: existing seat, no mint. GUI=eyes CLI=nerve.
+
+0:02–0:04  FRAME 02 — Speaker
+Morph: human puts on headphones, holds a speaker. Dome speaker icon blooms.
+Antigravity + Codex dim. Grok nods as possible named Reader. Not a second L2.
+Caption: Pocket Listen. Hear the room.
+
+0:04–0:06  FRAME 03 — GitHub
+Morph: dome becomes Public GitHub repo stack. Glue arrows to Codex Desktop
+and Antigravity IDE. Human points. Caption: public docs. Never commit keys.
+
+0:06–0:08  FRAME 04 — Internal agents
+Morph: pink dashed INSIDE Desktop ACP box appears in the dome; green dashed
+OUTSIDE visitor kit ring around the vendors. Human warns. Caption: two doors,
+same room. Do not mix. Not the quiet visitor path.
+
+0:08–0:10  FRAME 05 = FRAME 01 exactly
+Pink box and speaker and GitHub stack DISSOLVE. Dome returns to shared rooms.
+Human points “use buzz” again. Same pose, same labels as 0:00.
+Freeze last 0.4s on this frame so the loop is invisible.
+
+Hard no’s: do not wake all three vendors at once; UATP is not the visitor kit;
+glue is not use buzz; Grok is not a one-shot L2; do not stack L2; do not mint.
+
+Mood: fun explainer, calm, readable. End = start.

@@ -28,6 +28,9 @@ DEFAULT_MAX_EVENTS = 3
 DEFAULT_MAX_BYTES = 2048
 DEFAULT_L2_LEASE_TTL_SECS = 300
 DEFAULT_L2_BODY_CAP = 80
+# Wake lines used to keep 80 characters. A real ask past that cut was judged
+# as a short status and stayed quiet. 600 is enough for a gate decision.
+WAKE_PREVIEW_MAX = 600
 DEFAULT_L2_RETRY_MAX = 3
 DEFAULT_L2_LOG_MAX_BYTES = 65536
 PUBKEY_MIN = 8
@@ -35,6 +38,15 @@ PUBKEY_MIN = 8
 
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
+
+
+def wake_preview(content: str, limit: int = WAKE_PREVIEW_MAX) -> str:
+    """One line for the ear. A tail that does not fit is marked [cut]."""
+    flat = (content or "").replace("\n", " ").replace("\r", " ").strip()
+    flat = flat.replace('"', "'")
+    if len(flat) <= limit:
+        return flat
+    return flat[:limit].rstrip() + " [cut]"
 
 
 def _word_hit(content: str, needle: str) -> bool:
@@ -1019,12 +1031,23 @@ def filter_wakes(
     max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> dict[str, Any]:
     """Production wake seam used by wake.sh. Seen-set is updated only for
-    consumed events; cooldown/overflow leaves candidates for the next tick."""
-    seen = set(state.get("seen_ids") or [])
+    consumed events; cooldown/overflow leaves candidates for the next tick.
+
+    `since` stops at the oldest held candidate so a later event cannot skip it.
+    `seen_ids` keeps arrival order, newest 80.
+    """
+    order = [x for x in (state.get("seen_ids") or []) if isinstance(x, str) and x]
+    seen = set(order)
     since = int(state.get("since") or 0)
     last_wake = int(state.get("last_wake") or 0)
     new_max = since
-    new_seen = set(seen)
+
+    def mark(mid: str) -> None:
+        if not mid or mid in seen:
+            return
+        seen.add(mid)
+        order.append(mid)
+
     candidates: list[dict[str, Any]] = []
     for m in messages:
         if not isinstance(m, dict):
@@ -1048,10 +1071,9 @@ def filter_wakes(
             seat_role=seat_role,
         )
         if not wake:
-            if mid:
-                new_seen.add(mid)
+            mark(mid)
             continue
-        preview = content.replace("\n", " ").strip()[:80].replace('"', "'")
+        preview = wake_preview(content)
         candidates.append(
             {
                 "id": mid,
@@ -1062,16 +1084,23 @@ def filter_wakes(
                 "reason": reason,
             }
         )
+
+    def hold_of(cands: list[dict[str, Any]]) -> int | None:
+        stamps = [int(c.get("ts") or 0) for c in cands if int(c.get("ts") or 0) > 0]
+        return min(stamps) if stamps else None
+
     cooling = cooldown_blocks(last_wake, now_unix, cooldown_secs)
     if cooling:
+        hold = hold_of(candidates)
         return {
             "wakes": [],
             "overflow": False,
             "cooldown": True,
             "pending": len(candidates),
+            "hold_since": hold,
             "state": {
-                "seen_ids": list(new_seen)[-80:],
-                "since": new_max,
+                "seen_ids": order[-80:],
+                "since": hold if hold is not None else new_max,
                 "last_wake": last_wake,
                 "channel_id": state.get("channel_id") or "",
             },
@@ -1079,18 +1108,20 @@ def filter_wakes(
     kept, overflow = admit_budget(
         candidates, max_events=max_events, max_bytes=max_bytes
     )
+    kept_ids = {w.get("id") or "" for w in kept}
+    held = [c for c in candidates if (c.get("id") or "") not in kept_ids]
     for w in kept:
-        mid = w.get("id") or ""
-        if mid:
-            new_seen.add(mid)
+        mark(str(w.get("id") or ""))
+    hold = hold_of(held) if overflow else None
     return {
         "wakes": kept,
         "overflow": overflow,
         "cooldown": False,
         "pending": len(candidates),
+        "hold_since": hold,
         "state": {
-            "seen_ids": list(new_seen)[-80:],
-            "since": new_max,
+            "seen_ids": order[-80:],
+            "since": hold if hold is not None else new_max,
             "last_wake": now_unix if kept else last_wake,
             "channel_id": state.get("channel_id") or "",
         },
@@ -1137,18 +1168,19 @@ def feed_wakes(
         by.setdefault(cid, []).append(m)
     dm_set = {d.strip() for d in dm_ids if d and d.strip()}
     owned_set = {d.strip() for d in (owned_ids or []) if d and d.strip()}
-    seen = set(state.get("seen_ids") or [])
+    order = [x for x in (state.get("seen_ids") or []) if isinstance(x, str) and x]
+    seen = set(order)
     since = int(state.get("since") or 0)
     last_wake = int(state.get("last_wake") or 0)
     new_max = since
-    new_seen = set(seen)
+    holds: list[int] = []
     all_wakes: list[dict[str, Any]] = []
     overflow = False
     cooldown = False
     pending = 0
     for cid, msgs in by.items():
         st = {
-            "seen_ids": list(seen),
+            "seen_ids": list(order),
             "since": since,
             "last_wake": last_wake,
             "channel_id": cid,
@@ -1165,8 +1197,15 @@ def feed_wakes(
             now_unix=now_unix,
             cooldown_secs=cooldown_secs,
         )
-        new_max = max(new_max, int(out["state"].get("since") or 0))
-        new_seen.update(out["state"].get("seen_ids") or [])
+        for sid in out["state"].get("seen_ids") or []:
+            if sid and sid not in seen:
+                seen.add(sid)
+                order.append(sid)
+        hold = out.get("hold_since")
+        if hold is not None:
+            holds.append(int(hold))
+        else:
+            new_max = max(new_max, int(out["state"].get("since") or 0))
         pending += int(out.get("pending") or 0)
         if out.get("overflow"):
             overflow = True
@@ -1176,13 +1215,15 @@ def feed_wakes(
             if isinstance(w, dict):
                 w["channel"] = cid
                 all_wakes.append(w)
+    if holds:
+        new_max = min(holds)
     return {
         "wakes": all_wakes,
         "overflow": overflow,
         "cooldown": cooldown,
         "pending": pending,
         "state": {
-            "seen_ids": list(new_seen)[-80:],
+            "seen_ids": order[-80:],
             "since": new_max,
             "last_wake": now_unix if all_wakes else last_wake,
             "ear": "feed",
@@ -1424,6 +1465,7 @@ if __name__ == "__main__":
             dm_ids=dms,
             owned_ids=owned,
             now_unix=int(kw.get("now") or "0") or int(time.time()),
+            cooldown_secs=int(kw.get("cooldown") or str(DEFAULT_COOLDOWN_SECS)),
         )
         if state_path:
             state_path.parent.mkdir(parents=True, exist_ok=True)

@@ -20,6 +20,18 @@ test("returns null while the TipTap editor view is not mounted", () => {
   assert.equal(getMountedEditorDom(editor), null);
 });
 
+test("returns null for the Pulse TipTap unmounted-view error", () => {
+  const editor = {
+    get view() {
+      throw new Error(
+        "[tiptap error]: The editor view is not available. Cannot access view['dom']. The editor may not be mounted yet.",
+      );
+    },
+  };
+
+  assert.equal(getMountedEditorDom(editor), null);
+});
+
 test("returns the editor DOM after the TipTap view mounts", () => {
   const dom = {};
   const editor = { view: { dom } };

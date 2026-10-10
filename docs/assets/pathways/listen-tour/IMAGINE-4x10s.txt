@@ -1,0 +1,111 @@
+Four independent 10-second Imagine clips.
+Each clip loops on ITSELF (end frame = start frame).
+Attach ONE still per render. Do not stack titles. No Beat numbers. Never Claude.
+
+Photos:
+  01-how-we-use-buzz.jpg
+  02-hear-the-room.jpg
+  03-public-cookbook.jpg
+  04-two-doors.jpg
+
+================================================================
+1  HOW WE USE BUZZ
+File: 01-how-we-use-buzz.jpg
+
+WHAT THE GRAPHIC SHOWS
+Center: glowing glass clubhouse, round table, silhouettes, label Buzz shared rooms.
+Evidence not every thought. Idle = 0 tokens. Only the NAMED visitor wakes.
+Lower left: hoodie human, laptop, says use buzz. Human decides. Named-visitor arrow into the dome.
+Upper left: green Antigravity. IDE = eyes. agy CLI = nerve. Visitor kit, not UATP, not Desktop ACP.
+Upper right: teal Codex. Desktop = eyes. CLI = nerve. Local glue is NOT use buzz.
+Lower right: purple Grok Build. Steward. Not a one-shot L2. Does not spawn extra Desktop agents.
+Footer: bring.sh then use buzz. Only the named visitor wakes. Do not stack L2.
+
+SPOKEN (~10 seconds)
+You sit at the glowing table. You pick the game. Name one helper.
+The others nap. Idle is free. Come home. Use buzz.
+
+IMAGINE PROMPT
+10-second SELF-LOOP. Use only this attached still. Do not change layout or labels.
+Characters alive: human talks and points, named-visitor arrow pulses once then returns,
+robots blink and nod, dome light breathes. End pose = start pose. Freeze last 0.3s.
+No new text. No Beat. No Claude. No extra diagrams.
+
+Voice-over, calm:
+"You sit at the glowing table. You pick the game. Name one helper. The others nap. Idle is free. Come home. Use buzz."
+
+================================================================
+2  HEAR THE ROOM
+File: 02-hear-the-room.jpg
+
+WHAT THE GRAPHIC SHOWS
+Same four seats. Center dome is a radio: big speaker icon over the table.
+Human wears headphones and holds a speaker. Pocket Listen is extras: hear the thread.
+Antigravity and Codex stay eyes — they are not the speaker.
+Grok can be the named Reader (the one who speaks a short tour), still not L2.
+Footer: extras Listen. Same Buzz room. Does not mint seats.
+Mint = do not create a new helper identity.
+
+SPOKEN (~10 seconds)
+Headphones on. This is a radio for the clubhouse, not a new robot.
+Same room. Pause, resume, follow along.
+
+IMAGINE PROMPT
+10-second SELF-LOOP. Use only this attached still. Keep headphones, speaker, four seats.
+Alive: sound waves pulse from the dome speaker then settle, human nods with headphones,
+speaker in hand glows, vendor robots blink but stay eyes. End = start. Freeze last 0.3s.
+No new text. No Beat. No Claude.
+
+Voice-over, calm:
+"Headphones on. This is a radio for the clubhouse, not a new robot. Same room. Pause, resume, follow along."
+
+================================================================
+3  THE PUBLIC COOKBOOK
+File: 03-public-cookbook.jpg
+
+WHAT THE GRAPHIC SHOWS
+Center dome labeled Public GitHub, glowing repo stack. Public shelf strangers can read.
+Antigravity: glue CLI to IDE (your editor).
+Codex: glue CLI to Desktop (Buzz Desktop). Glue = local wiring, not use buzz.
+Human: public READMEs, no secrets in git.
+Grok: steward of the map.
+Footer: MIT public. No keys. No room IDs.
+extras bring.sh stays the visitor skill. Then leave the library.
+
+SPOKEN (~10 seconds)
+GitHub is the public shelf. Maps and glue go on it.
+Keys never do. Then leave the library.
+
+IMAGINE PROMPT
+10-second SELF-LOOP. Use only this attached still. Keep Public GitHub dome and four arrows.
+Alive: stack shimmers like pages turning, arrows pulse inward then rest, robots smile and wave,
+human points. End = start. Freeze last 0.3s.
+No new text. No Beat. No Claude. No extra logos.
+
+Voice-over, calm:
+"GitHub is the public shelf. Maps and glue go on it. Keys never do. Then leave the library."
+
+================================================================
+4  TWO DOORS
+File: 04-two-doors.jpg
+
+WHAT THE GRAPHIC SHOWS
+Same clubhouse. Pink dashed box INSIDE the dome = Desktop ACP (house-managed agents).
+Green dashed ring OUTSIDE = visitor kit (quiet guests).
+ACP = the Desktop socket for the house team. Different tax. Do not mix doors.
+Four corners still: Antigravity, Codex, Grok Build, human saying use buzz.
+Everyday path is still the visitor kit, not the pink box.
+Footer: two doors, same Buzz room. Visitors stay outside ACP.
+
+SPOKEN (~10 seconds)
+Same clubhouse. Visitors outside. Desktop team inside.
+Do not mix. Everyday path is still use buzz.
+
+IMAGINE PROMPT
+10-second SELF-LOOP. Use only this attached still. Keep pink inside box and green outside ring.
+Alive: pink box and green ring pulse out of phase then return, human warning-points,
+robots outside the ring breathe. End = start. Freeze last 0.3s.
+No new text. No Beat. No Claude. Do not move vendors inside the pink box.
+
+Voice-over, calm:
+"Same clubhouse. Visitors outside. Desktop team inside. Do not mix. Everyday path is still use buzz."

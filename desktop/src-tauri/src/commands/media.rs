@@ -604,6 +604,55 @@ async fn process_picked_path(
     Ok(descriptor)
 }
 
+/// Cap for one paperclip pick. Matches `MAX_MEDIA_FILES_PER_MESSAGE` in the
+/// renderer so a ten-picture burst is allowed and a hundred-file dump is not.
+const MAX_MEDIA_FILES_PER_MESSAGE: usize = 20;
+const UPLOAD_RATE_LIMIT_RETRIES: u32 = 4;
+
+fn is_retryable_upload_error(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("rate-limited")
+        || lower.contains("rate limit")
+        || lower.contains("concurrency limit")
+        || lower.contains("quota exceeded")
+}
+
+fn cap_picked_paths<T>(paths: Vec<T>) -> (Vec<T>, usize) {
+    let dropped = paths.len().saturating_sub(MAX_MEDIA_FILES_PER_MESSAGE);
+    if dropped == 0 {
+        return (paths, 0);
+    }
+    (
+        paths
+            .into_iter()
+            .take(MAX_MEDIA_FILES_PER_MESSAGE)
+            .collect(),
+        dropped,
+    )
+}
+
+async fn process_picked_path_with_retry(
+    path: std::path::PathBuf,
+    state: &AppState,
+    progress: Option<(tauri::AppHandle, String)>,
+) -> Result<BlobDescriptor, String> {
+    let mut last = String::new();
+    for attempt in 0..UPLOAD_RATE_LIMIT_RETRIES {
+        match process_picked_path(path.clone(), state, false, progress.clone()).await {
+            Ok(descriptor) => return Ok(descriptor),
+            Err(err)
+                if is_retryable_upload_error(&err) && attempt + 1 < UPLOAD_RATE_LIMIT_RETRIES =>
+            {
+                last = err;
+                let secs = 1_u64 << attempt;
+                tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    Err(last)
+}
+
 /// Open a native file dialog (multi-select), read each selected file, and
 /// upload it. Returns the resulting `BlobDescriptor` list — empty when the
 /// user cancels.
@@ -618,8 +667,9 @@ async fn process_picked_path(
 /// server-side content validation (MIME, image decode, size caps) is the
 /// defense in depth.
 ///
-/// Uploads run sequentially; on first failure, prior uploads are not
-/// rolled back (they're already content-addressed on the relay).
+/// Uploads run sequentially with retries on relay 429. A later file's failure
+/// does not drop files that already landed. The relay is content-addressed, so
+/// those blobs stay.
 #[tauri::command]
 pub async fn pick_and_upload_media(
     app: tauri::AppHandle,
@@ -640,14 +690,27 @@ pub async fn pick_and_upload_media(
         None => return Ok(Vec::new()),
     };
 
+    let (file_paths, dropped) = cap_picked_paths(file_paths);
+    if dropped > 0 {
+        eprintln!(
+            "buzz-desktop: attached the first {MAX_MEDIA_FILES_PER_MESSAGE} files; dropped {dropped}"
+        );
+    }
+
     let mut descriptors = Vec::with_capacity(file_paths.len());
+    let mut last_err = None;
     for file_path in file_paths {
         let path = file_path.as_path().ok_or("invalid path")?.to_path_buf();
         let progress = progress_id.clone().map(|id| (app.clone(), id));
-        let descriptor = process_picked_path(path, &state, false, progress).await?;
-        descriptors.push(descriptor);
+        match process_picked_path_with_retry(path, &state, progress).await {
+            Ok(descriptor) => descriptors.push(descriptor),
+            Err(err) => last_err = Some(err),
+        }
     }
 
+    if descriptors.is_empty() {
+        return Err(last_err.unwrap_or_else(|| "upload failed".to_string()));
+    }
     Ok(descriptors)
 }
 
@@ -977,5 +1040,33 @@ mod tests {
         assert!(!should_retry_legacy_upload(
             reqwest::StatusCode::UNSUPPORTED_MEDIA_TYPE
         ));
+    }
+
+    #[test]
+    fn retryable_upload_error_matches_composer_quota_text() {
+        assert!(is_retryable_upload_error(
+            "Error: relay rate-limited: quota exceeded"
+        ));
+        assert!(is_retryable_upload_error(
+            "upload concurrency limit reached; retry in 1s"
+        ));
+        assert!(!is_retryable_upload_error("Please choose an image file."));
+    }
+
+    #[test]
+    fn cap_picked_paths_keeps_a_ten_file_burst() {
+        let (kept, dropped) = cap_picked_paths((0..10).collect::<Vec<_>>());
+        assert_eq!(kept.len(), 10);
+        assert_eq!(dropped, 0);
+    }
+
+    #[test]
+    fn cap_picked_paths_drops_files_past_the_per_message_cap() {
+        let (kept, dropped) =
+            cap_picked_paths((0..MAX_MEDIA_FILES_PER_MESSAGE + 5).collect::<Vec<_>>());
+        assert_eq!(kept.len(), MAX_MEDIA_FILES_PER_MESSAGE);
+        assert_eq!(dropped, 5);
+        assert_eq!(kept[0], 0);
+        assert_eq!(kept[kept.len() - 1], MAX_MEDIA_FILES_PER_MESSAGE - 1);
     }
 }

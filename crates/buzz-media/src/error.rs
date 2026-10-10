@@ -148,9 +148,14 @@ impl IntoResponse for MediaError {
                 (StatusCode::FORBIDDEN, self.to_string())
             }
             Self::ServiceUnavailable => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
-            Self::UploadRateLimitExceeded | Self::UploadConcurrencyLimitReached => {
-                (StatusCode::TOO_MANY_REQUESTS, self.to_string())
-            }
+            Self::UploadRateLimitExceeded => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "upload rate limit exceeded; retry in 2s".to_string(),
+            ),
+            Self::UploadConcurrencyLimitReached => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "upload concurrency limit reached; retry in 1s".to_string(),
+            ),
             Self::UnknownContentType | Self::UnsupportedContainer | Self::WrongCodec => {
                 (StatusCode::UNSUPPORTED_MEDIA_TYPE, self.to_string())
             }

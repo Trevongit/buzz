@@ -27,7 +27,7 @@ export const LinkPasteTrailingSpace = Extension.create({
             if (!shouldAppendSpaceAfterPaste(pastedText)) return false;
 
             window.setTimeout(() => {
-              if (!view.dom.isConnected) return;
+              if (!view.dom?.isConnected) return;
               const { state } = view;
               if (!state.selection.empty) return;
 

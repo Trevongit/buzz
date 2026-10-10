@@ -36,7 +36,9 @@ import {
 import type { MentionIdentity } from "./mentionClipboard";
 import { CUSTOM_EMOJI_NODE_NAME } from "./customEmojiNode";
 import { useFeatureEnabled } from "@/shared/features/useFeatureEnabled";
+import { startComposerExtrasPoll } from "./composerExtras";
 import { createGhostCompleteExtension } from "./ghostCompleteExtension";
+import { createSpellUnderlineExtension } from "./spellUnderlineExtension";
 import { useComposerCustomEmoji } from "./useComposerCustomEmoji";
 import { buildPlainTextProjection } from "./plainTextProjection";
 import { parseSnapshotClipboardHtml } from "./agentSnapshotClipboard";
@@ -52,6 +54,7 @@ import { SpoilerMark } from "./spoilerMark";
 import { createComposerLinkPasteHandler } from "./composerMessageLinkNode";
 import type { ComposerMessageLinkChannel } from "./useComposerMessageLinks";
 import { useComposerMessageLinks } from "./useComposerMessageLinks";
+import { getMountedEditorDom } from "@/features/messages/ui/selectionFormattingTrayEditorDom";
 
 /**
  * Plain-text edit descriptor returned by autocomplete hooks
@@ -186,6 +189,9 @@ export function useRichTextEditor({
   // hook so this file stays focused on generic editor setup.
   const composerSpellcheck = useFeatureEnabled("composerSpellcheck");
   const composerGhostComplete = useFeatureEnabled("composerGhostComplete");
+  startComposerExtrasPoll();
+  const composerSpellcheckRef = React.useRef(composerSpellcheck);
+  composerSpellcheckRef.current = composerSpellcheck;
   const ghostCompleteEnabledRef = React.useRef(composerGhostComplete);
   ghostCompleteEnabledRef.current = composerGhostComplete;
   const customEmojiWiring = useComposerCustomEmoji(customEmoji);
@@ -193,6 +199,9 @@ export function useRichTextEditor({
 
   const editor = useEditor(
     {
+      // Pulse mounts ForumComposer before EditorContent attaches. Tiptap 3
+      // throws on editor.view.dom until that happens ("Something went wrong").
+      immediatelyRender: false,
       extensions: [
         StarterKit.configure({
           // Use hard breaks (Shift+Enter) — Enter submits the message.
@@ -341,6 +350,10 @@ export function useRichTextEditor({
         PastedMentionOccurrencesExtension,
         createGhostCompleteExtension({
           isEnabled: () => ghostCompleteEnabledRef.current,
+          isAutocompleteOpen: () => Boolean(isAutocompleteOpen?.current),
+        }),
+        createSpellUnderlineExtension({
+          isEnabled: () => composerSpellcheckRef.current,
           isAutocompleteOpen: () => Boolean(isAutocompleteOpen?.current),
         }),
         customEmojiWiring.extension,
@@ -592,9 +605,14 @@ export function useRichTextEditor({
   // biome-ignore lint/correctness/useExhaustiveDependencies: placeholder triggers the ref update
   React.useEffect(() => {
     if (!editor) return;
+    if (!getMountedEditorDom(editor)) return;
     // Force ProseMirror to re-run decoration plugins so the Placeholder
     // extension picks up the new text from placeholderRef.
-    editor.view.dispatch(editor.state.tr);
+    try {
+      editor.view.dispatch(editor.state.tr);
+    } catch {
+      // Composer mount can race the DOM. Never take the window down.
+    }
   }, [editor, placeholder]);
 
   // Keep mention/channel-highlight decorations in sync with known names.
@@ -687,7 +705,12 @@ export function useRichTextEditor({
   );
 
   const focusEnd = React.useCallback(() => {
-    editor?.commands.focus("end");
+    if (!editor || !getMountedEditorDom(editor)) return;
+    try {
+      editor.commands.focus("end");
+    } catch {
+      // Pulse compact composer can ask for focus before the view exists.
+    }
   }, [editor]);
 
   /**
@@ -697,9 +720,13 @@ export function useRichTextEditor({
    * effect) where we don't want to yank the cursor to the end.
    */
   const focusPreserve = React.useCallback(() => {
-    if (!editor) return;
+    if (!editor || !getMountedEditorDom(editor)) return;
     // `focus()` with no position argument preserves the current selection.
-    editor.commands.focus();
+    try {
+      editor.commands.focus();
+    } catch {
+      // Unmounted TipTap view must not take the window down.
+    }
   }, [editor]);
 
   // Backwards-compatible alias — existing call sites that want "end"
@@ -882,7 +909,8 @@ export function useRichTextEditor({
   );
 
   React.useEffect(() => {
-    const dom = editor?.view.dom;
+    if (!editor) return;
+    const dom = getMountedEditorDom(editor);
     if (!dom) return;
     dom.setAttribute("spellcheck", composerSpellcheck ? "true" : "false");
     dom.spellcheck = composerSpellcheck;

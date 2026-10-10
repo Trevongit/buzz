@@ -1599,4 +1599,3 @@ fn deleted_harness_summary_display_and_spawn_sentence_agree() {
     assert!(sentence.contains("\"doomed\"") && sentence.contains("deleted"));
     assert!(!sentence.contains(super::DANGLING_HARNESS_PREFIX));
 }
-

@@ -1,0 +1,34 @@
+10-SECOND LOOP (five pictures, start = end)
+About 24 words. ~2 seconds per picture. Last picture is the first picture again.
+
+SPOKEN (one breath, no Beat numbers):
+
+You coach the clubhouse. Name one helper. Eyes watch, hands work.
+Listen, GitHub, and the house team are detours. Come home. Use buzz.
+
+PICTURE TIMING (attach 01, 02, 03, 04, 05=01):
+0:00–0:02  How we use Buzz     "You coach the clubhouse. Name one helper."
+0:02–0:04  Hear the room       "Eyes watch, hands work."
+0:04–0:06  The public cookbook "Listen, GitHub,"
+0:06–0:08  Two doors           "and the house team are detours."
+0:08–0:10  How we use Buzz     "Come home. Use buzz." Freeze last 0.4s.
+
+
+FOUR SPOKEN CARDS (if 10s is too thin)
+~7 seconds each. Skip picture 5 — it is picture 1. Stitch 1→2→3→4 then cut back to 1.
+
+1 HOW WE USE BUZZ
+You sit at the glowing table. You pick the game. Green is Antigravity,
+teal is Codex, purple is Grok. Call one by name. The others nap free.
+
+2 HEAR THE ROOM
+Headphones. That is a radio for the clubhouse, not a new robot.
+Pause, resume, follow along. Same room.
+
+3 THE PUBLIC COOKBOOK
+GitHub is the public shelf. Maps and glue go on it. Keys never do.
+Then leave the library.
+
+4 TWO DOORS
+Same clubhouse. Green ring is visitors. Pink box is the Desktop house team.
+Do not mix. Everyday path is still use buzz.

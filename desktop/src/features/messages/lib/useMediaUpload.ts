@@ -10,6 +10,13 @@ import type { QueuedMediaAttachment } from "./backgroundMediaUploadStore";
 import { applyImetaUpdate, compactImetaSlots } from "./imetaSlots";
 import { isVoiceNoteFile } from "./audioAttachment";
 import { useFilePicker } from "./useFilePicker";
+import {
+  MAX_MEDIA_FILES_PER_MESSAGE,
+  MEDIA_UPLOAD_CONCURRENCY,
+  capMediaFiles,
+  runWithConcurrency,
+  withMediaUploadRetries,
+} from "./mediaUploadBatch";
 import { isVideoFile, videoMimeForFile } from "./videoFileType";
 
 /**
@@ -592,31 +599,36 @@ export function useMediaUpload({
 
   const uploadFiles = React.useCallback(
     (files: File[]) => {
-      if (files.length === 0) return;
+      const { files: kept, dropped } = capMediaFiles(files);
+      if (dropped > 0) {
+        setUploadState({
+          status: "error",
+          message: `Only the first ${MAX_MEDIA_FILES_PER_MESSAGE} files can go on one message.`,
+        });
+      }
+      if (kept.length === 0) return;
 
-      setUploadingCount((count) => count + files.length);
-      const baseIndex = reserveSlots(files.length);
+      setUploadingCount((count) => count + kept.length);
+      const baseIndex = reserveSlots(kept.length);
       // Pin the epoch at start: if the composer swaps drafts mid-flight, these
       // completions are discarded rather than written into the new draft.
       const epoch = uploadEpochRef.current;
 
-      for (let index = 0; index < files.length; index++) {
-        const file = files[index];
-        const slotIndex = baseIndex + index;
-        const previewId = reserveUploadingPreview(file, slotIndex);
-        // Fire-and-forget each upload concurrently — slot preserves order.
-        void (async () => {
-          try {
-            const descriptor = await uploadMediaFile(
-              file,
-              uploadProgressId(previewId),
-            );
-            fillSlot(slotIndex, descriptor, previewId, epoch);
-          } catch (err) {
-            onUploadError(err, previewId);
-          }
-        })();
-      }
+      const jobs = kept.map((file, index) => ({
+        file,
+        slotIndex: baseIndex + index,
+        previewId: reserveUploadingPreview(file, baseIndex + index),
+      }));
+      void runWithConcurrency(jobs, MEDIA_UPLOAD_CONCURRENCY, async (job) => {
+        try {
+          const descriptor = await withMediaUploadRetries(() =>
+            uploadMediaFile(job.file, uploadProgressId(job.previewId)),
+          );
+          fillSlot(job.slotIndex, descriptor, job.previewId, epoch);
+        } catch (err) {
+          onUploadError(err, job.previewId);
+        }
+      });
     },
     [fillSlot, onUploadError, reserveSlots, reserveUploadingPreview],
   );
@@ -765,9 +777,8 @@ export function useMediaUpload({
       setUploadingCount((c) => c + 1);
       const epoch = uploadEpochRef.current;
       try {
-        const descriptor = await uploadMediaFile(
-          file,
-          uploadProgressId(previewId),
+        const descriptor = await withMediaUploadRetries(() =>
+          uploadMediaFile(file, uploadProgressId(previewId)),
         );
         onUploaded(descriptor, previewId, epoch);
       } catch (err) {

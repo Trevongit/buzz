@@ -136,11 +136,25 @@ if out.get("cooldown"):
     print(f"VISITOR_COOLDOWN seat={seat} channel={cid} pending={out.get('pending')}", file=sys.stderr)
 if out.get("overflow"):
     print(f"VISITOR_ADMIT overflow seat={seat} channel={cid} pending={out.get('pending')}", file=sys.stderr)
+sys.path.insert(0, sys.argv[11])
+try:
+    from wake_log import note_wake
+except Exception:
+    note_wake = None
 for w in out.get("wakes") or []:
+    eid = w.get("id") or ""
+    replay = ""
+    if note_wake is not None and eid:
+        try:
+            mark = note_wake(seat, eid)
+        except Exception:
+            mark = {}
+        if mark.get("kind") == "replay" and mark.get("reply_id"):
+            replay = f" replay=1 answered={mark['reply_id']}"
     print(
         f"VISITOR_WAKE match seat={seat} room={room} channel={cid} "
         f"reason={w.get('reason')} from={(w.get('from') or '')[:12]} "
-        f"id={w.get('id') or ''} preview={w.get('preview')}"
+        f"id={eid}{replay} preview={w.get('preview')}"
     )
 PY
 }

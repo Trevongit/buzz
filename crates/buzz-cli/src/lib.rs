@@ -2160,9 +2160,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
         key
     } else if let Ok(path) = std::env::var("BUZZ_PRIVATE_KEY_FILE") {
         std::fs::read_to_string(&path)
-            .map_err(|e| {
-                CliError::Auth(format!("could not read BUZZ_PRIVATE_KEY_FILE: {e}"))
-            })?
+            .map_err(|e| CliError::Auth(format!("could not read BUZZ_PRIVATE_KEY_FILE: {e}")))?
             .trim()
             .to_string()
     } else {

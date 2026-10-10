@@ -203,6 +203,8 @@ Admit a channel event only when **all** hold:
 
 Stdout of `wake.sh` is only `VISITOR_WAKE …`. Overflow / cooldown stay on stderr / log.
 
+A wake that is printed again after a reply gets `replay=1 answered=<post id>` on that line. The durable line is `~/.buzz-dev/agents/<seat>/wake-log.json`: event id, first wake time, and the post that answered it. No preview. A prompt handed in with an id the ear never recorded is `NO EAR RECORD`. An interactive seat that sees a wake it already answered does not answer again. The vendor TUI can still show an old prompt from its own session. That hand is not this ear. Check the log before a second answer.
+
 **Auto-reply (required for Codex / agy).** Those TUIs do not consume `wake.sh` stdout the way Grok Build `monitor()` does. A background `wake.sh` that nobody reads is a dead nerve — DMs and `@mentions` sit until Prime pokes the pane. That is a functional miss.
 
 ```bash

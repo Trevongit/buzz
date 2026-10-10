@@ -472,6 +472,109 @@ class CooldownAndFilterTests(unittest.TestCase):
         leftover = [m["id"] for m in msgs if m["id"] not in seen]
         self.assertEqual(leftover, ["3", "4"])
 
+    def test_cooldown_does_not_skip_an_older_held_mention(self):
+        early = self._msg("early", "@codex-buzz please")
+        early["created_at"] = 100
+        late = self._msg("late", "unrelated status")
+        late["created_at"] = 200
+        out = filter_wakes(
+            [early, late],
+            state={"seen_ids": [], "since": 0, "last_wake": 190},
+            self_pk="bb",
+            names=["codex-buzz"],
+            pubkeys=["bb"],
+            seat_role="codex",
+            require_mention=True,
+            is_dm=False,
+            now_unix=200,
+            cooldown_secs=30,
+        )
+        self.assertEqual(out["wakes"], [])
+        self.assertNotIn("early", out["state"]["seen_ids"])
+        self.assertIn("late", out["state"]["seen_ids"])
+        self.assertEqual(out["state"]["since"], 100)
+
+    def test_overflow_since_stops_at_the_first_held(self):
+        msgs = []
+        for i in range(5):
+            msg = self._msg(str(i), f"@codex-buzz n{i}")
+            msg["created_at"] = 100 + i
+            msgs.append(msg)
+        out = filter_wakes(
+            msgs,
+            state={"seen_ids": [], "since": 0, "last_wake": 0},
+            self_pk="bb",
+            names=["codex-buzz"],
+            pubkeys=["bb"],
+            seat_role="codex",
+            require_mention=True,
+            is_dm=False,
+            now_unix=2000,
+            cooldown_secs=0,
+            max_events=3,
+            max_bytes=2048,
+        )
+        self.assertEqual(out["state"]["since"], 103)
+        self.assertNotIn("3", out["state"]["seen_ids"])
+
+    def test_seen_ids_keep_the_newest_in_order(self):
+        prior = [f"p{i}" for i in range(80)]
+        out = filter_wakes(
+            [self._msg("new", "@codex-buzz go")],
+            state={"seen_ids": prior, "since": 0, "last_wake": 0},
+            self_pk="bb",
+            names=["codex-buzz"],
+            pubkeys=["bb"],
+            seat_role="codex",
+            require_mention=True,
+            is_dm=False,
+            now_unix=2000,
+            cooldown_secs=0,
+        )
+        got = out["state"]["seen_ids"]
+        self.assertEqual(len(got), 80)
+        self.assertEqual(got[0], "p1")
+        self.assertEqual(got[-1], "new")
+        self.assertNotIn("p0", got)
+
+    def test_mention_past_the_old_80_stays_in_the_preview(self):
+        tail = "@codex-buzz please confirm the tail"
+        content = ("status only " + ("x" * 90) + " " + tail)
+        self.assertGreater(content.find("please"), 80)
+        out = filter_wakes(
+            [self._msg("9", content)],
+            state={"seen_ids": [], "since": 0, "last_wake": 0},
+            self_pk="bb",
+            names=["codex-buzz"],
+            pubkeys=["bb"],
+            seat_role="codex",
+            require_mention=True,
+            is_dm=False,
+            now_unix=2000,
+            cooldown_secs=0,
+        )
+        preview = out["wakes"][0]["preview"]
+        self.assertIn("please confirm the tail", preview)
+        self.assertNotIn("[cut]", preview)
+
+    def test_preview_marks_a_tail_that_does_not_fit(self):
+        content = "@codex-buzz " + ("y" * 700) + " please confirm"
+        out = filter_wakes(
+            [self._msg("10", content)],
+            state={"seen_ids": [], "since": 0, "last_wake": 0},
+            self_pk="bb",
+            names=["codex-buzz"],
+            pubkeys=["bb"],
+            seat_role="codex",
+            require_mention=True,
+            is_dm=False,
+            now_unix=2000,
+            cooldown_secs=0,
+        )
+        preview = out["wakes"][0]["preview"]
+        self.assertTrue(preview.endswith("[cut]"))
+        self.assertNotIn("please confirm", preview)
+
 
 class EscalationJournalTests(unittest.TestCase):
     def test_once_then_stop(self):
@@ -1557,6 +1660,42 @@ class FeedWakesTests(unittest.TestCase):
         ids = {w.get("id") for w in out.get("wakes") or []}
         self.assertIn(owned_id, ids)
         self.assertNotIn(skip, ids)
+
+    def test_held_mention_keeps_since_behind_a_newer_room(self):
+        cid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        other = "99999999-8888-7777-6666-555555555555"
+        entries = [
+            {
+                "id": "m1",
+                "pubkey": "aa",
+                "created_at": 100,
+                "content": "@codex-buzz hold me",
+                "tags": [["h", cid]],
+            },
+            {
+                "id": "m2",
+                "pubkey": "aa",
+                "created_at": 200,
+                "content": "noise",
+                "tags": [["h", other]],
+            },
+        ]
+        out = feed_wakes(
+            entries,
+            state={"seen_ids": [], "since": 0, "last_wake": 190},
+            self_pk="bb",
+            names=["codex-buzz"],
+            pubkeys=["bb"],
+            seat_role="codex",
+            require_mention=True,
+            dm_ids=[],
+            now_unix=200,
+            cooldown_secs=30,
+        )
+        self.assertEqual(out["wakes"], [])
+        self.assertEqual(out["state"]["since"], 100)
+        self.assertNotIn("m1", out["state"]["seen_ids"])
+        self.assertIn("m2", out["state"]["seen_ids"])
 
 
 class AutoReplyScriptTests(unittest.TestCase):

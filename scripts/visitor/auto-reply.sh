@@ -131,18 +131,24 @@ brain_argv() {
 }
 
 write_prompt() {
-  local room="$1" preview="$2" hist="$3" out="$4" must="${5:-0}" hint
+  local room="$1" preview="$2" hist="$3" out="$4" must="${5:-0}" wake_id="${6:-}" hint replay_note
   hint="$(printf '%s' "$hist" | python3 "${ROOT}/gate.py" l2-hint --preview "$preview" 2>/dev/null || true)"
+  replay_note=""
+  if [[ -n "$wake_id" && "$wake_id" != "catch" ]]; then
+    replay_note="$(python3 "${ROOT}/wake_log.py" classify --seat "$SEAT" --id "$wake_id" 2>/dev/null || true)"
+  fi
   cat >"$out" <<EOF
 You are Buzz visitor seat ${SEAT} role ${ROLE}. A mention-gated or DM event woke you.
 Channel: ${room}
 Preview: ${preview}
 Dest: ${hint:-none}
+Wake: ${replay_note:-kind=plain}
 
 Write ONLY the message body to post (phone-safe bullets, short). No tools. No fences.
 No nsec. Do not ping Helix/PATCH/Prism/Ember. Do not mint seats.
 Vendor team: Grok steward/kit, Codex volume+safety, agy Google-class scout (not agy-acp).
 One NEW finding per post. Duplicate skip is the kit (same-body hash), not your job.
+If Wake says kind=replay, output NO_REPLY. That mention already has an answer.
 Do not treat a first line that greets Prime (Trevor) as silence when Dest names you or all.
 
 NO_REPLY is allowed only when you are not the dest (no COLLAB to: ${ROLE}|all, no @mention, not a DM).
@@ -154,7 +160,7 @@ TTY (collab.sh --dry-run) is for tight pairs with agy before promoting. Turbo is
 One safety finding. Then COLLAB to: agy or leave idle. Do not to: all. Do not start a second auto-reply.
 EOF
   fi
-  if [[ "$must" == "1" ]]; then
+  if [[ "$must" == "1" && "$replay_note" != kind=replay* ]]; then
     cat >>"$out" <<EOF
 MUST REPLY: Dest is you. Do not output NO_REPLY. Write one new phone-safe bullet from your role, then idle.
 EOF
@@ -232,7 +238,7 @@ run_turn() {
   if [[ "${wake_id:-}" =~ ^[0-9a-f]{64}$ && -x "${HOME}/.grok/skills/use-buzz/scripts/buzz-eyes.sh" ]]; then
     BUZZ_SEAT_ID="$SEAT" bash "${HOME}/.grok/skills/use-buzz/scripts/buzz-eyes.sh" --event "$wake_id" >>"$LOG" 2>&1 || true
   fi
-  write_prompt "$room" "$preview" "$hist" "$prompt_file" 0
+  write_prompt "$room" "$preview" "$hist" "$prompt_file" 0 "$wake_id"
   chmod 600 "$prompt_file" 2>/dev/null || true
   invoke_brain || return $?
   if grep -qx 'NO_REPLY' "$out_file" 2>/dev/null; then
@@ -243,7 +249,7 @@ run_turn() {
     )"
     if [[ "$noreply_reason" != "noreply-ok" ]]; then
       echo "VISITOR_STATE state=retry-must-reply seat=$SEAT room=$room reason=${noreply_reason:-collab-must-reply}"
-      write_prompt "$room" "$preview" "$hist" "$prompt_file" 1
+      write_prompt "$room" "$preview" "$hist" "$prompt_file" 1 "$wake_id"
       invoke_brain || return $?
     fi
   fi
@@ -294,6 +300,7 @@ run_turn() {
     if [[ -n "$wake_id" && "$wake_id" != "catch" ]]; then
       python3 "${ROOT}/gate.py" l2-posted --action record \
         --file "$journal" --wake "$wake_id" --event "$posted_id" || true
+      python3 "${ROOT}/wake_log.py" note-reply --seat "$SEAT" --id "$wake_id" --reply "$posted_id" || true
     fi
     return 0
   fi

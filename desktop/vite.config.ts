@@ -73,5 +73,15 @@ export default defineConfig(async ({ mode }) => {
         ignored: ["**/src-tauri/**"],
       },
     },
+    // extras cargo-release still loads `devUrl` http://localhost:1420 via
+    // `vite preview`. WebKit keeps a cached index.html; after a dist rebuild
+    // that page asks for hashed JS that no longer exists and paints
+    // "Importing a module script failed". Never cache preview assets.
+    preview: {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        Pragma: "no-cache",
+      },
+    },
   };
 });

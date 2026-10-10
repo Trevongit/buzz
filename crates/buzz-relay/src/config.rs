@@ -293,10 +293,13 @@ pub struct Config {
     /// Media storage configuration (S3/MinIO).
     pub media: buzz_media::MediaConfig,
     /// Maximum concurrent media uploads handled by one relay process.
+    /// Default 16 so a 10-file composer burst from one person still fits.
     pub media_max_concurrent_uploads: usize,
     /// Maximum concurrent media uploads accepted from one pubkey.
+    /// Default 10: one message can carry a ten-picture burst without 429s.
     pub media_max_concurrent_uploads_per_pubkey: u32,
     /// Maximum media upload starts accepted from one pubkey per minute.
+    /// Default 60 so a ten-file pick plus retries stays inside the window.
     pub media_uploads_per_minute: u32,
 
     /// Whether tamper-evident event/media audit logging is enabled. Defaults to true.
@@ -884,19 +887,19 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .filter(|&v| v > 0)
-                .unwrap_or(8);
+                .unwrap_or(16);
         let media_max_concurrent_uploads_per_pubkey: u32 =
             std::env::var("BUZZ_MEDIA_MAX_CONCURRENT_UPLOADS_PER_PUBKEY")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .filter(|&v| v > 0)
-                .unwrap_or(2)
+                .unwrap_or(10)
                 .min(u32::try_from(media_max_concurrent_uploads).unwrap_or(u32::MAX));
         let media_uploads_per_minute: u32 = std::env::var("BUZZ_MEDIA_UPLOADS_PER_MINUTE")
             .ok()
             .and_then(|v| v.parse().ok())
             .filter(|&v| v > 0)
-            .unwrap_or(30);
+            .unwrap_or(60);
 
         for name in inert_env_vars(&INERT_MEDIA_READ_AUTH_VARS, |n| std::env::var(n).ok()) {
             warn!(
@@ -1391,6 +1394,18 @@ mod tests {
         assert!(
             config.huddle_audio_available,
             "huddle_audio_available should default to true so single-pod (N=1) keeps today's huddle behavior"
+        );
+        assert_eq!(
+            config.media_max_concurrent_uploads, 16,
+            "global upload slots must cover a 10-file composer burst"
+        );
+        assert_eq!(
+            config.media_max_concurrent_uploads_per_pubkey, 10,
+            "one pubkey can send ten pictures in one message without 429"
+        );
+        assert_eq!(
+            config.media_uploads_per_minute, 60,
+            "ten-file pick plus retries must fit in one minute"
         );
     }
 
