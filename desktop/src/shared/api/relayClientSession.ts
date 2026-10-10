@@ -74,7 +74,11 @@ import {
   type RelayAuthRequest,
 } from "@/shared/api/relayAuthPolicy";
 import { createRelayInboundBuffer } from "@/shared/api/relayInboundBuffer";
-import { buildThreadReferenceTags } from "@/features/messages/lib/threading";
+import {
+  buildPresenceEvent,
+  buildTypingIndicatorEvent,
+  buildUserStatusEvent,
+} from "@/shared/api/relayEphemeralPublish";
 type UserStatusInput = { text: string; emoji: string; expiresAt?: number };
 export class RelayClient {
   private wsId: number | null = null;
@@ -289,15 +293,8 @@ export class RelayClient {
 
   async sendPresence(status: PresenceStatus) {
     await this.ensureConnected();
-
-    const event = await signRelayEvent({
-      kind: 20001,
-      content: status,
-      tags: [],
-    });
-
     return this.publishEvent(
-      event,
+      await buildPresenceEvent(status),
       "Timed out while updating presence.",
       "Failed to update presence.",
     );
@@ -309,21 +306,12 @@ export class RelayClient {
     rootEventId?: string | null,
   ) {
     // Disconnected: not worth triggering a reconnect for ephemeral typing.
-    if (this.wsId === null) {
-      return;
-    }
-    const event = await signRelayEvent({
-      kind: KIND_TYPING_INDICATOR,
-      content: "",
-      tags: buildThreadReferenceTags(
-        channelId,
-        parentEventId ?? null,
-        rootEventId ?? null,
-      ),
-    });
-
+    if (this.wsId === null) return;
     // Fire-and-forget: no need to wait for relay acknowledgement.
-    void this.sendRaw(["EVENT", event]).catch(() => {});
+    void this.sendRaw([
+      "EVENT",
+      await buildTypingIndicatorEvent(channelId, parentEventId, rootEventId),
+    ]).catch(() => {});
   }
 
   async subscribeToChannel(
@@ -387,16 +375,8 @@ export class RelayClient {
   }
   async publishUserStatus(status: UserStatusInput): Promise<RelayEvent> {
     await this.ensureConnected();
-    const tags: string[][] = [["d", "general"]];
-    if (status.emoji) tags.push(["emoji", status.emoji]);
-    if (status.expiresAt) tags.push(["expiration", String(status.expiresAt)]);
-    const event = await signRelayEvent({
-      kind: KIND_USER_STATUS,
-      content: status.text,
-      tags,
-    });
     return this.publishEvent(
-      event,
+      await buildUserStatusEvent(status),
       "Timed out publishing user status",
       "Failed to publish user status",
     );
