@@ -2524,6 +2524,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_command_given_no_relay_reports_desktop_failures() {
         use clap::Parser;
+        // Clap reads BUZZ_RELAY_URL. A harness or local .env must not fill --relay.
+        std::env::remove_var("BUZZ_RELAY_URL");
         let cli = crate::Cli::try_parse_from(["buzz", "users", "get"]).unwrap();
         assert!(cli.relay.is_none());
         let store = MemoryStore::with(&[("a", "ta", &[RELAY])]);

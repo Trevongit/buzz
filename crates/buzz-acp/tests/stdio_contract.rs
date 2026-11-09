@@ -8,6 +8,9 @@ fn startup_and_failure_diagnostics_never_enter_acp_stdout() {
             "BUZZ_PRIVATE_KEY",
             "0000000000000000000000000000000000000000000000000000000000000001",
         )
+        // Clap reads BUZZ_ACP_AGENT_COMMAND (default "goose"). A wrong env name
+        // leaves PATH `goose` / `/usr/lib/goose/Goose` to spawn the desktop GUI.
+        .env("BUZZ_ACP_AGENT_COMMAND", "/definitely/missing/buzz-agent")
         .env("BUZZ_AGENT_COMMAND", "/definitely/missing/buzz-agent")
         .env("RUST_LOG", "buzz_acp=info")
         .output()

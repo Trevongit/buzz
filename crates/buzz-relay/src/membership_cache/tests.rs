@@ -13,6 +13,22 @@ fn snapshot(ids: Vec<Uuid>) -> ReadAt<Vec<Uuid>> {
     }
 }
 
+/// Moka eviction is asynchronous and process-global. Parallel tests in this
+/// module can delay the housekeeper; drain until the last Arc drops.
+async fn await_moka_release<T>(cache: &MembershipCache, weak: &std::sync::Weak<T>, msg: &str) {
+    let released = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            cache.entries.run_pending_tasks();
+            if weak.upgrade().is_none() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(released.is_ok(), "{msg}");
+}
+
 #[tokio::test]
 async fn membership_check_future_stays_small_in_nested_handlers() {
     let state = crate::state::tests::test_state().await;
@@ -445,7 +461,7 @@ async fn completed_payload_is_weighed_and_moka_evicts_under_byte_pressure() {
     cache.invalidate_community(community(1));
     cache.entries.run_pending_tasks();
     assert_eq!(cache.entries.weighted_size(), 0);
-    assert!(weak.upgrade().is_none(), "removed payload must be released");
+    await_moka_release(&cache, &weak, "removed payload must be released").await;
 }
 
 #[tokio::test]
@@ -510,10 +526,7 @@ async fn ttl_reclaims_idle_snapshots_and_invalidation_preserves_only_active_read
         "an active reader owns the old allocation"
     );
     drop(entry);
-    assert!(
-        weak.upgrade().is_none(),
-        "last reader must release the allocation"
-    );
+    await_moka_release(&cache, &weak, "last reader must release the allocation").await;
     assert!(cache
         .contains(
             key.clone(),

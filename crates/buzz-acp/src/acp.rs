@@ -3217,6 +3217,43 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    fn is_executable_busy(err: &AcpError) -> bool {
+        matches!(
+            err,
+            AcpError::Io(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy
+        )
+    }
+
+    /// Linux can return ETXTBSY when exec'ing a script that was just written.
+    /// fsync, then retry with a bound.
+    #[cfg(unix)]
+    async fn spawn_fresh_script(
+        path: &std::path::Path,
+        extra_env: &[(String, String)],
+        launch_env: &[(String, String)],
+        what: &str,
+    ) -> AcpClient {
+        if let Ok(file) = std::fs::File::open(path) {
+            let _ = file.sync_all();
+        }
+        let path_str = path.to_str().expect("utf8 path");
+        let mut delay = std::time::Duration::from_millis(10);
+        let mut last = None;
+        for _ in 0..16 {
+            match AcpClient::spawn_with_env(path_str, &[], extra_env, false, launch_env).await {
+                Ok(client) => return client,
+                Err(err) if is_executable_busy(&err) => {
+                    last = Some(err);
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(std::time::Duration::from_millis(80));
+                }
+                Err(err) => panic!("{what}: {err:?}"),
+            }
+        }
+        panic!("{what}: {last:?}");
+    }
+
     /// Spawn `script` under bash and return once it is running.
     ///
     /// Process startup can take hundreds of milliseconds on a loaded host,
@@ -3261,9 +3298,7 @@ mod tests {
             .permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&path, permissions).expect("chmod fake adapter");
-        let client = AcpClient::spawn(path.to_str().expect("utf8 path"), &[], &[], false)
-            .await
-            .expect("spawn named fake adapter");
+        let client = spawn_fresh_script(&path, &[], &[], "spawn named fake adapter").await;
         (client, dir)
     }
 
@@ -3290,14 +3325,7 @@ mod tests {
         permissions.set_mode(0o700);
         std::fs::set_permissions(&path, permissions).expect("chmod probe");
 
-        let mut client = AcpClient::spawn(
-            path.to_str().expect("probe path is UTF-8"),
-            &[],
-            extra_env,
-            false,
-        )
-        .await
-        .expect("spawn env probe script");
+        let mut client = spawn_fresh_script(&path, extra_env, &[], "spawn env probe script").await;
         let observed = client
             .reader
             .next()
@@ -3952,18 +3980,19 @@ read -r REQ
 echo '{"jsonrpc":"2.0","id":1,"result":{"sessionId":"ses_test","_receivedRequest":'"$REQ"'}}'
 sleep 1"#,
         );
-        let mut client = AcpClient::spawn_with_env(
-            adapter.to_str().expect("utf8 path"),
+        if let Ok(file) = std::fs::File::open(&cli) {
+            let _ = file.sync_all();
+        }
+        let mut client = spawn_fresh_script(
+            &adapter,
             &[],
-            &[],
-            false,
             &[(
                 "CLAUDE_CODE_EXECUTABLE".into(),
                 cli.to_str().expect("utf8 path").into(),
             )],
+            "spawn fake claude adapter",
         )
-        .await
-        .expect("spawn fake claude adapter");
+        .await;
         client.initialize().await.expect("initialize");
         let resp = client
             .session_new_full(

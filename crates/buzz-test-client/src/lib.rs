@@ -61,6 +61,10 @@ pub enum TestClientError {
     /// No NIP-42 AUTH challenge was received from the relay.
     #[error("No AUTH challenge received from relay")]
     NoAuthChallenge,
+
+    /// Client configuration is incomplete or invalid. Never contains secrets.
+    #[error("{0}")]
+    Config(String),
 }
 
 impl From<WsClientError> for TestClientError {
@@ -79,6 +83,7 @@ impl From<WsClientError> for TestClientError {
             WsClientError::AuthFailed(s) => TestClientError::AuthFailed(s),
             WsClientError::EventRejected(s) => TestClientError::EventRejected(s),
             WsClientError::NoAuthChallenge => TestClientError::NoAuthChallenge,
+            WsClientError::Config(s) => TestClientError::Config(s),
         }
     }
 }
