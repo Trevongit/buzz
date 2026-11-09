@@ -4,6 +4,11 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, afterEach, test } from "node:test";
 
+import {
+  STALL_CHECK_INTERVAL_MS,
+  STALL_IDLE_TIMEOUT_MS,
+} from "./relayClientTimings.ts";
+
 const originalNow = Date.now;
 const originalRandom = Math.random;
 const originalWindow = globalThis.window;
@@ -492,7 +497,7 @@ test("a half-open socket that never acknowledges replay is reset by the stall wa
   assert.equal(intervals.size, 1, "the watchdog is armed while parked");
 
   // No EOSE, no close: the idle tick is what notices.
-  now += 70_000;
+  now += STALL_IDLE_TIMEOUT_MS + STALL_CHECK_INTERVAL_MS;
   const [tick] = intervals.values();
   tick();
   await flush();
