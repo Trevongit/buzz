@@ -180,12 +180,23 @@ fn identity_from_env() -> Option<Keys> {
 /// must never substitute a redirect-following client on build failure. Shares
 /// the localhost `resolve`/pool config with the app-wide `http_client`.
 pub fn build_media_fetch_client() -> reqwest::Result<reqwest::Client> {
-    reqwest::Client::builder()
+    let builder = reqwest::Client::builder()
         .resolve("localhost", std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
         .pool_idle_timeout(std::time::Duration::from_secs(10))
         .pool_max_idle_per_host(1)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
+        .redirect(reqwest::redirect::Policy::none());
+    let builder = match crate::cf_access::apply_to_builder(builder) {
+        Ok(builder) => builder,
+        Err(error) => {
+            eprintln!("buzz-desktop: media client Access headers: {error}");
+            reqwest::Client::builder()
+                .resolve("localhost", std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+                .pool_idle_timeout(std::time::Duration::from_secs(10))
+                .pool_max_idle_per_host(1)
+                .redirect(reqwest::redirect::Policy::none())
+        }
+    };
+    builder.build()
 }
 
 pub fn build_app_state() -> AppState {
@@ -205,12 +216,22 @@ pub fn build_app_state() -> AppState {
     AppState {
         keys: Mutex::new(keys),
         identity_storage: AtomicU8::new(identity_storage as u8),
-        http_client: reqwest::Client::builder()
-            .resolve("localhost", std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
-            .pool_idle_timeout(std::time::Duration::from_secs(300))
-            .pool_max_idle_per_host(2)
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new()),
+        http_client: crate::cf_access::apply_to_builder(
+            reqwest::Client::builder()
+                .resolve("localhost", std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+                .pool_idle_timeout(std::time::Duration::from_secs(300))
+                .pool_max_idle_per_host(2),
+        )
+        .and_then(|builder| builder.build().map_err(|e| e.to_string()))
+        .unwrap_or_else(|error| {
+            eprintln!("buzz-desktop: HTTP client Access headers: {error}");
+            reqwest::Client::builder()
+                .resolve("localhost", std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
+                .pool_idle_timeout(std::time::Duration::from_secs(300))
+                .pool_max_idle_per_host(2)
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new())
+        }),
         media_fetch_client: build_media_fetch_client().expect(
             "media_fetch_client must build with redirect::Policy::none(); a \
              redirect-following fallback would forward the minted media auth \

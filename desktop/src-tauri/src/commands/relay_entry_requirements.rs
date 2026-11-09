@@ -36,10 +36,11 @@ fn discovery_url(relay: &str) -> Result<Url, String> {
 
 async fn fetch_policy(url: Url, deadline: Duration) -> Result<bool, String> {
     // This dedicated client has no cookies, default auth or redirect capability.
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| "Could not initialize community discovery")?;
+    let client = crate::cf_access::apply_to_builder(
+        reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()),
+    )
+    .and_then(|builder| builder.build().map_err(|error| error.to_string()))
+    .map_err(|_| "Could not initialize community discovery")?;
     tokio::time::timeout(deadline, async {
         let response = client
             .get(url)

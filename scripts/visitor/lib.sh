@@ -6,6 +6,21 @@ set -euo pipefail
 VISITOR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export VISITOR_ROOT
 
+# Cloudflare Access service token: CLI and Desktop read the same env pair.
+# Returns 0 when both are set, 1 when neither, 2 when only one is set.
+visitor_cf_access_ready() {
+  local id="${BUZZ_CF_ACCESS_CLIENT_ID:-${CF_ACCESS_CLIENT_ID:-}}"
+  local secret="${BUZZ_CF_ACCESS_CLIENT_SECRET:-${CF_ACCESS_CLIENT_SECRET:-}}"
+  if [[ -z "$id" && -z "$secret" ]]; then
+    return 1
+  fi
+  if [[ -z "$id" || -z "$secret" ]]; then
+    echo "visitor: set both BUZZ_CF_ACCESS_CLIENT_ID and BUZZ_CF_ACCESS_CLIENT_SECRET" >&2
+    return 2
+  fi
+  return 0
+}
+
 visitor_default_relay() {
   # Never Groundfeed unless the house file or env says so.
   if [[ -n "${BUZZ_RELAY_URL:-}" ]]; then

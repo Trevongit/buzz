@@ -4,6 +4,7 @@ mod app_state;
 mod archive;
 mod build_identity;
 mod builderlab;
+mod cf_access;
 mod channel_head_cache;
 mod commands;
 mod deep_link;
@@ -863,6 +864,7 @@ pub fn run() {
             validate_repos_dir,
             get_active_workspace,
             fetch_workspace_icon,
+            fetch_relay_entry_requirements,
             fetch_join_policy,
             set_prevent_sleep_active,
             get_agent_memory,
