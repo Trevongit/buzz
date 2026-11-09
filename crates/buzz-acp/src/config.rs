@@ -506,7 +506,8 @@ pub struct CliArgs {
     #[arg(long, env = "BUZZ_ACP_RELAY_OBSERVER", default_value_t = false)]
     pub relay_observer: bool,
 
-    /// Exit after this many seconds with no dispatched events and no turn in flight.
+    /// Exit after this many seconds since the last channel dispatch or completion,
+    /// with no turn in flight. Heartbeat completion does not renew this interval.
     /// 0 disables inactivity self-termination.
     #[arg(long, env = "BUZZ_ACP_EXIT_AFTER_INACTIVITY", default_value_t = 0)]
     pub exit_after_inactivity: u64,
@@ -527,8 +528,9 @@ pub struct CliArgs {
     pub publish_final_if_unsent: bool,
 
     /// Tear the woken pool back down to the lazy empty-slot state after this
-    /// many seconds with no dispatched turn in flight and an empty queue,
-    /// releasing worker subprocesses until the next accepted event re-wakes.
+    /// many seconds since the last channel dispatch or completion, with no turn
+    /// in flight and an empty queue. Heartbeat completion does not renew the interval.
+    /// Worker subprocesses are released until the next accepted event re-wakes.
     /// Requires `--lazy-pool`; ignored otherwise. 0 disables idle re-sleep.
     #[arg(long, env = "BUZZ_ACP_IDLE_POOL_SLEEP", default_value_t = 0)]
     pub idle_pool_sleep: u64,
@@ -859,6 +861,11 @@ fn with_grok_managed_stdio(command: &str, mut args: Vec<String>) -> Vec<String> 
 /// startup budget (see block/buzz#3355). Skip that unrelated global startup
 /// by default; an operator or persona can still opt back in by setting the
 /// variable explicitly.
+///
+/// Every runtime: `buzz` event reads (`messages get/thread/search`, `feed get`)
+/// default to the `agent` format, which drops signature material an agent
+/// would otherwise pay for on every history read.
+///
 /// Grok's bash tool drops `*KEY*` / `*SECRET*` / `*TOKEN*` unless this overlay
 /// turns default excludes off. `BUZZ_PRIVATE_KEY` matches `*KEY*`, so grokShell
 /// cannot run `buzz messages send` and the model scrapes `/proc` for the parent
@@ -869,16 +876,41 @@ fn with_grok_managed_stdio(command: &str, mut args: Vec<String>) -> Vec<String> 
 const GROK_SHELL_KEEP_BUZZ_AUTH: &str =
     r#"{"shell_environment_policy":{"inherit":"all","ignore_default_excludes":true}}"#;
 
+const AGENT_OUTPUT_FORMAT_ENV: (&str, &str) = ("BUZZ_OUTPUT_FORMAT", "agent");
+
 pub(crate) fn default_agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     match normalize_agent_command_identity(command).as_str() {
-        "hermes" | "hermes-agent" | "hermes-acp" => &[("HERMES_ACP_SKIP_CONFIGURED_MCP", "1")],
-        "grok" => &[("GROK_CONFIG", GROK_SHELL_KEEP_BUZZ_AUTH)],
-        _ => &[],
+        "hermes" | "hermes-agent" | "hermes-acp" => &[
+            AGENT_OUTPUT_FORMAT_ENV,
+            ("HERMES_ACP_SKIP_CONFIGURED_MCP", "1"),
+        ],
+        "grok" => &[
+            AGENT_OUTPUT_FORMAT_ENV,
+            ("GROK_CONFIG", GROK_SHELL_KEEP_BUZZ_AUTH),
+        ],
+        _ => &[AGENT_OUTPUT_FORMAT_ENV],
     }
 }
 
-/// Build the `CODEX_CONFIG` environment variable that lets a managed Codex
-/// agent send on the first `buzz messages send`.
+/// Resolve the CLI format for MCP servers that filter inherited environment.
+/// Match `AcpClient::spawn`: parent env wins, then the last persona value,
+/// then the shared runtime default.
+pub(crate) fn agent_output_format(extra_env: &[(String, String)]) -> String {
+    let (key, default) = AGENT_OUTPUT_FORMAT_ENV;
+    std::env::var(key)
+        .ok()
+        .or_else(|| {
+            extra_env
+                .iter()
+                .rev()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value.clone())
+        })
+        .unwrap_or_else(|| default.into())
+}
+
+/// Build the `CODEX_CONFIG` environment variable that enables full outbound
+/// network access in Codex's macOS Seatbelt sandbox.
 ///
 /// Default Codex `workspace-write` blocks outbound network (Linux bubblewrap
 /// / macOS Seatbelt). The first shell then fails and the model retries with
@@ -1835,14 +1867,18 @@ mod tests {
         ] {
             assert_eq!(
                 default_agent_env(command),
-                &[("HERMES_ACP_SKIP_CONFIGURED_MCP", "1")],
+                &[
+                    ("BUZZ_OUTPUT_FORMAT", "agent"),
+                    ("HERMES_ACP_SKIP_CONFIGURED_MCP", "1"),
+                ],
                 "unexpected env defaults for {command}"
             );
         }
         for command in ["goose", "codex-acp", "claude-agent-acp", "buzz-agent", ""] {
-            assert!(
-                default_agent_env(command).is_empty(),
-                "non-Hermes command must have no env defaults: {command}"
+            assert_eq!(
+                default_agent_env(command),
+                &[("BUZZ_OUTPUT_FORMAT", "agent")],
+                "non-Hermes command must only get the shared env defaults: {command}"
             );
         }
     }
@@ -1851,10 +1887,16 @@ mod tests {
     fn default_agent_env_keeps_buzz_auth_in_grok_shell() {
         for command in ["grok", "/usr/local/bin/grok", r"C:\Users\test\grok.exe"] {
             let env = default_agent_env(command);
-            assert_eq!(env[0].0, "GROK_CONFIG", "unexpected env key for {command}");
-            assert!(
-                env[0].1.contains("ignore_default_excludes"),
-                "GROK_CONFIG must disable *KEY* stripping for {command}"
+            assert_eq!(
+                env,
+                &[
+                    ("BUZZ_OUTPUT_FORMAT", "agent"),
+                    (
+                        "GROK_CONFIG",
+                        r#"{"shell_environment_policy":{"inherit":"all","ignore_default_excludes":true}}"#
+                    ),
+                ],
+                "unexpected env defaults for {command}"
             );
         }
     }

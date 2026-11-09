@@ -20,6 +20,7 @@ def resolved_key():
 
 log.write(json.dumps({"pid": os.getpid(), "relay": os.environ.get("BUZZ_RELAY_URL"),
                       "key": resolved_key(),
+                      "outputFormat": os.environ.get("BUZZ_OUTPUT_FORMAT"),
                       "gitKeyfile": subprocess.check_output(["git", "config", "nostr.keyfile"], text=True).strip()}) + "\n")
 if mode.startswith("descendant"):
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
